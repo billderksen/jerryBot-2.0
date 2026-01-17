@@ -428,6 +428,10 @@
       color: var(--accent);
       font-size: 20px;
       margin-left: 8px;
+      display: inline-block;
+    }
+
+    .cached-badge.animate {
       animation: cachePopIn 0.3s ease-out;
     }
 
@@ -921,6 +925,9 @@
     let playbackStartTime = null;
     let pausedAt = 0;
     let currentElapsed = 0;
+    
+    // Track if cache badge animation has been shown for current song
+    let cachedAnimationShown = false;
 
     function startProgressTracking() {
       stopProgressTracking();
@@ -970,6 +977,7 @@
       pausedAt = 0;
       currentElapsed = 0;
       playbackStartTime = null;
+      cachedAnimationShown = false;
     }
 
     // Search functionality
@@ -1198,6 +1206,12 @@
       // Update local state immediately for responsiveness
       currentElapsed = seekTime;
       pausedAt = seekTime;
+      
+      // Update playbackStartTime so the progress tracking continues from the new position
+      if (playbackStartTime !== null) {
+        playbackStartTime = Date.now() - (seekTime * 1000);
+      }
+      
       updateProgressBar();
       
       // Send seek command to server
@@ -1241,6 +1255,15 @@
 
       if (state.currentSong) {
         const song = state.currentSong;
+        const currentProgress = song.duration > 0 ? Math.min((currentElapsed / song.duration) * 100, 100) : 0;
+        const currentTimeStr = formatDuration(Math.floor(currentElapsed));
+        
+        // Determine if we should animate the cached badge
+        const shouldAnimateBadge = state.isCached && !cachedAnimationShown;
+        if (state.isCached && !cachedAnimationShown) {
+          cachedAnimationShown = true;
+        }
+        
         playerContent.innerHTML = `
           <div class="album-art-container">
             <div class="album-art ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
@@ -1252,16 +1275,16 @@
           </div>
 
           <div class="track-info">
-            <div class="track-title">${escapeHtml(song.title)}${state.isCached ? ' <span class="cached-badge" title="Cached - Instant seeking enabled">✓</span>' : ''}</div>
+            <div class="track-title">${escapeHtml(song.title)}${state.isCached ? ` <span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>` : ''}</div>
             <div class="track-requested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
           </div>
 
           <div class="progress-container">
             <div class="progress-bar" onclick="seekToPosition(event, ${song.duration || 0})" title="Click to seek">
-              <div class="progress-fill" style="width: 0%"></div>
+              <div class="progress-fill" style="width: ${currentProgress}%"></div>
             </div>
             <div class="progress-time">
-              <span>0:00</span>
+              <span>${currentTimeStr}</span>
               <span>${formatDuration(song.duration)}</span>
             </div>
           </div>
@@ -1296,11 +1319,6 @@
             <div class="idle-subtext">Search for songs above or use /play in Discord</div>
           </div>
         `;
-      }
-
-      // Restore progress bar after rebuilding HTML
-      if (state.currentSong && currentElapsed > 0) {
-        setTimeout(updateProgressBar, 10);
       }
 
       const allSongs = state.currentSong 

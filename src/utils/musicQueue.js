@@ -241,13 +241,15 @@ export class MusicQueue {
         audioFormat: 'opus',
         audioQuality: 0,
         noCheckCertificates: true,
-        noWarnings: true
+        noWarnings: true,
+        ffmpegLocation: ffmpegPath
       });
       
       // Only set cached path if we're still playing the same song
       if (this.isPlaying && this.currentSong) {
         this.cachedAudioPath = cachePath;
         console.log('Audio cached successfully - seeking will now be instant!');
+        broadcastState(); // Update UI to show cached checkmark
       } else {
         // Song changed, clean up the cache we just made
         try { unlinkSync(cachePath); } catch (e) {}
