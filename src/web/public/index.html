@@ -459,10 +459,15 @@
       border-radius: 3px;
       cursor: pointer;
       position: relative;
+      user-select: none;
     }
 
     .progress-bar:hover {
       height: 8px;
+    }
+
+    .progress-bar:active {
+      cursor: grabbing;
     }
 
     .progress-fill {
@@ -473,6 +478,10 @@
       position: relative;
       transition: width 0.25s linear;
       pointer-events: none;
+    }
+
+    .progress-bar:active .progress-fill {
+      transition: none;
     }
 
     .progress-fill::after {
@@ -1192,32 +1201,6 @@
       }
     }
 
-    function seekToPosition(event, duration) {
-      if (!duration || duration <= 0) return;
-      
-      const progressBar = event.currentTarget;
-      const rect = progressBar.getBoundingClientRect();
-      const clickX = event.clientX - rect.left;
-      const percentage = clickX / rect.width;
-      const seekTime = Math.floor(percentage * duration);
-      
-      console.log(`Seeking to ${seekTime}s (${Math.round(percentage * 100)}%)`);
-      
-      // Update local state immediately for responsiveness
-      currentElapsed = seekTime;
-      pausedAt = seekTime;
-      
-      // Update playbackStartTime so the progress tracking continues from the new position
-      if (playbackStartTime !== null) {
-        playbackStartTime = Date.now() - (seekTime * 1000);
-      }
-      
-      updateProgressBar();
-      
-      // Send seek command to server
-      sendCommand('seek:' + seekTime);
-    }
-
     function skipToSong(index) {
       if (index > 0) { // Can't skip to current song (index 0)
         sendCommand('skipto:' + index);
@@ -1280,7 +1263,7 @@
           </div>
 
           <div class="progress-container">
-            <div class="progress-bar" onclick="seekToPosition(event, ${song.duration || 0})" title="Click to seek">
+            <div class="progress-bar" id="progressBar" title="Click or drag to seek">
               <div class="progress-fill" style="width: ${currentProgress}%"></div>
             </div>
             <div class="progress-time">
@@ -1319,6 +1302,11 @@
             <div class="idle-subtext">Search for songs above or use /play in Discord</div>
           </div>
         `;
+      }
+
+      // Setup progress bar drag events after HTML is updated
+      if (state.currentSong) {
+        setTimeout(setupProgressBarEvents, 0);
       }
 
       const allSongs = state.currentSong 
@@ -1375,6 +1363,77 @@
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
       }, 3000);
+    }
+
+    // Progress bar drag/click functionality
+    let isDragging = false;
+    let currentSongDuration = 0;
+    let progressBarHandlers = null;
+
+    function setupProgressBarEvents() {
+      const progressBar = document.getElementById('progressBar');
+      if (!progressBar || !state.currentSong) return;
+      
+      // Remove old event listeners if they exist
+      if (progressBarHandlers) {
+        progressBar.removeEventListener('mousedown', progressBarHandlers.onMouseDown);
+        document.removeEventListener('mousemove', progressBarHandlers.onMouseMove);
+        document.removeEventListener('mouseup', progressBarHandlers.onMouseUp);
+      }
+      
+      currentSongDuration = state.currentSong.duration || 0;
+      
+      const handleSeek = (clientX) => {
+        if (currentSongDuration <= 0) return 0;
+        
+        const rect = progressBar.getBoundingClientRect();
+        const clickX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+        const percentage = clickX / rect.width;
+        const seekTime = Math.floor(percentage * currentSongDuration);
+        
+        // Update local state immediately for responsiveness
+        currentElapsed = seekTime;
+        pausedAt = seekTime;
+        
+        // Update playbackStartTime so the progress tracking continues from the new position
+        if (playbackStartTime !== null) {
+          playbackStartTime = Date.now() - (seekTime * 1000);
+        }
+        
+        updateProgressBar();
+        return seekTime;
+      };
+      
+      const onMouseDown = (e) => {
+        e.preventDefault();
+        isDragging = true;
+        const seekTime = handleSeek(e.clientX);
+        console.log(`Started dragging at ${seekTime}s`);
+      };
+      
+      const onMouseMove = (e) => {
+        if (isDragging) {
+          e.preventDefault();
+          handleSeek(e.clientX);
+        }
+      };
+      
+      const onMouseUp = (e) => {
+        if (isDragging) {
+          e.preventDefault();
+          const seekTime = handleSeek(e.clientX);
+          sendCommand('seek:' + seekTime);
+          console.log(`Seek complete at ${seekTime}s`);
+          isDragging = false;
+        }
+      };
+      
+      // Store handlers so we can remove them later
+      progressBarHandlers = { onMouseDown, onMouseMove, onMouseUp };
+      
+      progressBar.addEventListener('mousedown', onMouseDown);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
     }
 
     // Initialize
