@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Godcord Music Bot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #141414;
+      --bg-tertiary: #1a1a1a;
+      --bg-hover: #252525;
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+      --text-primary: #ffffff;
+      --text-secondary: #b3b3b3;
+      --text-muted: #727272;
+      --border: #282828;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--accent);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      overflow: hidden;
+    }
+
+    .logo-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .logo-text {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    /* Search Bar */
+    .search-container {
+      flex: 1;
+      max-width: 500px;
+      position: relative;
+    }
+
+    .search-input-wrapper {
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 14px 20px 14px 48px;
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      border-radius: 30px;
+      color: var(--text-primary);
+      font-size: 15px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--bg-tertiary);
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--bg-hover);
+      border: none;
+      color: var(--text-secondary);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .search-clear.visible {
+      display: flex;
+    }
+
+    .search-clear:hover {
+      background: var(--text-muted);
+      color: var(--text-primary);
+    }
+
+    /* Search Results Dropdown */
+    .search-results {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .search-results.visible {
+      display: block;
+    }
+
+    .search-results::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .search-results::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .search-results::-webkit-scrollbar-thumb {
+      background: var(--bg-hover);
+      border-radius: 4px;
+    }
+
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .search-result-item:first-child {
+      border-radius: 16px 16px 0 0;
+    }
+
+    .search-result-item:last-child {
+      border-radius: 0 0 16px 16px;
+    }
+
+    .search-result-item:only-child {
+      border-radius: 16px;
+    }
+
+    .search-result-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .search-result-thumb {
+      width: 56px;
+      height: 56px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .search-result-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .search-result-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-result-title {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+
+    .search-result-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 8px;
+    }
+
+    .search-result-add {
+      background: var(--accent);
+      border: none;
+      color: var(--text-primary);
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .search-result-add:hover {
+      background: var(--accent-hover);
+      transform: scale(1.05);
+    }
+
+    .search-result-add:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .search-loading, .search-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .search-loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-secondary);
+      border-radius: 20px;
+      font-size: 14px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff4444;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.connected {
+      background: var(--accent);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Main Layout */
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 30px;
+    }
+
+    @media (max-width: 1024px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .search-container {
+        order: 3;
+        max-width: 100%;
+        width: 100%;
+      }
+    }
+
+    /* Now Playing Section */
+    .now-playing {
+      background: var(--bg-secondary);
+      border-radius: 16px;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .now-playing::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 200px;
+      background: linear-gradient(180deg, rgba(29, 185, 84, 0.1) 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .now-playing-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-secondary);
+      margin-bottom: 30px;
+      display: flex;
+      align-items: center;
+    }
+
+    .album-art-container {
+      position: relative;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto 40px;
+    }
+
+    .album-art {
+      width: 100%;
+      aspect-ratio: 1;
+      background: var(--bg-tertiary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .album-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .album-art .placeholder {
+      font-size: 120px;
+      opacity: 0.3;
+    }
+
+    .album-art.playing {
+      animation: albumPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes albumPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .track-info {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .track-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .cached-badge {
+      color: var(--accent);
+      font-size: 20px;
+      margin-left: 8px;
+      animation: cachePopIn 0.3s ease-out;
+    }
+
+    @keyframes cachePopIn {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.3); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .track-requested {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 12px;
+    }
+
+    /* Progress Bar */
+    .progress-container {
+      margin-bottom: 30px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .progress-bar:hover {
+      height: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #1ed760);
+      border-radius: 3px;
+      width: 0%;
+      position: relative;
+      transition: width 0.25s linear;
+      pointer-events: none;
+    }
+
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .progress-bar:hover .progress-fill::after {
+      opacity: 1;
+    }
+
+    .progress-time {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+    }
+
+    .control-btn {
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .control-btn:hover {
+      color: var(--accent);
+      transform: scale(1.1);
+    }
+
+    .control-btn:active {
+      transform: scale(0.95);
+    }
+
+    .control-btn.secondary {
+      width: 48px;
+      height: 48px;
+      font-size: 24px;
+    }
+
+    .control-btn.primary {
+      width: 64px;
+      height: 64px;
+      background: var(--accent);
+      border-radius: 50%;
+      font-size: 28px;
+    }
+
+    .control-btn.primary:hover {
+      background: var(--accent-hover);
+      color: var(--text-primary);
+      transform: scale(1.1);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .control-btn:disabled:hover {
+      transform: none;
+      color: var(--text-primary);
+    }
+
+    /* Volume */
+    .volume-control {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 30px;
+      justify-content: center;
+    }
+
+    .volume-icon {
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    .volume-slider {
+      width: 120px;
+      height: 6px;
+      -webkit-appearance: none;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .volume-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* Queue Section */
+    .queue-section {
+      background: var(--bg-secondary);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 140px);
+    }
+
+    .queue-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .queue-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .queue-count {
+      background: var(--bg-tertiary);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .queue-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .queue-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .queue-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .queue-list::-webkit-scrollbar-thumb {
+      background: var(--bg-hover);
+      border-radius: 4px;
+    }
+
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+
+    .queue-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .queue-item.current {
+      cursor: default;
+    }
+
+    .queue-item:not(.current):hover {
+      background: var(--bg-hover);
+      transform: scale(1.01);
+    }
+
+    .queue-item:not(.current):active {
+      transform: scale(0.99);
+    }
+
+    .queue-item:not(.current):hover .queue-item-number {
+      color: var(--accent);
+    }
+
+    .queue-item:not(.current):hover .queue-item-number::before {
+      content: '▶';
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .queue-item:not(.current):hover .queue-item-number span {
+      visibility: hidden;
+    }
+
+    .queue-item.current {
+      background: rgba(29, 185, 84, 0.15);
+    }
+
+    .queue-item-number {
+      width: 24px;
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+      position: relative;
+    }
+
+    .queue-item.current .queue-item-number {
+      color: var(--accent);
+    }
+
+    .queue-item-art {
+      width: 48px;
+      height: 48px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .queue-item-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .queue-item-art .mini-placeholder {
+      font-size: 20px;
+      opacity: 0.5;
+    }
+
+    .queue-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .queue-item-title {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+
+    .queue-item-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .queue-item-duration {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .queue-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .queue-empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    /* Visualizer */
+    .visualizer {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 20px;
+      margin-left: 10px;
+    }
+
+    .visualizer-bar {
+      width: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: visualize 0.5s ease-in-out infinite;
+    }
+
+    .visualizer-bar:nth-child(1) { animation-delay: 0s; }
+    .visualizer-bar:nth-child(2) { animation-delay: 0.1s; }
+    .visualizer-bar:nth-child(3) { animation-delay: 0.2s; }
+    .visualizer-bar:nth-child(4) { animation-delay: 0.3s; }
+
+    @keyframes visualize {
+      0%, 100% { height: 6px; }
+      50% { height: 18px; }
+    }
+
+    .visualizer.paused .visualizer-bar {
+      animation: none;
+      height: 6px;
+    }
+
+    /* Idle State */
+    .idle-state {
+      text-align: center;
+      padding: 80px 40px;
+    }
+
+    .idle-icon {
+      font-size: 80px;
+      margin-bottom: 24px;
+      opacity: 0.3;
+    }
+
+    .idle-text {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .idle-subtext {
+      color: var(--text-secondary);
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+    }
+
+    .toast {
+      background: var(--bg-tertiary);
+      padding: 16px 24px;
+      border-radius: 8px;
+      margin-top: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      animation: slideIn 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toast.success {
+      border-left: 3px solid var(--accent);
+    }
+
+    .toast.error {
+      border-left: 3px solid #ff4444;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon" id="logoIcon">🎵</div>
+        <div class="logo-text">Godcord <span>Music Bot</span></div>
+      </div>
+
+      <div class="search-container">
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search-input" id="searchInput" placeholder="Search for songs..." autocomplete="off">
+          <button class="search-clear" id="searchClear">✕</button>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+      </div>
+
+      <div class="status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="now-playing">
+        <div class="now-playing-label">
+          NOW PLAYING
+          <div class="visualizer" id="visualizer">
+            <div class="visualizer-bar"></div>
+            <div class="visualizer-bar"></div>
+            <div class="visualizer-bar"></div>
+            <div class="visualizer-bar"></div>
+          </div>
+        </div>
+
+        <div id="playerContent">
+          <!-- Dynamic content will be inserted here -->
+        </div>
+      </section>
+
+      <aside class="queue-section">
+        <div class="queue-header">
+          <h2>
+            📋 Queue
+            <span class="queue-count" id="queueCount">0 songs</span>
+          </h2>
+        </div>
+        <div class="queue-list" id="queueList">
+          <!-- Queue items will be inserted here -->
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // WebSocket connection
+    let ws;
+    let state = {
+      currentSong: null,
+      queue: [],
+      isPlaying: false,
+      isPaused: false,
+      volume: 1.0
+    };
+    
+    // Progress tracking
+    let progressInterval = null;
+    let playbackStartTime = null;
+    let pausedAt = 0;
+    let currentElapsed = 0;
+
+    function startProgressTracking() {
+      stopProgressTracking();
+      console.log('startProgressTracking called - song:', state.currentSong?.title, 'isPlaying:', state.isPlaying, 'isPaused:', state.isPaused);
+      if (!state.currentSong || !state.isPlaying) return;
+      if (state.isPaused) return;
+      
+      playbackStartTime = Date.now() - (pausedAt * 1000);
+      console.log('Progress tracking started at pausedAt:', pausedAt);
+      
+      progressInterval = setInterval(() => {
+        if (!state.currentSong || !state.isPlaying || state.isPaused) {
+          stopProgressTracking();
+          return;
+        }
+        
+        currentElapsed = (Date.now() - playbackStartTime) / 1000;
+        updateProgressBar();
+      }, 250);
+    }
+
+    function updateProgressBar() {
+      if (!state.currentSong) return;
+      
+      const duration = state.currentSong.duration || 0;
+      const progress = duration > 0 ? Math.min((currentElapsed / duration) * 100, 100) : 0;
+      
+      const progressFill = document.querySelector('.progress-fill');
+      const progressTimeStart = document.querySelector('.progress-time span:first-child');
+      
+      if (progressFill) {
+        progressFill.style.width = `${progress}%`;
+      }
+      if (progressTimeStart) {
+        progressTimeStart.textContent = formatDuration(Math.floor(currentElapsed));
+      }
+    }
+
+    function stopProgressTracking() {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+    }
+
+    function resetProgress() {
+      pausedAt = 0;
+      currentElapsed = 0;
+      playbackStartTime = null;
+    }
+
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    const searchResults = document.getElementById('searchResults');
+    const searchClear = document.getElementById('searchClear');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.trim();
+      searchClear.classList.toggle('visible', query.length > 0);
+      
+      clearTimeout(searchTimeout);
+      
+      if (query.length < 2) {
+        searchResults.classList.remove('visible');
+        return;
+      }
+      
+      searchResults.innerHTML = `
+        <div class="search-loading">
+          <div class="search-loading-spinner"></div>
+          Searching...
+        </div>
+      `;
+      searchResults.classList.add('visible');
+      
+      searchTimeout = setTimeout(() => searchSongs(query), 300);
+    });
+
+    searchInput.addEventListener('focus', () => {
+      if (searchInput.value.trim().length >= 2) {
+        searchResults.classList.add('visible');
+      }
+    });
+
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      searchClear.classList.remove('visible');
+      searchResults.classList.remove('visible');
+      searchInput.focus();
+    });
+
+    // Close search results when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-container')) {
+        searchResults.classList.remove('visible');
+      }
+    });
+
+    async function searchSongs(query) {
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const songs = await response.json();
+        
+        if (songs.length === 0) {
+          searchResults.innerHTML = `
+            <div class="search-empty">
+              <div>😕</div>
+              <div>No songs found for "${escapeHtml(query)}"</div>
+            </div>
+          `;
+        } else {
+          searchResults.innerHTML = songs.map(song => `
+            <div class="search-result-item" data-url="${escapeHtml(song.url)}" data-title="${escapeHtml(song.title)}" data-duration="${song.duration}" data-thumbnail="${escapeHtml(song.thumbnail || '')}">
+              <div class="search-result-thumb">
+                ${song.thumbnail 
+                  ? `<img src="${song.thumbnail}" alt="" onerror="this.style.display='none'">`
+                  : ''
+                }
+              </div>
+              <div class="search-result-info">
+                <div class="search-result-title">${escapeHtml(song.title)}</div>
+                <div class="search-result-meta">
+                  <span>${escapeHtml(song.channel)}</span>
+                  <span>•</span>
+                  <span>${formatDuration(song.duration)}</span>
+                </div>
+              </div>
+              <button class="search-result-add" onclick="addSong(event, this)">+ Add</button>
+            </div>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        searchResults.innerHTML = `
+          <div class="search-empty">
+            <div>❌</div>
+            <div>Search failed. Please try again.</div>
+          </div>
+        `;
+      }
+    }
+
+    async function addSong(event, button) {
+      event.stopPropagation();
+      const item = button.closest('.search-result-item');
+      const url = item.dataset.url;
+      const title = item.dataset.title;
+      const duration = parseInt(item.dataset.duration) || 0;
+      const thumbnail = item.dataset.thumbnail;
+      
+      button.disabled = true;
+      button.textContent = 'Adding...';
+      
+      try {
+        const response = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, title, duration, thumbnail, guildId: state.guildId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          button.textContent = '✓ Added';
+          button.style.background = 'var(--bg-tertiary)';
+          showToast(`Added: ${title}`, 'success');
+          
+          // Clear search after adding
+          setTimeout(() => {
+            searchInput.value = '';
+            searchClear.classList.remove('visible');
+            searchResults.classList.remove('visible');
+          }, 500);
+        } else {
+          throw new Error(result.error || result.result?.error || 'Failed to add song');
+        }
+      } catch (error) {
+        console.error('Error adding song:', error);
+        button.disabled = false;
+        button.textContent = '+ Add';
+        showToast(error.message || 'Failed to add song. Make sure someone is in a voice channel.', 'error');
+      }
+    }
+
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+      ws.onopen = () => {
+        console.log('Connected to server');
+        document.getElementById('statusDot').classList.add('connected');
+        document.getElementById('statusText').textContent = 'Connected';
+      };
+
+      ws.onclose = () => {
+        console.log('Disconnected from server');
+        document.getElementById('statusDot').classList.remove('connected');
+        document.getElementById('statusText').textContent = 'Disconnected';
+        setTimeout(connect, 3000);
+      };
+
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        console.log('Received:', message);
+        
+        if (message.type === 'state') {
+          const prevSong = state.currentSong?.url;
+          const wasPlaying = state.isPlaying && !state.isPaused;
+          
+          state = message.data;
+          updateUI();
+          
+          // Handle progress tracking
+          const newSong = state.currentSong?.url;
+          const isNowPlaying = state.isPlaying && !state.isPaused;
+          
+          console.log('State update - isPlaying:', state.isPlaying, 'isPaused:', state.isPaused, 'isNowPlaying:', isNowPlaying, 'progressInterval:', !!progressInterval);
+          
+          // Reset progress if song changed
+          if (prevSong !== newSong) {
+            console.log('Song changed, resetting progress');
+            resetProgress();
+          }
+          
+          // Handle seek position update from server
+          if (message.data.seekPosition !== null && message.data.seekPosition !== undefined) {
+            pausedAt = message.data.seekPosition;
+            currentElapsed = message.data.seekPosition;
+            if (isNowPlaying) {
+              playbackStartTime = Date.now() - (pausedAt * 1000);
+            }
+          }
+          
+          // Start/stop progress tracking based on play state
+          if (isNowPlaying && !progressInterval) {
+            console.log('Starting progress tracking');
+            startProgressTracking();
+          } else if (!isNowPlaying && progressInterval) {
+            // Save current position when paused
+            if (playbackStartTime) {
+              pausedAt = (Date.now() - playbackStartTime) / 1000;
+            }
+            stopProgressTracking();
+          }
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    }
+
+    function sendCommand(command) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'command',
+          command: command,
+          guildId: state.guildId
+        }));
+      }
+    }
+
+    function seekToPosition(event, duration) {
+      if (!duration || duration <= 0) return;
+      
+      const progressBar = event.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const percentage = clickX / rect.width;
+      const seekTime = Math.floor(percentage * duration);
+      
+      console.log(`Seeking to ${seekTime}s (${Math.round(percentage * 100)}%)`);
+      
+      // Update local state immediately for responsiveness
+      currentElapsed = seekTime;
+      pausedAt = seekTime;
+      updateProgressBar();
+      
+      // Send seek command to server
+      sendCommand('seek:' + seekTime);
+    }
+
+    function skipToSong(index) {
+      if (index > 0) { // Can't skip to current song (index 0)
+        sendCommand('skipto:' + index);
+      }
+    }
+
+    function formatDuration(seconds) {
+      if (!seconds) return '0:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function updateUI() {
+      const playerContent = document.getElementById('playerContent');
+      const queueList = document.getElementById('queueList');
+      const queueCount = document.getElementById('queueCount');
+      const visualizer = document.getElementById('visualizer');
+      const logoIcon = document.getElementById('logoIcon');
+
+      // Update guild icon
+      if (state.guildIcon) {
+        logoIcon.innerHTML = `<img src="${state.guildIcon}" alt="Server Icon" onerror="this.parentElement.innerHTML='🎵'">`;
+      } else {
+        logoIcon.innerHTML = '🎵';
+      }
+
+      if (state.isPlaying && !state.isPaused) {
+        visualizer.classList.remove('paused');
+        visualizer.style.display = 'flex';
+      } else {
+        visualizer.classList.add('paused');
+        if (!state.currentSong) visualizer.style.display = 'none';
+      }
+
+      if (state.currentSong) {
+        const song = state.currentSong;
+        playerContent.innerHTML = `
+          <div class="album-art-container">
+            <div class="album-art ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
+              ${song.thumbnail 
+                ? `<img src="${song.thumbnail}" alt="Album Art" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>🎵</div>'">`
+                : '<div class="placeholder">🎵</div>'
+              }
+            </div>
+          </div>
+
+          <div class="track-info">
+            <div class="track-title">${escapeHtml(song.title)}${state.isCached ? ' <span class="cached-badge" title="Cached - Instant seeking enabled">✓</span>' : ''}</div>
+            <div class="track-requested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
+          </div>
+
+          <div class="progress-container">
+            <div class="progress-bar" onclick="seekToPosition(event, ${song.duration || 0})" title="Click to seek">
+              <div class="progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="progress-time">
+              <span>0:00</span>
+              <span>${formatDuration(song.duration)}</span>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button class="control-btn secondary" onclick="sendCommand('previous')" title="Previous" disabled>
+              ⏮
+            </button>
+            <button class="control-btn primary" onclick="sendCommand('${state.isPaused ? 'resume' : 'pause'}')" title="${state.isPaused ? 'Resume' : 'Pause'}">
+              ${state.isPaused ? '▶' : '⏸'}
+            </button>
+            <button class="control-btn secondary" onclick="sendCommand('skip')" title="Skip">
+              ⏭
+            </button>
+            <button class="control-btn secondary" onclick="sendCommand('stop')" title="Stop">
+              ⏹
+            </button>
+          </div>
+
+          <div class="volume-control">
+            <span class="volume-icon">🔊</span>
+            <input type="range" class="volume-slider" min="0" max="100" value="${state.volume * 100}" 
+              onchange="sendCommand('volume:' + this.value)">
+            <span style="font-size: 12px; color: var(--text-muted)">${Math.round(state.volume * 100)}%</span>
+          </div>
+        `;
+      } else {
+        playerContent.innerHTML = `
+          <div class="idle-state">
+            <div class="idle-icon">🎧</div>
+            <div class="idle-text">Nothing Playing</div>
+            <div class="idle-subtext">Search for songs above or use /play in Discord</div>
+          </div>
+        `;
+      }
+
+      // Restore progress bar after rebuilding HTML
+      if (state.currentSong && currentElapsed > 0) {
+        setTimeout(updateProgressBar, 10);
+      }
+
+      const allSongs = state.currentSong 
+        ? [{ ...state.currentSong, isCurrent: true }, ...state.queue]
+        : state.queue;
+
+      queueCount.textContent = `${state.queue.length} song${state.queue.length !== 1 ? 's' : ''}`;
+
+      if (allSongs.length === 0) {
+        queueList.innerHTML = `
+          <div class="queue-empty">
+            <div class="queue-empty-icon">📭</div>
+            <div>Queue is empty</div>
+          </div>
+        `;
+      } else {
+        queueList.innerHTML = allSongs.map((song, index) => `
+          <div class="queue-item ${song.isCurrent ? 'current' : ''}" 
+               ${!song.isCurrent ? `onclick="skipToSong(${index})" title="Click to play"` : ''}>
+            <div class="queue-item-number">
+              ${song.isCurrent ? '▶' : `<span>${index}</span>`}
+            </div>
+            <div class="queue-item-art">
+              ${song.thumbnail 
+                ? `<img src="${song.thumbnail}" alt="" onerror="this.parentElement.innerHTML='<div class=\\'mini-placeholder\\'>🎵</div>'">`
+                : '<div class="mini-placeholder">🎵</div>'
+              }
+            </div>
+            <div class="queue-item-info">
+              <div class="queue-item-title">${escapeHtml(song.title)}</div>
+              <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
+            </div>
+            <div class="queue-item-duration">${formatDuration(song.duration)}</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<span>${type === 'success' ? '✓' : '✕'}</span> ${escapeHtml(message)}`;
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Initialize
+    connect();
+    updateUI();
+  </script>
+</body>
+</html>
