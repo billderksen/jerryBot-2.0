@@ -37,8 +37,10 @@ function broadcastState(seekPosition = null) {
       guildId: firstQueue.guildId,
       guildName: firstQueue.guildName,
       guildIcon: firstQueue.guildIcon,
+      voiceChannelName: firstQueue.voiceChannelName,
       seekPosition: seekPosition,
-      isCached: !!(firstQueue.cachedAudioPath && existsSync(firstQueue.cachedAudioPath))
+      isCached: !!(firstQueue.cachedAudioPath && existsSync(firstQueue.cachedAudioPath)),
+      songStartTime: firstQueue.songStartTime
     });
   } else {
     webUpdateCallback({
@@ -57,6 +59,7 @@ export class MusicQueue {
     this.guildId = guildId;
     this.guildName = guildInfo?.name || null;
     this.guildIcon = guildInfo?.icon || null;
+    this.voiceChannelName = null;
     this.songs = [];
     this.isPlaying = false;
     this.isSeeking = false;
@@ -69,6 +72,8 @@ export class MusicQueue {
     this.cachedAudioPath = null; // Path to cached audio file
     this.isCaching = false; // Whether we're currently caching audio
     this.currentAudioUrl = null; // Current streaming URL
+    this.songStartTime = null; // Timestamp when current song started playing
+    this.seekOffset = 0; // Offset in seconds for when song started (for seeking)
 
     // Handle player state changes - use arrow function to preserve 'this'
     this.player.on(AudioPlayerStatus.Idle, () => {
@@ -84,6 +89,13 @@ export class MusicQueue {
     this.player.on(AudioPlayerStatus.Playing, () => {
       console.log('Player is now playing');
       this.isSeeking = false; // Clear seeking flag when playing resumes
+      
+      // Set song start time when actually playing (accounting for seek offset)
+      if (!this.songStartTime) {
+        this.songStartTime = Date.now() - (this.seekOffset * 1000);
+        console.log('Song start time set:', new Date(this.songStartTime), 'with offset:', this.seekOffset);
+      }
+      
       broadcastState();
     });
 
@@ -100,6 +112,7 @@ export class MusicQueue {
   }
 
   async join(voiceChannel) {
+    this.voiceChannelName = voiceChannel.name;
     this.connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: voiceChannel.guild.id,
@@ -183,6 +196,9 @@ export class MusicQueue {
     if (seekSeconds > 0) {
       ffmpegArgs.push('-ss', String(Math.floor(seekSeconds)));
     }
+    
+    // Store the seek offset - songStartTime will be set when player actually starts
+    this.seekOffset = seekSeconds;
     
     ffmpegArgs.push(
       '-reconnect', '1',
@@ -268,6 +284,9 @@ export class MusicQueue {
       return;
     }
 
+    // Store the seek offset - songStartTime will be set when player actually starts
+    this.seekOffset = seekSeconds;
+
     // Build FFmpeg args
     const ffmpegArgs = [];
     
@@ -326,6 +345,7 @@ export class MusicQueue {
     this.cachedAudioPath = null;
     this.currentAudioUrl = null;
     this.isCaching = false;
+    this.songStartTime = null;
   }
 
   async playNext() {
@@ -388,6 +408,9 @@ export class MusicQueue {
     // Set seeking flag to prevent playNext from being triggered
     this.isSeeking = true;
     
+    // Reset songStartTime so it gets recalculated when playback resumes
+    this.songStartTime = null;
+    
     // Store old FFmpeg reference
     const oldFFmpeg = this.currentFFmpeg;
     
@@ -427,6 +450,23 @@ export class MusicQueue {
     
     // Stop current song to trigger playNext
     this.player.stop();
+    return true;
+  }
+
+  // Remove a specific song from the queue (index is from web UI where 0 = current song)
+  removeFromQueue(index) {
+    // Index 0 is current song (can't remove)
+    // Index 1 = songs[0], Index 2 = songs[1], etc.
+    const queueIndex = index - 1;
+    
+    if (index === 0 || queueIndex < 0 || queueIndex >= this.songs.length) return false;
+    
+    // Remove the song at the specified index
+    this.songs.splice(queueIndex, 1);
+    console.log(`Removed song at index ${index} from queue`);
+    
+    // Broadcast updated state
+    broadcastState();
     return true;
   }
 

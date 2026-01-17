@@ -545,16 +545,13 @@
     }
 
     .control-btn.primary {
-      width: 64px;
-      height: 64px;
-      background: var(--accent);
-      border-radius: 50%;
-      font-size: 28px;
+      width: 48px;
+      height: 48px;
+      font-size: 24px;
     }
 
     .control-btn.primary:hover {
-      background: var(--accent-hover);
-      color: var(--text-primary);
+      color: var(--accent);
       transform: scale(1.1);
     }
 
@@ -763,6 +760,28 @@
       color: var(--text-muted);
     }
 
+    .queue-item-remove {
+      font-size: 18px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 8px;
+      margin-left: 8px;
+      transition: color 0.2s, transform 0.2s;
+      user-select: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .queue-item:hover .queue-item-remove {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .queue-item-remove:hover {
+      color: #ff4444;
+      transform: scale(1.2);
+    }
+
     .queue-empty {
       text-align: center;
       padding: 60px 20px;
@@ -888,7 +907,7 @@
     <main class="main-content">
       <section class="now-playing">
         <div class="now-playing-label">
-          NOW PLAYING
+          <span id="nowPlayingText">NOW PLAYING</span>
           <div class="visualizer" id="visualizer">
             <div class="visualizer-bar"></div>
             <div class="visualizer-bar"></div>
@@ -1105,13 +1124,6 @@
           button.textContent = '✓ Added';
           button.style.background = 'var(--bg-tertiary)';
           showToast(`Added: ${title}`, 'success');
-          
-          // Clear search after adding
-          setTimeout(() => {
-            searchInput.value = '';
-            searchClear.classList.remove('visible');
-            searchResults.classList.remove('visible');
-          }, 500);
         } else {
           throw new Error(result.error || result.result?.error || 'Failed to add song');
         }
@@ -1161,6 +1173,15 @@
           if (prevSong !== newSong) {
             console.log('Song changed, resetting progress');
             resetProgress();
+            
+            // Initialize progress from server's songStartTime
+            if (state.songStartTime && isNowPlaying) {
+              const elapsed = (Date.now() - state.songStartTime) / 1000;
+              currentElapsed = elapsed;
+              pausedAt = elapsed;
+              playbackStartTime = state.songStartTime;
+              console.log('Initialized progress from server:', elapsed, 's');
+            }
           }
           
           // Handle seek position update from server
@@ -1170,6 +1191,13 @@
             if (isNowPlaying) {
               playbackStartTime = Date.now() - (pausedAt * 1000);
             }
+          } else if (state.songStartTime && isNowPlaying && !playbackStartTime) {
+            // On initial page load or reconnect, sync with server's start time
+            const elapsed = (Date.now() - state.songStartTime) / 1000;
+            currentElapsed = elapsed;
+            pausedAt = elapsed;
+            playbackStartTime = state.songStartTime;
+            console.log('Synced progress with server on connection:', elapsed, 's');
           }
           
           // Start/stop progress tracking based on play state
@@ -1207,6 +1235,17 @@
       }
     }
 
+    function removeSong(event, index) {
+      event.stopPropagation(); // Prevent triggering skipToSong
+      if (index === 0) {
+        // Skip current song
+        sendCommand('skip');
+      } else {
+        // Remove from queue
+        sendCommand('remove:' + index);
+      }
+    }
+
     function formatDuration(seconds) {
       if (!seconds) return '0:00';
       const mins = Math.floor(seconds / 60);
@@ -1220,12 +1259,20 @@
       const queueCount = document.getElementById('queueCount');
       const visualizer = document.getElementById('visualizer');
       const logoIcon = document.getElementById('logoIcon');
+      const nowPlayingText = document.getElementById('nowPlayingText');
 
       // Update guild icon
       if (state.guildIcon) {
         logoIcon.innerHTML = `<img src="${state.guildIcon}" alt="Server Icon" onerror="this.parentElement.innerHTML='🎵'">`;
       } else {
         logoIcon.innerHTML = '🎵';
+      }
+
+      // Update NOW PLAYING text with voice channel
+      if (state.voiceChannelName) {
+        nowPlayingText.textContent = `NOW PLAYING IN ${state.voiceChannelName.toUpperCase()}`;
+      } else {
+        nowPlayingText.textContent = 'NOW PLAYING';
       }
 
       if (state.isPlaying && !state.isPaused) {
@@ -1340,6 +1387,7 @@
               <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
             </div>
             <div class="queue-item-duration">${formatDuration(song.duration)}</div>
+            <div class="queue-item-remove" onclick="removeSong(event, ${index})" title="Remove from queue">✕</div>
           </div>
         `).join('');
       }

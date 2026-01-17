@@ -64,6 +64,9 @@ setCommandHandler((command, guildId) => {
   } else if (command.startsWith('skipto:')) {
     const index = parseInt(command.split(':')[1]);
     queue.skipTo(index);
+  } else if (command.startsWith('remove:')) {
+    const index = parseInt(command.split(':')[1]);
+    queue.removeFromQueue(index);
   } else if (command.startsWith('seek:')) {
     const seconds = parseFloat(command.split(':')[1]);
     queue.seek(seconds);
