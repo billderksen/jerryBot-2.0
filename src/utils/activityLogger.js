@@ -100,6 +100,12 @@ export async function logWebAction(username, action, details = '') {
     case 'remove':
       message = `🗑️ **${username}** (web) removed song #${details} from queue`;
       break;
+    case 'shuffle':
+      message = `🔀 **${username}** (web) shuffled the queue`;
+      break;
+    case 'reorder':
+      message = `↕️ **${username}** (web) reordered the queue`;
+      break;
     default:
       message = `🎮 **${username}** (web) used **${action}**${details ? `: ${details}` : ''}`;
   }

@@ -606,6 +606,51 @@ export class MusicQueue {
     return true;
   }
 
+  // Shuffle the queue using Fisher-Yates algorithm
+  shuffle() {
+    if (this.songs.length < 2) return false;
+    
+    for (let i = this.songs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.songs[i], this.songs[j]] = [this.songs[j], this.songs[i]];
+    }
+    
+    console.log('Queue shuffled');
+    broadcastState();
+    return true;
+  }
+
+  // Reorder queue - move song from one position to another
+  // fromIndex and toIndex are 1-based (from web UI where 1 = first song in queue)
+  reorder(fromIndex, toIndex) {
+    // Convert to 0-based array indices
+    const from = fromIndex - 1;
+    let to = toIndex - 1;
+    
+    if (from < 0 || from >= this.songs.length) {
+      console.log(`Invalid reorder from index: ${fromIndex}`);
+      return false;
+    }
+    
+    // Clamp 'to' to valid range
+    to = Math.max(0, Math.min(to, this.songs.length - 1));
+    
+    if (from === to) {
+      console.log('Reorder: same position, no change');
+      return false;
+    }
+    
+    // Remove the song from its original position
+    const [song] = this.songs.splice(from, 1);
+    
+    // Insert at the new position
+    this.songs.splice(to, 0, song);
+    
+    console.log(`Reordered queue: moved "${song.title}" from position ${fromIndex} to ${toIndex}`);
+    broadcastState();
+    return true;
+  }
+
   stop() {
     this.songs = [];
     this.player.stop();

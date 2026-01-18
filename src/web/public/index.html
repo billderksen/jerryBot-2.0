@@ -823,6 +823,22 @@
       50% { opacity: 0.6; }
     }
 
+    .control-btn.shuffle-btn {
+      position: relative;
+      opacity: 0.4;
+      color: var(--text-muted);
+    }
+
+    .control-btn.shuffle-btn:hover {
+      opacity: 0.7;
+    }
+
+    .control-btn.shuffle-btn:active {
+      opacity: 1;
+      color: var(--accent);
+      transform: scale(0.95);
+    }
+
     .control-btn.primary {
       width: 48px;
       height: 48px;
@@ -1202,6 +1218,52 @@
     .queue-item-remove:hover {
       color: #ff4444;
       transform: scale(1.2);
+    }
+
+    /* Drag handle */
+    .queue-item-drag {
+      cursor: grab;
+      padding: 8px 4px;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.2s, color 0.2s;
+      font-size: 14px;
+      user-select: none;
+    }
+
+    .queue-item:hover .queue-item-drag {
+      opacity: 0.5;
+    }
+
+    .queue-item-drag:hover {
+      opacity: 1 !important;
+      color: var(--accent);
+    }
+
+    .queue-item-drag:active {
+      cursor: grabbing;
+    }
+
+    /* Drag & Drop styles */
+    .queue-item.dragging {
+      opacity: 0.5;
+      background: var(--bg-hover);
+      transform: scale(1.02);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .queue-item.drag-over {
+      border-top: 2px solid var(--accent);
+      margin-top: -2px;
+    }
+
+    .queue-item.drag-over-bottom {
+      border-bottom: 2px solid var(--accent);
+      margin-bottom: -2px;
+    }
+
+    .queue-list.drag-active .queue-item {
+      transition: transform 0.15s ease, border 0.1s ease;
     }
 
     /* History item specific styles */
@@ -2502,6 +2564,9 @@
           </div>
 
           <div class="controls">
+            <button class="control-btn secondary shuffle-btn" onclick="shuffleQueue()" title="Shuffle queue" ${state.queue && state.queue.length >= 2 ? '' : 'disabled'}>
+              ⇌
+            </button>
             <button class="control-btn secondary" onclick="sendCommand('previous')" title="Previous" ${(state.recentlyPlayed && state.recentlyPlayed.length > 0) ? '' : 'disabled'}>
               ⏮
             </button>
@@ -2568,7 +2633,8 @@
         `;
       } else {
         queueList.innerHTML = queueSongs.map((song, index) => `
-          <div class="queue-item" onclick="skipToSong(${index + 1})" title="Click to play">
+          <div class="queue-item" data-index="${index + 1}" draggable="true" onclick="skipToSong(${index + 1})" title="Click to play • Drag to reorder">
+            <div class="queue-item-drag" onmousedown="event.stopPropagation()" title="Drag to reorder">⋮⋮</div>
             <div class="queue-item-number">
               <span>${index + 1}</span>
             </div>
@@ -2586,6 +2652,9 @@
             <div class="queue-item-remove" onclick="removeSong(event, ${index + 1})" title="Remove from queue">✕</div>
           </div>
         `).join('');
+        
+        // Setup drag and drop handlers
+        setupQueueDragAndDrop();
       }
 
       // Update recently played / history tab
@@ -2786,6 +2855,133 @@
       progressBar.addEventListener('mousedown', onMouseDown);
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
+    }
+
+    // Shuffle queue
+    function shuffleQueue() {
+      if (!state.queue || state.queue.length < 2) {
+        showToast('Need at least 2 songs in queue to shuffle', 'warning');
+        return;
+      }
+      
+      sendCommand('shuffle');
+      showToast('🔀 Queue shuffled!', 'success');
+    }
+
+    // Drag and drop for queue reordering
+    let draggedItem = null;
+    let draggedIndex = null;
+
+    function setupQueueDragAndDrop() {
+      const queueList = document.getElementById('queueList');
+      const items = queueList.querySelectorAll('.queue-item[draggable="true"]');
+      
+      items.forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragend', handleDragEnd);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('dragenter', handleDragEnter);
+        item.addEventListener('dragleave', handleDragLeave);
+        item.addEventListener('drop', handleDrop);
+      });
+    }
+
+    function handleDragStart(e) {
+      draggedItem = this;
+      draggedIndex = parseInt(this.dataset.index);
+      
+      // Add visual feedback
+      setTimeout(() => {
+        this.classList.add('dragging');
+        document.getElementById('queueList').classList.add('drag-active');
+      }, 0);
+      
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedIndex);
+    }
+
+    function handleDragEnd(e) {
+      this.classList.remove('dragging');
+      document.getElementById('queueList').classList.remove('drag-active');
+      
+      // Remove all drag-over classes
+      document.querySelectorAll('.queue-item').forEach(item => {
+        item.classList.remove('drag-over', 'drag-over-bottom');
+      });
+      
+      draggedItem = null;
+      draggedIndex = null;
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      
+      // Determine if we're in the top or bottom half of the item
+      const rect = this.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      
+      if (e.clientY < midpoint) {
+        this.classList.add('drag-over');
+        this.classList.remove('drag-over-bottom');
+      } else {
+        this.classList.add('drag-over-bottom');
+        this.classList.remove('drag-over');
+      }
+    }
+
+    function handleDragEnter(e) {
+      e.preventDefault();
+      if (this !== draggedItem) {
+        this.classList.add('drag-over');
+      }
+    }
+
+    function handleDragLeave(e) {
+      // Only remove if we're actually leaving this element
+      const rect = this.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || 
+          e.clientY < rect.top || e.clientY > rect.bottom) {
+        this.classList.remove('drag-over', 'drag-over-bottom');
+      }
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (this === draggedItem) return;
+      
+      const targetIndex = parseInt(this.dataset.index);
+      
+      // Don't move if same position
+      if (targetIndex === draggedIndex) return;
+      
+      // Determine if dropping above or below based on mouse position
+      const rect = this.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropBelow = e.clientY > midpoint;
+      
+      // Calculate where to insert
+      let insertPosition = dropBelow ? targetIndex : targetIndex - 1;
+      
+      // Adjust if moving down (account for removal)
+      if (draggedIndex < targetIndex) {
+        insertPosition = dropBelow ? targetIndex : targetIndex - 1;
+      } else {
+        insertPosition = dropBelow ? targetIndex + 1 : targetIndex;
+      }
+      
+      // Don't move if effectively same position
+      if (insertPosition === draggedIndex) return;
+      
+      console.log(`Reorder: from ${draggedIndex} to ${insertPosition}`);
+      
+      // Send reorder command (1-based indices)
+      sendCommand(`reorder:${draggedIndex}:${insertPosition}`);
+      
+      // Remove visual feedback
+      this.classList.remove('drag-over', 'drag-over-bottom');
     }
 
     // Initialize

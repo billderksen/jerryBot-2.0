@@ -80,6 +80,13 @@ setCommandHandler((command, guildId) => {
   } else if (command.startsWith('seek:')) {
     const seconds = parseFloat(command.split(':')[1]);
     queue.seek(seconds);
+  } else if (command === 'shuffle') {
+    queue.shuffle();
+  } else if (command.startsWith('reorder:')) {
+    const parts = command.split(':');
+    const fromIndex = parseInt(parts[1]);
+    const toIndex = parseInt(parts[2]);
+    queue.reorder(fromIndex, toIndex);
   }
 });
 

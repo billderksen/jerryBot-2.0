@@ -581,6 +581,8 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard') {
       logWebAction(username, 'previous');
     } else if (command === 'stop') {
       logWebAction(username, 'stop');
+    } else if (command === 'shuffle') {
+      logWebAction(username, 'shuffle');
     } else if (command.startsWith('volume:')) {
       const level = command.split(':')[1];
       logWebAction(username, 'volume', level);
@@ -595,6 +597,8 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard') {
       const mins = Math.floor(seconds / 60);
       const secs = Math.floor(seconds % 60);
       logWebAction(username, 'seek', `${mins}:${secs.toString().padStart(2, '0')}`);
+    } else if (command.startsWith('reorder:')) {
+      logWebAction(username, 'reorder');
     }
   }
 }
