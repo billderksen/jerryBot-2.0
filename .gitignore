@@ -2,3 +2,32 @@ node_modules/
 .env
 *.log
 .DS_Store
+
+# Session data (contains sensitive auth tokens)
+data/sessions/
+
+# Runtime data
+data/recentlyPlayed.json
+
+# Temporary audio cache files
+*.opus
+*.webm
+godcord_*.opus
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+.Spotlight-V100
+.Trashes
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# YouTube player scripts (accidentally downloaded)
+*-player-script.js
+*-base.js
