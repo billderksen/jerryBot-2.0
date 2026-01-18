@@ -1,8 +1,53 @@
 import { createAudioPlayer, createAudioResource, joinVoiceChannel, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } from '@discordjs/voice';
 import ytDlpPkg from 'yt-dlp-exec';
-const ytDlpExec = ytDlpPkg;
-import { spawn } from 'child_process';
-import ffmpegPath from 'ffmpeg-static';
+import { platform } from 'os';
+import { spawn, execSync } from 'child_process';
+let ytDlpExec;
+
+// Use system yt-dlp(.exe) if available, otherwise fallback to yt-dlp-exec default
+let systemYtDlpPath = null;
+try {
+  if (platform() === 'win32') {
+    // On Windows, look for yt-dlp.exe
+    systemYtDlpPath = execSync('where yt-dlp.exe', { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
+  } else {
+    // On Linux/macOS, look for yt-dlp
+    systemYtDlpPath = execSync('which yt-dlp', { encoding: 'utf8' }).trim();
+  }
+} catch (e) {
+  console.log('System yt-dlp not found in PATH, checking common locations...');
+  // Try common locations
+  const commonPaths = platform() === 'win32' 
+    ? ['C:\\yt-dlp\\yt-dlp.exe', 'C:\\Program Files\\yt-dlp\\yt-dlp.exe']
+    : ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp', '/home/jerryBot/yt-dlp'];
+  
+  for (const p of commonPaths) {
+    try {
+      if (platform() === 'win32') {
+        execSync(`if exist "${p}" echo found`, { encoding: 'utf8' });
+      } else {
+        execSync(`test -f "${p}"`, { encoding: 'utf8' });
+      }
+      systemYtDlpPath = p;
+      break;
+    } catch (e2) {
+      // Not found, try next
+    }
+  }
+}
+
+if (systemYtDlpPath) {
+  console.log('Using system yt-dlp:', systemYtDlpPath);
+  // Use .create() to specify a custom binary path
+  ytDlpExec = ytDlpPkg.create(systemYtDlpPath);
+} else {
+  console.log('WARNING: System yt-dlp not found! Music playback will likely fail on Linux.');
+  console.log('Install yt-dlp with: sudo apt install yt-dlp');
+  console.log('Or: sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp');
+  ytDlpExec = ytDlpPkg;
+}
+// (moved up)
+import ffmpegStatic from 'ffmpeg-static';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { unlinkSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
@@ -10,6 +55,25 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Determine FFmpeg path - try ffmpeg-static first, fall back to system ffmpeg
+let ffmpegPath = ffmpegStatic;
+
+// On Linux, ffmpeg-static might not work, so try system ffmpeg as fallback
+if (!ffmpegPath || process.platform === 'linux') {
+  try {
+    // Check if system ffmpeg is available
+    const systemFfmpeg = execSync('which ffmpeg', { encoding: 'utf8' }).trim();
+    if (systemFfmpeg) {
+      ffmpegPath = systemFfmpeg;
+      console.log('Using system FFmpeg:', ffmpegPath);
+    }
+  } catch (e) {
+    // System ffmpeg not found, use ffmpeg-static
+    ffmpegPath = ffmpegStatic;
+    console.log('Using ffmpeg-static:', ffmpegPath);
+  }
+}
 
 // Set FFmpeg path
 process.env.FFMPEG_PATH = ffmpegPath;

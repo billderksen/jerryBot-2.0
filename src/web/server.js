@@ -16,10 +16,46 @@ const { getData, getPreview, getTracks } = spotifyUrlInfo(fetch);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Helper function to get highest quality YouTube thumbnail
+function getHighQualityThumbnail(video) {
+  // FIRST: Try to construct maxresdefault URL from video ID (highest quality)
+  const videoId = video.id || extractVideoId(video.url) || extractVideoId(video.webpage_url);
+  if (videoId) {
+    return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  }
+  
+  // SECOND: Upgrade existing thumbnail URL to higher quality
+  if (video.thumbnail) {
+    return video.thumbnail
+      .replace(/\/default\.jpg/, '/maxresdefault.jpg')
+      .replace(/\/mqdefault\.jpg/, '/maxresdefault.jpg')
+      .replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg')
+      .replace(/\/sddefault\.jpg/, '/maxresdefault.jpg')
+      .replace(/\?.*$/, '');
+  }
+  
+  // THIRD: If thumbnails array exists, find the highest resolution one
+  if (video.thumbnails && Array.isArray(video.thumbnails) && video.thumbnails.length > 0) {
+    const sorted = [...video.thumbnails].sort((a, b) => (b.width || 0) - (a.width || 0));
+    if (sorted[0]?.url) {
+      return sorted[0].url;
+    }
+  }
+  
+  return null;
+}
+
+// Helper to extract video ID from YouTube URL
+function extractVideoId(url) {
+  if (!url) return null;
+  const match = url.match(/(?:v=|youtu\.be\/|\/vi\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
 // OAuth2 Configuration - use getters to read at runtime after dotenv loads
 const getClientId = () => process.env.CLIENT_ID;
 const getClientSecret = () => process.env.CLIENT_SECRET;
-const getRedirectUri = () => process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback';
+const getRedirectUri = () => process.env.OAUTH_REDIRECT_URI || 'http://localhost:3001/auth/discord/callback';
 const getRequiredRoleId = () => process.env.REQUIRED_ROLE_ID || '1462395138776236134';
 const getRequiredGuildId = () => process.env.GUILD_ID || '918554414220972032';
 
@@ -198,6 +234,9 @@ app.use('/api', requireAuth);
 
 app.use(express.json());
 
+// Serve images folder
+app.use('/images', express.static(join(__dirname, '../images')));
+
 // API endpoint to get current state
 app.get('/api/state', (req, res) => {
   res.json(currentState);
@@ -226,7 +265,7 @@ app.get('/api/search', async (req, res) => {
       title: video.title || 'Unknown Title',
       url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
       duration: video.duration || 0,
-      thumbnail: video.thumbnail || video.thumbnails?.[0]?.url || null,
+      thumbnail: getHighQualityThumbnail(video),
       channel: video.channel || video.uploader || 'Unknown'
     }));
     res.json(songs);
@@ -340,7 +379,7 @@ app.get('/api/youtube/search', async (req, res) => {
         title: video.title || 'Unknown Title',
         url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
         duration: video.duration || 0,
-        thumbnail: video.thumbnail || video.thumbnails?.[0]?.url || null
+        thumbnail: getHighQualityThumbnail(video)
       });
     } else {
       res.status(404).json({ error: 'No results found' });
@@ -376,7 +415,7 @@ app.get('/api/youtube/playlist', async (req, res) => {
       title: video.title || 'Unknown Title',
       url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
       duration: video.duration || 0,
-      thumbnail: video.thumbnail || video.thumbnails?.[0]?.url || null,
+      thumbnail: getHighQualityThumbnail(video),
       channel: video.channel || video.uploader || 'Unknown'
     }));
     
@@ -431,7 +470,7 @@ app.get('/api/youtube/radio', async (req, res) => {
         title: video.title || 'Unknown Title',
         url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
         duration: video.duration || 0,
-        thumbnail: video.thumbnail || video.thumbnails?.[0]?.url || null,
+        thumbnail: getHighQualityThumbnail(video),
         channel: video.channel || video.uploader || 'Unknown'
       }));
     
@@ -469,7 +508,7 @@ app.post('/api/queue/add', async (req, res) => {
         title: videoInfo.title,
         url: videoInfo.webpage_url || url,
         duration: videoInfo.duration || 0,
-        thumbnail: videoInfo.thumbnail,
+        thumbnail: getHighQualityThumbnail(videoInfo),
         requestedBy,
         source: 'youtube'
       };
@@ -604,7 +643,7 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard') {
 }
 
 // Start server
-const PORT = process.env.WEB_PORT || 3000;
+const PORT = process.env.WEB_PORT || 3001;
 
 export function startWebServer() {
   server.listen(PORT, () => {

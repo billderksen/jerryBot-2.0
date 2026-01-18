@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Godcord Music Bot</title>
+  <link rel="icon" type="image/jpeg" href="/images/jerry.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1672,7 +1673,7 @@
             <div class="search-result-item" data-url="${escapeHtml(song.url)}" data-title="${escapeHtml(song.title)}" data-duration="${song.duration}" data-thumbnail="${escapeHtml(song.thumbnail || '')}">
               <div class="search-result-thumb">
                 ${song.thumbnail 
-                  ? `<img src="${song.thumbnail}" alt="" onerror="this.style.display='none'">`
+                  ? `<img src="${song.thumbnail}" alt="" onerror="handleThumbnailError(this)">`
                   : ''
                 }
               </div>
@@ -1780,7 +1781,7 @@
              data-index="${index}">
           <div class="search-result-thumb spotify-thumb">
             ${track.thumbnail 
-              ? `<img src="${track.thumbnail}" alt="" onerror="this.style.display='none'">`
+              ? `<img src="${track.thumbnail}" alt="" onerror="handleThumbnailError(this)">`
               : '<div class="spotify-placeholder">🎵</div>'
             }
           </div>
@@ -1980,7 +1981,7 @@
              data-index="${index}">
           <div class="search-result-thumb">
             ${track.thumbnail 
-              ? `<img src="${track.thumbnail}" alt="" onerror="this.style.display='none'">`
+              ? `<img src="${track.thumbnail}" alt="" onerror="handleThumbnailError(this)">`
               : '<div class="mini-placeholder">🎵</div>'
             }
           </div>
@@ -2542,7 +2543,7 @@
           <div class="album-art-container">
             <div class="album-art ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
               ${song.thumbnail 
-                ? `<img src="${song.thumbnail}" alt="Album Art" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>🎵</div>'">`
+                ? `<img src="${song.thumbnail}" alt="Album Art" onerror="handleThumbnailError(this)">`
                 : '<div class="placeholder">🎵</div>'
               }
             </div>
@@ -2771,6 +2772,38 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // Thumbnail fallback chain for YouTube videos
+    function handleThumbnailError(img) {
+      const src = img.src;
+      const videoIdMatch = src.match(/\/vi\/([a-zA-Z0-9_-]{11})\//);
+      if (!videoIdMatch) {
+        // Not a YouTube thumbnail, hide or show placeholder
+        if (img.closest('.album-art')) {
+          img.parentElement.innerHTML = '<div class="placeholder">🎵</div>';
+        } else {
+          img.style.display = 'none';
+        }
+        return;
+      }
+      const videoId = videoIdMatch[1];
+      
+      // Fallback chain: maxresdefault -> hqdefault -> mqdefault -> default
+      if (src.includes('maxresdefault')) {
+        img.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      } else if (src.includes('hqdefault')) {
+        img.src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+      } else if (src.includes('mqdefault')) {
+        img.src = `https://img.youtube.com/vi/${videoId}/default.jpg`;
+      } else {
+        // All fallbacks exhausted
+        if (img.closest('.album-art')) {
+          img.parentElement.innerHTML = '<div class="placeholder">🎵</div>';
+        } else {
+          img.style.display = 'none';
+        }
+      }
     }
 
     function showToast(message, type = 'success') {

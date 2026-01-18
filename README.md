@@ -6,24 +6,59 @@ A Discord bot that uses the OpenRouter API to provide AI-powered chat responses.
 
 - 🤖 Slash command integration (`/chat`)
 - 🧠 OpenRouter API integration (supports GPT-5 and other models)
+- 🎵 Music player with web dashboard
+- 🌐 Web interface with Discord OAuth2
 - ⚡ Fast and responsive
 - 🔒 Environment-based configuration
+- 🐧 Linux/Windows compatible
 
 ## Prerequisites
 
 - Node.js 18.x or higher
 - A Discord bot token ([Discord Developer Portal](https://discord.com/developers/applications))
 - An OpenRouter API key ([OpenRouter](https://openrouter.ai/))
+- FFmpeg (auto-installed on Linux, bundled on Windows)
+- yt-dlp (auto-installed on Linux)
 
 ## Setup Instructions
 
-### 1. Clone and Install
+### Windows Setup
 
 ```bash
 # Navigate to project directory
 cd "c:\Scripts\jerryBot 2.0"
 
-# Install dependencies (already done)
+# Install dependencies
+npm install
+```
+
+### Linux Setup (Debian/Ubuntu)
+
+```bash
+# Make the setup script executable
+chmod +x setup-linux.sh
+
+# Run the setup script (installs Node.js, FFmpeg, yt-dlp, dependencies)
+./setup-linux.sh
+```
+
+Or manually:
+```bash
+# Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install FFmpeg
+sudo apt install -y ffmpeg
+
+# Install yt-dlp
+sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+sudo chmod a+rx /usr/local/bin/yt-dlp
+
+# Install build tools for native modules
+sudo apt install -y build-essential python3
+
+# Install npm dependencies
 npm install
 ```
 
@@ -119,6 +154,81 @@ jerryBot 2.0/
 - `npm run dev` - Start the bot with auto-reload (Node 18+ required)
 - `npm run deploy` - Deploy slash commands to Discord
 
+## Linux Production Deployment
+
+### 1. Create Systemd Service
+
+```bash
+sudo nano /etc/systemd/system/jerrybot.service
+```
+
+```ini
+[Unit]
+Description=JerryBot Discord Music Player
+After=network.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/jerrybot
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable jerrybot
+sudo systemctl start jerrybot
+```
+
+### 2. Set Up Nginx Reverse Proxy (for HTTPS)
+
+```bash
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+sudo nano /etc/nginx/sites-available/jerrybot
+```
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/jerrybot /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d yourdomain.com
+```
+
+### 3. Update Discord OAuth Settings
+
+Update your `.env`:
+```env
+OAUTH_REDIRECT_URI=https://yourdomain.com/auth/discord/callback
+```
+
+Update Discord Developer Portal OAuth2 redirect URL to match.
+
 ## Troubleshooting
 
 **Bot doesn't respond to commands:**
@@ -130,6 +240,20 @@ jerryBot 2.0/
 - Verify your `OPENROUTER_API_KEY` is valid
 - Check that you have credits in your OpenRouter account
 - Ensure the `OPENROUTER_MODEL` value is a valid model name
+
+**Music not playing (Linux):**
+- Make sure FFmpeg is installed: `ffmpeg -version`
+- Make sure yt-dlp is installed: `yt-dlp --version`
+- Update yt-dlp: `sudo yt-dlp -U`
+- Check audio permissions
+
+**Native module errors on Linux:**
+- Install build tools: `sudo apt install build-essential python3`
+- Rebuild native modules: `npm rebuild`
+
+**Port 3000 already in use:**
+- Find what's using it: `sudo lsof -i :3000`
+- Kill the process or change `WEB_PORT` in `.env`
 
 **Dependencies warnings:**
 - The low severity vulnerabilities are in development dependencies and don't affect bot functionality
