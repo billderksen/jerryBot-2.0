@@ -4,11 +4,60 @@ const ytDlpExec = ytDlpPkg;
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 import { tmpdir } from 'os';
-import { join } from 'path';
-import { unlinkSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { unlinkSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Set FFmpeg path
 process.env.FFMPEG_PATH = ffmpegPath;
+
+// Recently played persistence
+const RECENTLY_PLAYED_FILE = join(__dirname, '..', '..', 'data', 'recentlyPlayed.json');
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Load recently played from file
+function loadRecentlyPlayed() {
+  try {
+    if (existsSync(RECENTLY_PLAYED_FILE)) {
+      const data = JSON.parse(readFileSync(RECENTLY_PLAYED_FILE, 'utf8'));
+      // Filter out entries older than 7 days
+      const now = Date.now();
+      return data.filter(song => (now - song.playedAt) < SEVEN_DAYS_MS);
+    }
+  } catch (error) {
+    console.error('Error loading recently played:', error);
+  }
+  return [];
+}
+
+// Save recently played to file
+function saveRecentlyPlayed(recentlyPlayed) {
+  try {
+    // Ensure data directory exists
+    const dataDir = dirname(RECENTLY_PLAYED_FILE);
+    if (!existsSync(dataDir)) {
+      mkdirSync(dataDir, { recursive: true });
+    }
+    // Filter out entries older than 7 days before saving
+    const now = Date.now();
+    const filtered = recentlyPlayed.filter(song => (now - song.playedAt) < SEVEN_DAYS_MS);
+    writeFileSync(RECENTLY_PLAYED_FILE, JSON.stringify(filtered, null, 2));
+  } catch (error) {
+    console.error('Error saving recently played:', error);
+  }
+}
+
+// Global recently played list (shared across all guilds for persistence)
+let globalRecentlyPlayed = loadRecentlyPlayed();
+console.log(`Loaded ${globalRecentlyPlayed.length} recently played songs from storage`);
+
+// Export getter for recently played (used by web server for initial state)
+export function getRecentlyPlayed() {
+  return globalRecentlyPlayed;
+}
 
 // Store queue per guild
 const queues = new Map();
@@ -31,6 +80,7 @@ function broadcastState(seekPosition = null) {
     webUpdateCallback({
       currentSong: firstQueue.currentSong,
       queue: firstQueue.songs,
+      recentlyPlayed: globalRecentlyPlayed,
       isPlaying: firstQueue.isPlaying,
       isPaused: firstQueue.player.state.status === AudioPlayerStatus.Paused,
       volume: firstQueue.volume,
@@ -46,6 +96,7 @@ function broadcastState(seekPosition = null) {
     webUpdateCallback({
       currentSong: null,
       queue: [],
+      recentlyPlayed: globalRecentlyPlayed,
       isPlaying: false,
       isPaused: false,
       volume: 1.0,
@@ -74,6 +125,8 @@ export class MusicQueue {
     this.currentAudioUrl = null; // Current streaming URL
     this.songStartTime = null; // Timestamp when current song started playing
     this.seekOffset = 0; // Offset in seconds for when song started (for seeking)
+    this.historyIndex = -1; // Current position in recently played history (-1 = not navigating history)
+    this.playingFromHistory = false; // Flag to prevent re-adding history songs
 
     // Handle player state changes - use arrow function to preserve 'this'
     this.player.on(AudioPlayerStatus.Idle, () => {
@@ -143,6 +196,56 @@ export class MusicQueue {
     broadcastState();
   }
 
+  playPrevious() {
+    // Start from current position or beginning
+    let startIndex = this.historyIndex >= 0 ? this.historyIndex + 1 : 0;
+    
+    // Find the next song in history (skip duplicates of current song)
+    let previousSong = null;
+    let foundIndex = -1;
+    
+    for (let i = startIndex; i < globalRecentlyPlayed.length; i++) {
+      const song = globalRecentlyPlayed[i];
+      // Skip if this is the currently playing song
+      if (this.currentSong && song.url === this.currentSong.url) continue;
+      previousSong = song;
+      foundIndex = i;
+      break;
+    }
+    
+    if (!previousSong) {
+      console.log('No previous song available');
+      return false;
+    }
+    
+    // Update history index
+    this.historyIndex = foundIndex;
+    this.playingFromHistory = true;
+    
+    // Create a clean copy of the song (without playedAt)
+    const songToPlay = {
+      url: previousSong.url,
+      title: previousSong.title,
+      duration: previousSong.duration,
+      thumbnail: previousSong.thumbnail,
+      requestedBy: previousSong.requestedBy || 'Previous',
+      source: previousSong.source || 'youtube'
+    };
+    
+    // Add to front of queue
+    this.songs.unshift(songToPlay);
+    console.log(`Previous song queued (history index ${foundIndex}): ${songToPlay.title}`);
+    
+    // If currently playing, skip to it; otherwise start playing
+    if (this.isPlaying) {
+      this.skip();
+    } else {
+      this.play();
+    }
+    
+    return true;
+  }
+
   async play() {
     console.log(`play() called - isPlaying: ${this.isPlaying}, songs in queue: ${this.songs.length}`);
     if (this.isPlaying || this.songs.length === 0) {
@@ -159,6 +262,25 @@ export class MusicQueue {
 
     this.isPlaying = true;
     this.currentSong = this.songs.shift();
+    
+    // Only add to recently played if not playing from history navigation
+    if (!this.playingFromHistory) {
+      // Reset history index when playing new songs normally
+      this.historyIndex = -1;
+      
+      // Add to global recently played (at the beginning, max 50)
+      globalRecentlyPlayed.unshift({
+        ...this.currentSong,
+        playedAt: Date.now()
+      });
+      if (globalRecentlyPlayed.length > 50) {
+        globalRecentlyPlayed.pop();
+      }
+      // Save to file for persistence
+      saveRecentlyPlayed(globalRecentlyPlayed);
+    }
+    // Clear the flag for next song
+    this.playingFromHistory = false;
     
     // Broadcast state immediately when song changes
     broadcastState();

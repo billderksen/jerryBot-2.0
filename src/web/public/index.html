@@ -274,6 +274,33 @@
       transform: none;
     }
 
+    .load-more-btn {
+      display: block;
+      width: 100%;
+      padding: 14px 20px;
+      margin-top: 12px;
+      background: var(--surface-light);
+      border: 2px solid var(--border);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .load-more-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .load-more-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     .search-loading, .search-empty {
       padding: 40px 20px;
       text-align: center;
@@ -292,6 +319,89 @@
 
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    /* Spotify styles */
+    .spotify-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: linear-gradient(135deg, #1DB954 0%, #1ed760 100%);
+      border-radius: 12px 12px 0 0;
+      margin: -4px -4px 8px -4px;
+    }
+
+    .spotify-header-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #000;
+      font-weight: 600;
+    }
+
+    .spotify-icon {
+      font-size: 20px;
+    }
+
+    .spotify-name {
+      font-size: 16px;
+      max-width: 250px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .spotify-count {
+      font-size: 13px;
+      opacity: 0.8;
+      font-weight: 500;
+    }
+
+    .spotify-add-all {
+      background: rgba(0, 0, 0, 0.2);
+      border: none;
+      color: #000;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .spotify-add-all:hover {
+      background: rgba(0, 0, 0, 0.3);
+      transform: scale(1.05);
+    }
+
+    .spotify-add-all:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .spotify-badge {
+      background: #1DB954;
+      color: #000;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .spotify-thumb {
+      background: linear-gradient(135deg, #1DB954 0%, #191414 100%);
+    }
+
+    .spotify-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
     }
 
     .status {
@@ -326,6 +436,7 @@
       display: grid;
       grid-template-columns: 1fr 380px;
       gap: 30px;
+      align-items: start;
     }
 
     @media (max-width: 1024px) {
@@ -577,15 +688,20 @@
     .volume-icon {
       font-size: 20px;
       color: var(--text-secondary);
+      min-width: 20px;
+      width: 20px;
+      flex-shrink: 0;
     }
 
     .volume-slider {
       width: 120px;
+      min-width: 120px;
       height: 6px;
       -webkit-appearance: none;
       background: var(--bg-tertiary);
       border-radius: 3px;
       cursor: pointer;
+      flex-shrink: 0;
     }
 
     .volume-slider::-webkit-slider-thumb {
@@ -602,13 +718,92 @@
       transform: scale(1.2);
     }
 
+    .volume-input {
+      width: 38px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      text-align: center;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    /* Hide number input spinner arrows */
+    .volume-input::-webkit-outer-spin-button,
+    .volume-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .volume-input {
+      -moz-appearance: textfield;
+    }
+
+    .volume-input:hover {
+      border-color: var(--accent);
+    }
+
+    .volume-input:focus {
+      border-color: var(--accent);
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
     /* Queue Section */
     .queue-section {
       background: var(--bg-secondary);
       border-radius: 16px;
       display: flex;
       flex-direction: column;
-      max-height: calc(100vh - 140px);
+      overflow: hidden;
+    }
+
+    .queue-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .queue-tab {
+      flex: 1;
+      padding: 16px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+
+    .queue-tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .queue-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .queue-tab .queue-count {
+      background: var(--bg-tertiary);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .queue-tab.active .queue-count {
+      background: var(--accent);
+      color: #000;
     }
 
     .queue-header {
@@ -637,6 +832,8 @@
       flex: 1;
       overflow-y: auto;
       padding: 12px;
+      min-height: 0;
+      max-height: 450px;
     }
 
     .queue-list::-webkit-scrollbar {
@@ -650,6 +847,64 @@
     .queue-list::-webkit-scrollbar-thumb {
       background: var(--bg-hover);
       border-radius: 4px;
+    }
+
+    .clear-queue-btn {
+      display: none;
+      width: 100%;
+      padding: 12px 20px;
+      margin-top: 12px;
+      background: var(--surface-light);
+      border: 2px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: not-allowed;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .clear-queue-btn-text {
+      position: relative;
+      z-index: 2;
+    }
+
+    .clear-queue-btn::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: var(--progress, 0%);
+      background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
+      border-radius: 8px;
+      transition: width 0.05s linear;
+      z-index: 0;
+    }
+
+    .clear-queue-btn.holding {
+      color: white;
+    }
+
+    .clear-queue-btn.ready {
+      background: #dc3545;
+      border-color: #dc3545;
+      color: white;
+      cursor: pointer;
+    }
+
+    .clear-queue-btn.ready:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    }
+
+    .clear-queue-btn.visible {
+      display: block;
     }
 
     .queue-item {
@@ -779,6 +1034,47 @@
 
     .queue-item-remove:hover {
       color: #ff4444;
+      transform: scale(1.2);
+    }
+
+    /* History item specific styles */
+    .history-item {
+      opacity: 0.85;
+    }
+
+    .history-item:hover {
+      opacity: 1;
+    }
+
+    .history-item .queue-item-number {
+      font-size: 12px;
+    }
+
+    .history-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .history-item .history-replay {
+      font-size: 14px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 8px;
+      margin-left: 8px;
+      transition: color 0.2s, transform 0.2s;
+      user-select: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .history-item:hover .history-replay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .history-replay:hover {
+      color: var(--accent);
       transform: scale(1.2);
     }
 
@@ -922,14 +1218,24 @@
       </section>
 
       <aside class="queue-section">
-        <div class="queue-header">
-          <h2>
+        <div class="queue-tabs">
+          <button class="queue-tab active" data-tab="queue" onclick="switchTab('queue')">
             📋 Queue
-            <span class="queue-count" id="queueCount">0 songs</span>
-          </h2>
+            <span class="queue-count" id="queueCount">0</span>
+          </button>
+          <button class="queue-tab" data-tab="history" onclick="switchTab('history')">
+            🕐 Recently Played
+            <span class="queue-count" id="historyCount">0</span>
+          </button>
         </div>
         <div class="queue-list" id="queueList">
           <!-- Queue items will be inserted here -->
+        </div>
+        <button class="clear-queue-btn" id="clearQueueBtn">
+          <span class="clear-queue-btn-text">🗑️ Clear Queue</span>
+        </button>
+        <div class="queue-list" id="historyList" style="display: none;">
+          <!-- Recently played items will be inserted here -->
         </div>
       </aside>
     </main>
@@ -943,10 +1249,14 @@
     let state = {
       currentSong: null,
       queue: [],
+      recentlyPlayed: [],
       isPlaying: false,
       isPaused: false,
       volume: 1.0
     };
+    
+    // Current active tab
+    let activeTab = 'queue';
     
     // Progress tracking
     let progressInterval = null;
@@ -1013,6 +1323,14 @@
     const searchResults = document.getElementById('searchResults');
     const searchClear = document.getElementById('searchClear');
     let searchTimeout;
+    let currentSearchQuery = '';
+    let currentSearchCount = 10;
+    let currentSearchResults = [];
+
+    // Check if input is a Spotify URL
+    function isSpotifyUrl(text) {
+      return /^https?:\/\/(open\.)?spotify\.com\/(track|playlist|album)\//.test(text);
+    }
 
     searchInput.addEventListener('input', (e) => {
       const query = e.target.value.trim();
@@ -1022,18 +1340,31 @@
       
       if (query.length < 2) {
         searchResults.classList.remove('visible');
+        currentSearchResults = [];
+        currentSearchCount = 10;
         return;
+      }
+      
+      // Reset if query changed
+      if (query !== currentSearchQuery) {
+        currentSearchResults = [];
+        currentSearchCount = 10;
       }
       
       searchResults.innerHTML = `
         <div class="search-loading">
           <div class="search-loading-spinner"></div>
-          Searching...
+          ${isSpotifyUrl(query) ? 'Loading Spotify...' : 'Searching...'}
         </div>
       `;
       searchResults.classList.add('visible');
       
-      searchTimeout = setTimeout(() => searchSongs(query), 300);
+      // Handle Spotify URLs differently
+      if (isSpotifyUrl(query)) {
+        searchTimeout = setTimeout(() => handleSpotifyUrl(query), 100);
+      } else {
+        searchTimeout = setTimeout(() => searchSongs(query, 10, false), 300);
+      }
     });
 
     searchInput.addEventListener('focus', () => {
@@ -1056,12 +1387,24 @@
       }
     });
 
-    async function searchSongs(query) {
+    async function searchSongs(query, count = 10, append = false) {
+      currentSearchQuery = query;
+      
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&count=${count}`);
         const songs = await response.json();
         
-        if (songs.length === 0) {
+        if (append) {
+          // Filter out duplicates when loading more
+          const existingUrls = new Set(currentSearchResults.map(s => s.url));
+          const newSongs = songs.filter(s => !existingUrls.has(s.url));
+          currentSearchResults = [...currentSearchResults, ...newSongs];
+        } else {
+          currentSearchResults = songs;
+        }
+        currentSearchCount = count;
+        
+        if (currentSearchResults.length === 0) {
           searchResults.innerHTML = `
             <div class="search-empty">
               <div>😕</div>
@@ -1069,7 +1412,7 @@
             </div>
           `;
         } else {
-          searchResults.innerHTML = songs.map(song => `
+          const resultsHtml = currentSearchResults.map(song => `
             <div class="search-result-item" data-url="${escapeHtml(song.url)}" data-title="${escapeHtml(song.title)}" data-duration="${song.duration}" data-thumbnail="${escapeHtml(song.thumbnail || '')}">
               <div class="search-result-thumb">
                 ${song.thumbnail 
@@ -1088,6 +1431,15 @@
               <button class="search-result-add" onclick="addSong(event, this)">+ Add</button>
             </div>
           `).join('');
+          
+          // Add "Load More" button if we got full results
+          const loadMoreHtml = songs.length >= 10 ? `
+            <button class="load-more-btn" onclick="loadMoreResults()">
+              Load More Results
+            </button>
+          ` : '';
+          
+          searchResults.innerHTML = resultsHtml + loadMoreHtml;
         }
       } catch (error) {
         console.error('Search error:', error);
@@ -1097,6 +1449,229 @@
             <div>Search failed. Please try again.</div>
           </div>
         `;
+      }
+    }
+
+    async function loadMoreResults() {
+      if (!currentSearchQuery) return;
+      
+      const loadMoreBtn = document.querySelector('.load-more-btn');
+      if (loadMoreBtn) {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.textContent = 'Loading...';
+      }
+      
+      // Request more results
+      const newCount = currentSearchCount + 10;
+      await searchSongs(currentSearchQuery, newCount, true);
+    }
+
+    // Handle Spotify URLs (tracks, playlists, albums)
+    async function handleSpotifyUrl(url) {
+      try {
+        const response = await fetch(`/api/spotify/track?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        
+        if (data.type === 'track') {
+          // Single track - show it with option to add
+          displaySpotifyTracks(data.tracks, null);
+        } else {
+          // Playlist or album - show tracks with "Add All" button
+          displaySpotifyTracks(data.tracks, data.name, data.type, data.total);
+        }
+      } catch (error) {
+        console.error('Spotify error:', error);
+        searchResults.innerHTML = `
+          <div class="search-empty">
+            <div>❌</div>
+            <div>Failed to load Spotify link. Make sure it's a valid track, playlist, or album URL.</div>
+          </div>
+        `;
+      }
+    }
+
+    function displaySpotifyTracks(tracks, playlistName, type = 'track', totalCount = 0) {
+      let html = '';
+      
+      // Show playlist/album header with "Add All" button
+      if (playlistName) {
+        const icon = type === 'album' ? '💿' : '📋';
+        html += `
+          <div class="spotify-header">
+            <div class="spotify-header-info">
+              <span class="spotify-icon">${icon}</span>
+              <span class="spotify-name">${escapeHtml(playlistName)}</span>
+              <span class="spotify-count">(${tracks.length}${totalCount > tracks.length ? ' of ' + totalCount : ''} tracks)</span>
+            </div>
+            <button class="spotify-add-all" onclick="addAllSpotifyTracks(event, this)">
+              <span>+ Add All</span>
+            </button>
+          </div>
+        `;
+      }
+      
+      // Show individual tracks
+      html += tracks.map((track, index) => `
+        <div class="search-result-item spotify-track" 
+             data-search-query="${escapeHtml(track.searchQuery)}" 
+             data-title="${escapeHtml(track.title)}" 
+             data-duration="${track.duration}" 
+             data-thumbnail="${escapeHtml(track.thumbnail || '')}"
+             data-index="${index}">
+          <div class="search-result-thumb spotify-thumb">
+            ${track.thumbnail 
+              ? `<img src="${track.thumbnail}" alt="" onerror="this.style.display='none'">`
+              : '<div class="spotify-placeholder">🎵</div>'
+            }
+          </div>
+          <div class="search-result-info">
+            <div class="search-result-title">${escapeHtml(track.title)}</div>
+            <div class="search-result-meta">
+              <span class="spotify-badge">Spotify</span>
+              <span>•</span>
+              <span>${formatDuration(track.duration)}</span>
+            </div>
+          </div>
+          <button class="search-result-add" onclick="addSpotifyTrack(event, this)">+ Add</button>
+        </div>
+      `).join('');
+      
+      searchResults.innerHTML = html;
+    }
+
+    // Add a single Spotify track by searching YouTube
+    async function addSpotifyTrack(event, button) {
+      event.stopPropagation();
+      const item = button.closest('.search-result-item');
+      const searchQuery = item.dataset.searchQuery;
+      const title = item.dataset.title;
+      const thumbnail = item.dataset.thumbnail;
+      
+      button.disabled = true;
+      button.textContent = 'Finding...';
+      
+      try {
+        // Search YouTube for the song
+        const ytResponse = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery)}`);
+        const ytData = await ytResponse.json();
+        
+        if (ytData.error) {
+          throw new Error('Could not find song on YouTube');
+        }
+        
+        button.textContent = 'Adding...';
+        
+        // Add to queue
+        const response = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url: ytData.url, 
+            title: title, // Keep original Spotify title
+            duration: ytData.duration, 
+            thumbnail: thumbnail || ytData.thumbnail, 
+            guildId: state.guildId 
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          button.textContent = '✓ Added';
+          button.style.background = 'var(--bg-tertiary)';
+          showToast(`Added: ${title}`, 'success');
+        } else {
+          throw new Error(result.error || 'Failed to add song');
+        }
+      } catch (error) {
+        console.error('Error adding Spotify track:', error);
+        button.disabled = false;
+        button.textContent = '+ Add';
+        showToast(error.message || 'Failed to add song', 'error');
+      }
+    }
+
+    // Add all Spotify tracks from playlist/album
+    async function addAllSpotifyTracks(event, button) {
+      event.stopPropagation();
+      
+      const trackItems = document.querySelectorAll('.spotify-track');
+      const totalTracks = trackItems.length;
+      let addedCount = 0;
+      let failedCount = 0;
+      
+      button.disabled = true;
+      button.innerHTML = `<span>Adding 0/${totalTracks}...</span>`;
+      
+      for (const item of trackItems) {
+        const addButton = item.querySelector('.search-result-add');
+        if (addButton.textContent === '✓ Added') {
+          addedCount++;
+          continue; // Skip already added tracks
+        }
+        
+        const searchQuery = item.dataset.searchQuery;
+        const title = item.dataset.title;
+        const thumbnail = item.dataset.thumbnail;
+        
+        addButton.disabled = true;
+        addButton.textContent = 'Adding...';
+        
+        try {
+          // Search YouTube for the song
+          const ytResponse = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery)}`);
+          const ytData = await ytResponse.json();
+          
+          if (ytData.error) {
+            throw new Error('Not found');
+          }
+          
+          // Add to queue
+          const response = await fetch('/api/queue/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              url: ytData.url, 
+              title: title,
+              duration: ytData.duration, 
+              thumbnail: thumbnail || ytData.thumbnail, 
+              guildId: state.guildId 
+            })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            addButton.textContent = '✓ Added';
+            addButton.style.background = 'var(--bg-tertiary)';
+            addedCount++;
+          } else {
+            throw new Error('Failed');
+          }
+        } catch (error) {
+          console.error(`Failed to add: ${title}`, error);
+          addButton.disabled = false;
+          addButton.textContent = '+ Add';
+          failedCount++;
+        }
+        
+        button.innerHTML = `<span>Adding ${addedCount}/${totalTracks}...</span>`;
+        
+        // Small delay to prevent rate limiting
+        await new Promise(r => setTimeout(r, 200));
+      }
+      
+      button.innerHTML = `<span>✓ Added ${addedCount}</span>`;
+      button.style.background = 'var(--bg-tertiary)';
+      
+      if (failedCount > 0) {
+        showToast(`Added ${addedCount} songs (${failedCount} failed)`, 'warning');
+      } else {
+        showToast(`Added ${addedCount} songs from playlist`, 'success');
       }
     }
 
@@ -1143,6 +1718,7 @@
         console.log('Connected to server');
         document.getElementById('statusDot').classList.add('connected');
         document.getElementById('statusText').textContent = 'Connected';
+        setupClearQueueButton();
       };
 
       ws.onclose = () => {
@@ -1229,6 +1805,27 @@
       }
     }
 
+    function updateVolumeDisplay(value) {
+      const volumeDisplay = document.getElementById('volumeDisplay');
+      if (volumeDisplay) {
+        volumeDisplay.value = Math.round(value);
+      }
+    }
+
+    function updateVolumeFromInput(value) {
+      let numValue = parseInt(value);
+      if (isNaN(numValue) || numValue < 0) numValue = 0;
+      if (numValue > 100) numValue = 100;
+      
+      const volumeSlider = document.getElementById('volumeSlider');
+      const volumeDisplay = document.getElementById('volumeDisplay');
+      
+      if (volumeDisplay) volumeDisplay.value = numValue;
+      if (volumeSlider) volumeSlider.value = numValue;
+      
+      sendCommand('volume:' + numValue);
+    }
+
     function skipToSong(index) {
       if (index > 0) { // Can't skip to current song (index 0)
         sendCommand('skipto:' + index);
@@ -1244,6 +1841,62 @@
         // Remove from queue
         sendCommand('remove:' + index);
       }
+    }
+
+    // Clear queue button hover timer
+    let clearQueueHoldTime = 0;
+    let clearQueueHoldInterval = null;
+    const CLEAR_QUEUE_HOLD_TIME = 1000; // 1 second in milliseconds
+
+    function setupClearQueueButton() {
+      const clearQueueBtn = document.getElementById('clearQueueBtn');
+      
+      clearQueueBtn.addEventListener('mouseenter', () => {
+        clearQueueHoldTime = 0;
+        clearQueueBtn.classList.add('holding');
+        
+        // Update progress bar every 50ms
+        clearQueueHoldInterval = setInterval(() => {
+          clearQueueHoldTime += 50;
+          const progress = (clearQueueHoldTime / CLEAR_QUEUE_HOLD_TIME) * 100;
+          clearQueueBtn.style.setProperty('--progress', Math.min(progress, 100) + '%');
+          
+          if (clearQueueHoldTime >= CLEAR_QUEUE_HOLD_TIME) {
+            clearInterval(clearQueueHoldInterval);
+            clearQueueBtn.classList.remove('holding');
+            clearQueueBtn.classList.add('ready');
+          }
+        }, 50);
+      });
+      
+      clearQueueBtn.addEventListener('mouseleave', () => {
+        clearInterval(clearQueueHoldInterval);
+        clearQueueBtn.classList.remove('holding');
+        clearQueueBtn.classList.remove('ready');
+        clearQueueBtn.style.setProperty('--progress', '0%');
+      });
+      
+      clearQueueBtn.addEventListener('click', (e) => {
+        if (!clearQueueBtn.classList.contains('ready')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+        // Call the clear queue function
+        clearQueue();
+        // Reset state after click
+        clearQueueBtn.classList.remove('ready');
+        clearQueueBtn.style.setProperty('--progress', '0%');
+      });
+    }
+
+    function clearQueue() {
+      if (state.queue.length === 0) return;
+      // Remove all songs from queue (not the current song)
+      for (let i = state.queue.length; i > 0; i--) {
+        sendCommand('remove:' + i);
+      }
+      showToast('Queue cleared', 'success');
     }
 
     function formatDuration(seconds) {
@@ -1320,7 +1973,7 @@
           </div>
 
           <div class="controls">
-            <button class="control-btn secondary" onclick="sendCommand('previous')" title="Previous" disabled>
+            <button class="control-btn secondary" onclick="sendCommand('previous')" title="Previous" ${(state.recentlyPlayed && state.recentlyPlayed.length > 0) ? '' : 'disabled'}>
               ⏮
             </button>
             <button class="control-btn primary" onclick="sendCommand('${state.isPaused ? 'resume' : 'pause'}')" title="${state.isPaused ? 'Resume' : 'Pause'}">
@@ -1336,9 +1989,13 @@
 
           <div class="volume-control">
             <span class="volume-icon">🔊</span>
-            <input type="range" class="volume-slider" min="0" max="100" value="${state.volume * 100}" 
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="${state.volume * 100}" 
+              oninput="updateVolumeDisplay(this.value)"
               onchange="sendCommand('volume:' + this.value)">
-            <span style="font-size: 12px; color: var(--text-muted)">${Math.round(state.volume * 100)}%</span>
+            <input type="number" id="volumeDisplay" class="volume-input" min="0" max="100" value="${Math.round(state.volume * 100)}" 
+              onchange="updateVolumeFromInput(this.value)" 
+              onkeydown="if(event.key==='Enter') this.blur()">
+            <span style="font-size: 12px; color: var(--text-muted)">%</span>
           </div>
         `;
       } else {
@@ -1360,7 +2017,16 @@
         ? [{ ...state.currentSong, isCurrent: true }, ...state.queue]
         : state.queue;
 
-      queueCount.textContent = `${state.queue.length} song${state.queue.length !== 1 ? 's' : ''}`;
+      // Update queue count (just the number for the tab badge)
+      queueCount.textContent = allSongs.length;
+
+      // Show/hide clear queue button (only on queue tab)
+      const clearQueueBtn = document.getElementById('clearQueueBtn');
+      if (state.queue.length > 0 && activeTab === 'queue') {
+        clearQueueBtn.classList.add('visible');
+      } else {
+        clearQueueBtn.classList.remove('visible');
+      }
 
       if (allSongs.length === 0) {
         queueList.innerHTML = `
@@ -1390,6 +2056,114 @@
             <div class="queue-item-remove" onclick="removeSong(event, ${index})" title="Remove from queue">✕</div>
           </div>
         `).join('');
+      }
+
+      // Update recently played / history tab
+      updateHistoryList();
+    }
+
+    function updateHistoryList() {
+      const historyList = document.getElementById('historyList');
+      const historyCount = document.getElementById('historyCount');
+      const recentlyPlayed = state.recentlyPlayed || [];
+      
+      historyCount.textContent = recentlyPlayed.length;
+
+      if (recentlyPlayed.length === 0) {
+        historyList.innerHTML = `
+          <div class="queue-empty">
+            <div class="queue-empty-icon">🕐</div>
+            <div>No recently played songs</div>
+          </div>
+        `;
+      } else {
+        historyList.innerHTML = recentlyPlayed.map((song, index) => `
+          <div class="queue-item history-item" onclick="replaySong(${index})" title="Click to play again">
+            <div class="queue-item-number">
+              <span>${index + 1}</span>
+            </div>
+            <div class="queue-item-art">
+              ${song.thumbnail 
+                ? `<img src="${song.thumbnail}" alt="" onerror="this.parentElement.innerHTML='<div class=\\'mini-placeholder\\'>🎵</div>'">`
+                : '<div class="mini-placeholder">🎵</div>'
+              }
+            </div>
+            <div class="queue-item-info">
+              <div class="queue-item-title">${escapeHtml(song.title)}</div>
+              <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
+              <div class="history-time">${formatTimeAgo(song.playedAt)}</div>
+            </div>
+            <div class="queue-item-duration">${formatDuration(song.duration)}</div>
+            <div class="history-replay" onclick="replaySong(${index})" title="Play again">🔄</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function formatTimeAgo(timestamp) {
+      if (!timestamp) return '';
+      const seconds = Math.floor((Date.now() - timestamp) / 1000);
+      if (seconds < 60) return 'Just now';
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return `${Math.floor(hours / 24)}d ago`;
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      const queueList = document.getElementById('queueList');
+      const historyList = document.getElementById('historyList');
+      const clearQueueBtn = document.getElementById('clearQueueBtn');
+      const tabs = document.querySelectorAll('.queue-tab');
+      
+      tabs.forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+      
+      if (tab === 'queue') {
+        queueList.style.display = 'block';
+        historyList.style.display = 'none';
+        // Show clear button if queue has items
+        if (state.queue.length > 0) {
+          clearQueueBtn.classList.add('visible');
+        }
+      } else {
+        queueList.style.display = 'none';
+        historyList.style.display = 'block';
+        // Hide clear button on history tab
+        clearQueueBtn.classList.remove('visible');
+      }
+    }
+
+    async function replaySong(index) {
+      const song = state.recentlyPlayed[index];
+      if (!song) return;
+      
+      try {
+        const response = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url: song.url, 
+            title: song.title, 
+            duration: song.duration, 
+            thumbnail: song.thumbnail, 
+            guildId: state.guildId 
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showToast(`Added: ${song.title}`, 'success');
+        } else {
+          throw new Error(result.error || 'Failed to add song');
+        }
+      } catch (error) {
+        console.error('Error replaying song:', error);
+        showToast(error.message || 'Failed to add song', 'error');
       }
     }
 

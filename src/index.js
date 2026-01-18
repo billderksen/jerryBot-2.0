@@ -55,6 +55,8 @@ setCommandHandler((command, guildId) => {
     queue.resume();
   } else if (command === 'skip') {
     queue.skip();
+  } else if (command === 'previous') {
+    queue.playPrevious();
   } else if (command === 'stop') {
     queue.stop();
     queue.leave();
