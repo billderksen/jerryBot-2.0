@@ -42,6 +42,13 @@ app.use(session({
 // Store connected clients
 const clients = new Set();
 
+// Store bot info
+let botInfo = {
+  username: 'JerryBot',
+  avatar: null,
+  id: null
+};
+
 // Store current state
 let currentState = {
   currentSong: null,
@@ -64,6 +71,11 @@ function requireAuth(req, res, next) {
   // For page routes, redirect to login
   res.redirect('/login');
 }
+
+// Bot info API (public, no auth required)
+app.get('/api/bot-info', (req, res) => {
+  res.json(botInfo);
+});
 
 // Discord OAuth2 routes
 app.get('/login', (req, res) => {
@@ -539,6 +551,14 @@ export function startWebServer() {
   server.listen(PORT, () => {
     console.log(`🌐 Web dashboard running at http://localhost:${PORT}`);
   });
+}
+
+export function setBotInfo(info) {
+  botInfo = {
+    username: info.username || 'JerryBot',
+    avatar: info.avatar,
+    id: info.id
+  };
 }
 
 export { currentState };

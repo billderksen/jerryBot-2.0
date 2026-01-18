@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
-import { startWebServer, updateState, setCommandHandler, setAddSongHandler } from './web/server.js';
+import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo } from './web/server.js';
 import { getQueue, createQueue, setWebUpdateCallback } from './utils/musicQueue.js';
 
 // Store the last used voice channel for web dashboard
@@ -166,6 +166,14 @@ client.on(Events.VoiceStateUpdate, (oldState, newState) => {
 // Ready event
 client.once(Events.ClientReady, readyClient => {
   console.log(`✅ Ready! Logged in as ${readyClient.user.tag}`);
+  
+  // Set bot info for web dashboard
+  setBotInfo({
+    username: readyClient.user.username,
+    avatar: readyClient.user.displayAvatarURL({ size: 256 }),
+    id: readyClient.user.id
+  });
+  
   startWebServer();
 });
 

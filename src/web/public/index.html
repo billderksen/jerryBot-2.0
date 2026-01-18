@@ -1419,7 +1419,7 @@
       isPlaying: false,
       isPaused: false,
       volume: 1.0,
-      radioEnabled: false
+      radioEnabled: localStorage.getItem('radioEnabled') === 'true'
     };
     
     // Current active tab
@@ -2137,8 +2137,9 @@
           const wasPlaying = state.isPlaying && !state.isPaused;
           const prevQueueLength = state.queue.length;
           const prevRadioEnabled = state.radioEnabled;
+          const isInitialLoad = prevSong === undefined || prevSong === null;
           
-          // Preserve radioEnabled state (it's client-side only)
+          // Preserve radioEnabled state (it's client-side only, stored in localStorage)
           const radioEnabled = state.radioEnabled;
           state = message.data;
           state.radioEnabled = radioEnabled;
@@ -2165,10 +2166,13 @@
               console.log('Initialized progress from server:', elapsed, 's');
             }
             
-            // Fetch new radio songs when song changes
+            // Fetch new radio songs when song changes or on initial load with radio enabled
             if (state.radioEnabled && newSong) {
               fetchRadioSongs(newSong);
             }
+          } else if (isInitialLoad && state.radioEnabled && state.currentSong) {
+            // On page refresh with radio enabled, pre-fetch radio songs
+            fetchRadioSongs(state.currentSong.url);
           }
           
           // Radio mode: add a song when queue is empty and playing
@@ -2228,6 +2232,7 @@
 
     function toggleRadio() {
       state.radioEnabled = !state.radioEnabled;
+      localStorage.setItem('radioEnabled', state.radioEnabled);
       updateUI();
       
       if (state.radioEnabled) {
