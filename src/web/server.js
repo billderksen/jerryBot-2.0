@@ -229,6 +229,56 @@ app.get('/api/youtube/playlist', async (req, res) => {
   }
 });
 
+// API endpoint to get YouTube radio/mix (similar songs)
+app.get('/api/youtube/radio', async (req, res) => {
+  const videoUrl = req.query.url;
+  if (!videoUrl) {
+    return res.status(400).json({ error: 'Video URL is required' });
+  }
+  
+  try {
+    // Extract video ID from URL
+    const videoIdMatch = videoUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (!videoIdMatch) {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+    const videoId = videoIdMatch[1];
+    
+    // YouTube Mix playlist URL format: list=RD<videoId>
+    const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+    
+    const results = await ytDlpExec(mixUrl, {
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+      flatPlaylist: true,
+      skipDownload: true,
+      playlistEnd: 25 // Get up to 25 songs from the mix
+    });
+    
+    if (!results.entries || results.entries.length === 0) {
+      return res.status(404).json({ error: 'No radio mix found for this video' });
+    }
+    
+    // Filter out the current video and return the rest
+    const tracks = results.entries
+      .filter(video => video.id !== videoId)
+      .slice(0, 20)
+      .map(video => ({
+        title: video.title || 'Unknown Title',
+        url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
+        duration: video.duration || 0,
+        thumbnail: video.thumbnail || video.thumbnails?.[0]?.url || null,
+        channel: video.channel || video.uploader || 'Unknown'
+      }));
+    
+    res.json({ tracks });
+  } catch (error) {
+    console.error('YouTube radio error:', error);
+    res.status(500).json({ error: 'Failed to get radio mix' });
+  }
+});
+
 // API endpoint to add song to queue
 app.post('/api/queue/add', async (req, res) => {
   const { url, title, duration, thumbnail, guildId } = req.body;

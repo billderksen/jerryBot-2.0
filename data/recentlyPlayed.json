@@ -1,5 +1,59 @@
 [
   {
+    "url": "https://www.youtube.com/watch?v=cAm8QozZ9ao",
+    "title": "Gerard Joling - Unchained Melody",
+    "duration": 224,
+    "thumbnail": "https://i.ytimg.com/vi/cAm8QozZ9ao/hqdefault.jpg?sqp=-oaymwE1CKgBEF5IVfKriqkDKAgBFQAAiEIYAXABwAEG8AEB-AG-B4AC0AWKAgwIABABGBMgNih_MA8=&rs=AOn4CLDNLauyGDBYlaji4h8juG1EhP_vvQ",
+    "requestedBy": "Web Dashboard",
+    "source": "youtube",
+    "playedAt": 1768698730577
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=H0KpEXENqCs",
+    "title": "Gerard Joling - No More Bolero's",
+    "duration": 191,
+    "thumbnail": "https://i.ytimg.com/vi/H0KpEXENqCs/hqdefault.jpg?sqp=-oaymwE1CKgBEF5IVfKriqkDKAgBFQAAiEIYAXABwAEG8AEB-AG-B4AC0AWKAgwIABABGH8gJCgWMA8=&rs=AOn4CLClI4xqbbL672vcqaMCdHEO6G381Q",
+    "requestedBy": "Web Dashboard",
+    "source": "youtube",
+    "playedAt": 1768698653037
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=os4rMI0wUaE",
+    "title": "Roy Orbison - Califórnia Blue (com tradução)",
+    "duration": 243,
+    "thumbnail": "https://i.ytimg.com/vi/os4rMI0wUaE/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLD13p6YJTt_nvPOZhR48G1EbGm_aQ",
+    "requestedBy": "Web Dashboard",
+    "source": "youtube",
+    "playedAt": 1768698639235
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=cAm8QozZ9ao",
+    "title": "Gerard Joling - Unchained Melody",
+    "duration": 224,
+    "thumbnail": "https://i.ytimg.com/vi/cAm8QozZ9ao/hqdefault.jpg?sqp=-oaymwE1CKgBEF5IVfKriqkDKAgBFQAAiEIYAXABwAEG8AEB-AG-B4AC0AWKAgwIABABGBMgNih_MA8=&rs=AOn4CLDNLauyGDBYlaji4h8juG1EhP_vvQ",
+    "requestedBy": "Web Dashboard",
+    "source": "youtube",
+    "playedAt": 1768698616595
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=XyRuMR5EW3c",
+    "title": "Gerard Joling - No More Bolero",
+    "duration": 245,
+    "thumbnail": "https://i.ytimg.com/vi/XyRuMR5EW3c/hqdefault.jpg?sqp=-oaymwE2COADEI4CSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgBzAOAAp4CigIMCAAQARhyIFsoQTAP&rs=AOn4CLC4vrHSO10-XKiXfnkeDSHZy3Cc-A",
+    "requestedBy": "Web Dashboard",
+    "source": "youtube",
+    "playedAt": 1768698595893
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=R22urvGcWy4",
+    "title": "André Hazes - Zeg Maar Niets Meer",
+    "duration": 169,
+    "thumbnail": "https://i.ytimg.com/vi/R22urvGcWy4/hq720.jpg?sqp=-oaymwEcCOgCEMoBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDatBLZS3r9PO93t6pQc9TzCWhXWw",
+    "requestedBy": "Web Dashboard",
+    "source": "youtube",
+    "playedAt": 1768698513767
+  },
+  {
     "url": "https://www.youtube.com/watch?v=XyRuMR5EW3c",
     "title": "Gerard Joling - No More Bolero",
     "duration": 245,

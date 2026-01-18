@@ -665,6 +665,31 @@
       font-size: 24px;
     }
 
+    .control-btn.radio-btn {
+      position: relative;
+      opacity: 0.4;
+      color: var(--text-muted);
+    }
+
+    .control-btn.radio-btn:hover {
+      opacity: 0.7;
+    }
+
+    .control-btn.radio-btn.active {
+      opacity: 1;
+      color: var(--accent);
+      animation: radio-pulse 2s ease-in-out infinite;
+    }
+
+    .control-btn.radio-btn.active:hover {
+      opacity: 1;
+    }
+
+    @keyframes radio-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
     .control-btn.primary {
       width: 48px;
       height: 48px;
@@ -1261,7 +1286,8 @@
       recentlyPlayed: [],
       isPlaying: false,
       isPaused: false,
-      volume: 1.0
+      volume: 1.0,
+      radioEnabled: false
     };
     
     // Current active tab
@@ -1939,8 +1965,14 @@
         if (message.type === 'state') {
           const prevSong = state.currentSong?.url;
           const wasPlaying = state.isPlaying && !state.isPaused;
+          const prevQueueLength = state.queue.length;
+          const prevRadioEnabled = state.radioEnabled;
           
+          // Preserve radioEnabled state (it's client-side only)
+          const radioEnabled = state.radioEnabled;
           state = message.data;
+          state.radioEnabled = radioEnabled;
+          
           updateUI();
           
           // Handle progress tracking
@@ -1962,6 +1994,17 @@
               playbackStartTime = state.songStartTime;
               console.log('Initialized progress from server:', elapsed, 's');
             }
+            
+            // Fetch new radio songs when song changes
+            if (state.radioEnabled && newSong) {
+              fetchRadioSongs(newSong);
+            }
+          }
+          
+          // Radio mode: add a song when queue is empty and playing
+          if (state.radioEnabled && state.isPlaying && state.queue.length === 0 && radioSongs.length > 0) {
+            console.log('Radio mode: Queue empty, adding radio song');
+            addRadioSong();
           }
           
           // Handle seek position update from server
@@ -2006,6 +2049,77 @@
           command: command,
           guildId: state.guildId
         }));
+      }
+    }
+
+    // Radio mode state
+    let radioSongs = []; // Pre-fetched radio songs
+    let fetchingRadio = false;
+
+    function toggleRadio() {
+      state.radioEnabled = !state.radioEnabled;
+      updateUI();
+      
+      if (state.radioEnabled) {
+        showToast('📻 Radio mode enabled - Similar songs will auto-play', 'success');
+        // Pre-fetch radio songs if we have a current song
+        if (state.currentSong) {
+          fetchRadioSongs(state.currentSong.url);
+        }
+      } else {
+        showToast('📻 Radio mode disabled', 'info');
+        radioSongs = [];
+      }
+    }
+
+    async function fetchRadioSongs(videoUrl) {
+      if (fetchingRadio || !videoUrl) return;
+      
+      fetchingRadio = true;
+      try {
+        const response = await fetch(`/api/youtube/radio?url=${encodeURIComponent(videoUrl)}`);
+        const data = await response.json();
+        
+        if (data.tracks && data.tracks.length > 0) {
+          radioSongs = data.tracks;
+          console.log('Fetched', radioSongs.length, 'radio songs');
+        }
+      } catch (error) {
+        console.error('Error fetching radio songs:', error);
+      }
+      fetchingRadio = false;
+    }
+
+    async function addRadioSong() {
+      if (!state.radioEnabled || radioSongs.length === 0) return;
+      
+      // Pick the first song from radio queue
+      const song = radioSongs.shift();
+      
+      try {
+        const response = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url: song.url, 
+            title: song.title, 
+            duration: song.duration, 
+            thumbnail: song.thumbnail, 
+            guildId: state.guildId 
+          })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+          showToast(`📻 Radio: Added ${song.title}`, 'success');
+        }
+      } catch (error) {
+        console.error('Error adding radio song:', error);
+      }
+      
+      // If running low on radio songs, fetch more
+      if (radioSongs.length < 5 && state.currentSong) {
+        fetchRadioSongs(state.currentSong.url);
       }
     }
 
@@ -2190,6 +2304,9 @@
             </button>
             <button class="control-btn secondary" onclick="sendCommand('stop')" title="Stop">
               ⏹
+            </button>
+            <button class="control-btn secondary radio-btn ${state.radioEnabled ? 'active' : ''}" onclick="toggleRadio()" title="Radio Mode - Auto-play similar songs">
+              📻
             </button>
           </div>
 
