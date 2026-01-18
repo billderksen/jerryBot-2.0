@@ -679,6 +679,17 @@
       line-height: 1.3;
     }
 
+    .track-title-link {
+      color: var(--text-primary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .track-title-link:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
     .cached-badge {
       color: var(--accent);
       font-size: 20px;
@@ -2440,17 +2451,17 @@
     // Clear queue button hover timer
     let clearQueueHoldTime = 0;
     let clearQueueHoldInterval = null;
-    let clearQueueDrainInterval = null;
+    let clearQueueResetTimeout = null;
     const CLEAR_QUEUE_HOLD_TIME = 2000; // 2 seconds in milliseconds
 
     function setupClearQueueButton() {
       const clearQueueBtn = document.getElementById('clearQueueBtn');
       
       clearQueueBtn.addEventListener('mouseenter', () => {
-        // Stop any drain animation
-        if (clearQueueDrainInterval) {
-          clearInterval(clearQueueDrainInterval);
-          clearQueueDrainInterval = null;
+        // Stop any reset timeout
+        if (clearQueueResetTimeout) {
+          clearTimeout(clearQueueResetTimeout);
+          clearQueueResetTimeout = null;
         }
         
         // If already ready, stay ready
@@ -2482,28 +2493,14 @@
           clearQueueHoldInterval = null;
         }
         
-        // If ready, stay ready (so user can click after leaving briefly)
-        // But start drain animation to slowly remove the red
         clearQueueBtn.classList.remove('holding');
         
-        // Start draining the progress
-        clearQueueDrainInterval = setInterval(() => {
-          clearQueueHoldTime -= 50;
-          if (clearQueueHoldTime <= 0) {
-            clearQueueHoldTime = 0;
-            clearInterval(clearQueueDrainInterval);
-            clearQueueDrainInterval = null;
-            clearQueueBtn.classList.remove('ready');
-            clearQueueBtn.style.setProperty('--progress', '0%');
-            return;
-          }
-          const progress = (clearQueueHoldTime / CLEAR_QUEUE_HOLD_TIME) * 100;
-          clearQueueBtn.style.setProperty('--progress', progress + '%');
-          // Remove ready state once progress drops below 100%
-          if (progress < 100) {
-            clearQueueBtn.classList.remove('ready');
-          }
-        }, 50);
+        // After 2 seconds of not hovering, completely reset
+        clearQueueResetTimeout = setTimeout(() => {
+          clearQueueHoldTime = 0;
+          clearQueueBtn.classList.remove('ready');
+          clearQueueBtn.style.setProperty('--progress', '0%');
+        }, 2000);
       });
       
       clearQueueBtn.addEventListener('click', (e) => {
@@ -2516,9 +2513,9 @@
         clearQueue();
         // Reset state after click
         clearQueueHoldTime = 0;
-        if (clearQueueDrainInterval) {
-          clearInterval(clearQueueDrainInterval);
-          clearQueueDrainInterval = null;
+        if (clearQueueResetTimeout) {
+          clearTimeout(clearQueueResetTimeout);
+          clearQueueResetTimeout = null;
         }
         clearQueueBtn.classList.remove('ready');
         clearQueueBtn.style.setProperty('--progress', '0%');
@@ -2594,7 +2591,7 @@
           </div>
 
           <div class="track-info">
-            <div class="track-title">${escapeHtml(song.title)}${state.isCached ? ` <span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>` : ''}</div>
+            <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a>${state.isCached ? ` <span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>` : ''}</div>
             <div class="track-requested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
           </div>
 
@@ -2886,6 +2883,19 @@
       }
       
       currentSongDuration = state.currentSong.duration || 0;
+      
+      // Setup track title link to open YouTube at current timestamp
+      const trackTitleLink = document.getElementById('trackTitleLink');
+      if (trackTitleLink) {
+        trackTitleLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          const baseUrl = trackTitleLink.dataset.baseUrl;
+          const timestamp = Math.floor(currentElapsed);
+          const separator = baseUrl.includes('?') ? '&' : '?';
+          const urlWithTimestamp = `${baseUrl}${separator}t=${timestamp}`;
+          window.open(urlWithTimestamp, '_blank', 'noopener,noreferrer');
+        });
+      }
       
       const handleSeek = (clientX) => {
         if (currentSongDuration <= 0) return 0;
