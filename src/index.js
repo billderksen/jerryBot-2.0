@@ -11,8 +11,9 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
-import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback } from './utils/musicQueue.js';
+import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger } from './web/server.js';
+import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback } from './utils/musicQueue.js';
+import { setDiscordClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 
 // Store the last used voice channel for web dashboard
 let lastVoiceChannel = null;
@@ -46,6 +47,9 @@ for (const file of commandFiles) {
 
 // Setup web dashboard callbacks
 setWebUpdateCallback(updateState);
+
+// Setup activity logger callbacks
+setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong);
 
 // Handle commands from web dashboard
 setCommandHandler((command, guildId) => {
@@ -173,6 +177,12 @@ client.once(Events.ClientReady, readyClient => {
     avatar: readyClient.user.displayAvatarURL({ size: 256 }),
     id: readyClient.user.id
   });
+  
+  // Set Discord client for activity logger
+  setDiscordClient(readyClient);
+  
+  // Pass logger to web server for web dashboard actions
+  setActivityLogger({ logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong });
   
   startWebServer();
 });

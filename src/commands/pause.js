@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getQueue } from '../utils/musicQueue.js';
+import { logCommandAction } from '../utils/activityLogger.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -17,6 +18,10 @@ export default {
     }
 
     queue.pause();
+    
+    // Log the action
+    logCommandAction(interaction.user, 'pause');
+    
     await interaction.reply('⏸️ Paused the music.');
   }
 };

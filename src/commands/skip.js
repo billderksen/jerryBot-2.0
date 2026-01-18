@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getQueue } from '../utils/musicQueue.js';
+import { logCommandAction } from '../utils/activityLogger.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -18,6 +19,9 @@ export default {
 
     const skippedSong = queue.currentSong;
     queue.skip();
+    
+    // Log the action
+    logCommandAction(interaction.user, 'skip', skippedSong.title);
     
     await interaction.reply(`⏭️ Skipped: **${skippedSong.title}**`);
   }

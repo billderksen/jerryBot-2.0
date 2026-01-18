@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getQueue } from '../utils/musicQueue.js';
+import { logCommandAction } from '../utils/activityLogger.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -28,6 +29,9 @@ export default {
     const volume = level / 10; // Convert 1-10 to 0.1-1.0
     
     queue.setVolume(volume);
+    
+    // Log the action
+    logCommandAction(interaction.user, 'volume', level * 10);
     
     const volumeBar = '█'.repeat(level) + '░'.repeat(10 - level);
     await interaction.reply(`🔊 Volume set to **${level}/10**\n\`${volumeBar}\``);

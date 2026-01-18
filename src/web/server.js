@@ -42,13 +42,6 @@ app.use(session({
 // Store connected clients
 const clients = new Set();
 
-// Store bot info
-let botInfo = {
-  username: 'JerryBot',
-  avatar: null,
-  id: null
-};
-
 // Store current state
 let currentState = {
   currentSong: null,
@@ -71,11 +64,6 @@ function requireAuth(req, res, next) {
   // For page routes, redirect to login
   res.redirect('/login');
 }
-
-// Bot info API (public, no auth required)
-app.get('/api/bot-info', (req, res) => {
-  res.json(botInfo);
-});
 
 // Discord OAuth2 routes
 app.get('/login', (req, res) => {
@@ -158,6 +146,29 @@ app.get('/auth/discord/callback', async (req, res) => {
     res.redirect('/login?error=oauth_error');
   }
 });
+
+// Store bot info for login page
+let botInfo = null;
+
+export function setBotInfo(info) {
+  botInfo = info;
+}
+
+// API endpoint for bot info (public)
+app.get('/api/bot-info', (req, res) => {
+  if (botInfo) {
+    res.json(botInfo);
+  } else {
+    res.status(503).json({ error: 'Bot not ready' });
+  }
+});
+
+// Activity logger (will be set by index.js)
+let activityLogger = null;
+
+export function setActivityLogger(logger) {
+  activityLogger = logger;
+}
 
 app.get('/access-denied', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'access-denied.html'));
@@ -441,6 +452,7 @@ app.post('/api/queue/add', async (req, res) => {
   
   // Use custom requestedBy if provided (e.g., for Radio), otherwise use session username
   const requestedBy = customRequestedBy || req.session?.user?.username || 'Web Dashboard';
+  const isRadio = customRequestedBy && customRequestedBy.toLowerCase().includes('radio');
   
   try {
     // Get full song info if needed
@@ -470,6 +482,18 @@ app.post('/api/queue/add', async (req, res) => {
       if (result.success === false) {
         return res.status(400).json({ success: false, error: result.error });
       }
+      
+      // Log the action (skip radio auto-adds to avoid spam, but log a simplified message)
+      if (activityLogger && activityLogger.logWebAction) {
+        if (isRadio) {
+          // Log radio additions with a distinct message
+          activityLogger.logWebAction('📻 Radio', 'radio-add', song.title);
+        } else {
+          const username = req.session?.user?.username || 'Web Dashboard';
+          activityLogger.logWebAction(username, 'play', song.title);
+        }
+      }
+      
       res.json({ success: true, song, result });
     } else {
       res.status(500).json({ error: 'Queue not available' });
@@ -501,7 +525,7 @@ wss.on('connection', (ws) => {
       
       // Handle commands from web interface
       if (data.type === 'command') {
-        handleWebCommand(data.command, data.guildId);
+        handleWebCommand(data.command, data.guildId, data.username);
       }
     } catch (error) {
       console.error('Error parsing WebSocket message:', error);
@@ -538,9 +562,40 @@ export function setAddSongHandler(handler) {
   addSongHandler = handler;
 }
 
-function handleWebCommand(command, guildId) {
+function handleWebCommand(command, guildId, username = 'Web Dashboard') {
   if (commandHandler) {
     commandHandler(command, guildId);
+  }
+  
+  // Log the action
+  if (activityLogger && activityLogger.logWebAction) {
+    const { logWebAction } = activityLogger;
+    
+    if (command === 'pause') {
+      logWebAction(username, 'pause');
+    } else if (command === 'resume') {
+      logWebAction(username, 'resume');
+    } else if (command === 'skip') {
+      logWebAction(username, 'skip');
+    } else if (command === 'previous') {
+      logWebAction(username, 'previous');
+    } else if (command === 'stop') {
+      logWebAction(username, 'stop');
+    } else if (command.startsWith('volume:')) {
+      const level = command.split(':')[1];
+      logWebAction(username, 'volume', level);
+    } else if (command.startsWith('skipto:')) {
+      const index = parseInt(command.split(':')[1]) + 1; // Convert to 1-based
+      logWebAction(username, 'skipto', index);
+    } else if (command.startsWith('remove:')) {
+      const index = parseInt(command.split(':')[1]) + 1; // Convert to 1-based
+      logWebAction(username, 'remove', index);
+    } else if (command.startsWith('seek:')) {
+      const seconds = parseFloat(command.split(':')[1]);
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      logWebAction(username, 'seek', `${mins}:${secs.toString().padStart(2, '0')}`);
+    }
   }
 }
 
@@ -551,14 +606,6 @@ export function startWebServer() {
   server.listen(PORT, () => {
     console.log(`🌐 Web dashboard running at http://localhost:${PORT}`);
   });
-}
-
-export function setBotInfo(info) {
-  botInfo = {
-    username: info.username || 'JerryBot',
-    avatar: info.avatar,
-    id: info.id
-  };
 }
 
 export { currentState };

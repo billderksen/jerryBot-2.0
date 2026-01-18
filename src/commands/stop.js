@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getQueue } from '../utils/musicQueue.js';
+import { logCommandAction } from '../utils/activityLogger.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -18,6 +19,9 @@ export default {
 
     queue.stop();
     queue.leave();
+    
+    // Log the action
+    logCommandAction(interaction.user, 'stop');
     
     await interaction.reply('⏹️ Stopped the music and left the voice channel.');
   }

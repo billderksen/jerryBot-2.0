@@ -3,6 +3,7 @@ import play from 'play-dl';
 import ytDlpPkg from 'yt-dlp-exec';
 const ytDlpExec = ytDlpPkg;
 import { getQueue, createQueue } from '../utils/musicQueue.js';
+import { logCommandAction } from '../utils/activityLogger.js';
 import Spotify from 'spotify-url-info';
 import { fetch } from 'undici';
 
@@ -176,6 +177,9 @@ export default {
       console.log(`\n[${new Date().toISOString()}] Music played by ${interaction.user.tag}:`);
       console.log(`Song: ${song.title}`);
       console.log(`URL: ${song.url}\n`);
+      
+      // Log the action
+      logCommandAction(interaction.user, 'play', song.title);
 
     } catch (error) {
       console.error('Error playing music:', error);

@@ -65,8 +65,17 @@ const queues = new Map();
 // Web dashboard update function (will be set by index.js)
 let webUpdateCallback = null;
 
+// Activity logger callbacks (will be set by index.js)
+let logNowPlayingCallback = null;
+let resetLastLoggedSongCallback = null;
+
 export function setWebUpdateCallback(callback) {
   webUpdateCallback = callback;
+}
+
+export function setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong) {
+  logNowPlayingCallback = logNowPlaying;
+  resetLastLoggedSongCallback = resetLastLoggedSong;
 }
 
 // Broadcast state to web dashboard
@@ -284,6 +293,11 @@ export class MusicQueue {
     
     // Broadcast state immediately when song changes
     broadcastState();
+    
+    // Log the now playing song
+    if (logNowPlayingCallback && this.currentSong) {
+      logNowPlayingCallback(this.currentSong);
+    }
 
     try {
       // Get the audio URL for streaming
@@ -595,6 +609,10 @@ export class MusicQueue {
   stop() {
     this.songs = [];
     this.player.stop();
+    // Reset logged song tracker since we're stopping
+    if (resetLastLoggedSongCallback) {
+      resetLastLoggedSongCallback();
+    }
     broadcastState();
   }
 
@@ -610,6 +628,10 @@ export class MusicQueue {
     this.isPlaying = false;
     this.currentSong = null;
     this.connection = null;
+    // Reset logged song tracker on cleanup
+    if (resetLastLoggedSongCallback) {
+      resetLastLoggedSongCallback();
+    }
     queues.delete(this.guildId);
     broadcastState();
   }
