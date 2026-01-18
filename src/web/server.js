@@ -641,9 +641,14 @@ wss.on('connection', (ws, req) => {
     const stateWithRecentlyPlayed = { ...currentState, recentlyPlayed: getRecentlyPlayed() };
     ws.send(JSON.stringify({ type: 'state', data: stateWithRecentlyPlayed }));
     
+    // Broadcast updated listeners list to all clients (including new one)
+    setTimeout(() => broadcastListeners(), 100);
+    
     ws.on('close', () => {
       console.log(`Web client disconnected: ${ws.user?.username || 'unknown'}`);
       clients.delete(ws);
+      // Broadcast updated listeners list after disconnect
+      broadcastListeners();
     });
     
     ws.on('message', (message) => {
@@ -661,6 +666,27 @@ wss.on('connection', (ws, req) => {
     });
   });
 });
+
+// Get list of currently connected listeners
+function getConnectedListeners() {
+  const listeners = [];
+  clients.forEach(client => {
+    if (client.readyState === 1 && client.user) {
+      listeners.push({
+        id: client.user.id,
+        username: client.user.username,
+        avatar: client.user.avatar
+      });
+    }
+  });
+  return listeners;
+}
+
+// Broadcast listeners update to all clients
+function broadcastListeners() {
+  const listeners = getConnectedListeners();
+  broadcast('listeners', listeners);
+}
 
 // Broadcast to all connected clients
 export function broadcast(type, data) {

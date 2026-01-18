@@ -369,15 +369,23 @@ export class MusicQueue {
 
     try {
       // Get the audio URL for streaming
+      // Format priority: opus (best quality) > m4a/aac > webm/vorbis > any audio > any format
+      // Prefer 160kbps+ audio when available
       const result = await ytDlpExec(this.currentSong.url, {
         dumpSingleJson: true,
         noCheckCertificates: true,
         noWarnings: true,
         preferFreeFormats: true,
-        format: 'bestaudio[ext=webm]/bestaudio/best'
+        format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
+        audioQuality: 0 // Best quality
       });
       
       this.currentAudioUrl = result.url;
+      
+      // Log audio quality info for debugging
+      if (result.acodec || result.abr) {
+        console.log(`Audio quality: ${result.acodec || 'unknown'} @ ${result.abr || 'unknown'}kbps`);
+      }
       
       // Start streaming immediately
       this.playFromUrl(this.currentAudioUrl, 0);
@@ -411,9 +419,10 @@ export class MusicQueue {
       '-i', audioUrl,
       '-analyzeduration', '0',
       '-loglevel', '0',
+      '-af', 'aresample=resampler=soxr', // High quality resampling
       '-f', 's16le',
-      '-ar', '48000',
-      '-ac', '2',
+      '-ar', '48000', // Discord's native sample rate
+      '-ac', '2',     // Stereo
       'pipe:1'
     );
     
@@ -457,14 +466,18 @@ export class MusicQueue {
     console.log(`Background caching audio to: ${cachePath}`);
     
     try {
+      // Cache at highest quality opus (quality 0 = best, ~256kbps VBR)
+      // Use same format preference as streaming for consistency
       await ytDlpExec(this.currentSong.url, {
         output: cachePath,
         extractAudio: true,
         audioFormat: 'opus',
-        audioQuality: 0,
+        audioQuality: 0, // Best quality (VBR ~256kbps for opus)
         noCheckCertificates: true,
         noWarnings: true,
-        ffmpegLocation: ffmpegPath
+        ffmpegLocation: ffmpegPath,
+        format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
+        postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
       });
       
       // Only set cached path if we're still playing the same song
@@ -505,9 +518,10 @@ export class MusicQueue {
       '-i', this.cachedAudioPath,
       '-analyzeduration', '0',
       '-loglevel', '0',
+      '-af', 'aresample=resampler=soxr', // High quality resampling
       '-f', 's16le',
-      '-ar', '48000',
-      '-ac', '2',
+      '-ar', '48000', // Discord's native sample rate
+      '-ac', '2',     // Stereo
       'pipe:1'
     );
     
