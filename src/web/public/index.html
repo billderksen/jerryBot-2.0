@@ -864,7 +864,6 @@
       transition: all 0.2s;
       position: relative;
       overflow: hidden;
-      display: flex;
       align-items: center;
       justify-content: center;
     }
@@ -904,7 +903,7 @@
     }
 
     .clear-queue-btn.visible {
-      display: block;
+      display: flex;
     }
 
     .queue-item {
@@ -2013,12 +2012,11 @@
         setTimeout(setupProgressBarEvents, 0);
       }
 
-      const allSongs = state.currentSong 
-        ? [{ ...state.currentSong, isCurrent: true }, ...state.queue]
-        : state.queue;
+      // Queue only shows upcoming songs, not the current song
+      const queueSongs = state.queue;
 
       // Update queue count (just the number for the tab badge)
-      queueCount.textContent = allSongs.length;
+      queueCount.textContent = queueSongs.length;
 
       // Show/hide clear queue button (only on queue tab)
       const clearQueueBtn = document.getElementById('clearQueueBtn');
@@ -2028,7 +2026,7 @@
         clearQueueBtn.classList.remove('visible');
       }
 
-      if (allSongs.length === 0) {
+      if (queueSongs.length === 0) {
         queueList.innerHTML = `
           <div class="queue-empty">
             <div class="queue-empty-icon">📭</div>
@@ -2036,11 +2034,10 @@
           </div>
         `;
       } else {
-        queueList.innerHTML = allSongs.map((song, index) => `
-          <div class="queue-item ${song.isCurrent ? 'current' : ''}" 
-               ${!song.isCurrent ? `onclick="skipToSong(${index})" title="Click to play"` : ''}>
+        queueList.innerHTML = queueSongs.map((song, index) => `
+          <div class="queue-item" onclick="skipToSong(${index + 1})" title="Click to play">
             <div class="queue-item-number">
-              ${song.isCurrent ? '▶' : `<span>${index}</span>`}
+              <span>${index + 1}</span>
             </div>
             <div class="queue-item-art">
               ${song.thumbnail 
@@ -2053,7 +2050,7 @@
               <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
             </div>
             <div class="queue-item-duration">${formatDuration(song.duration)}</div>
-            <div class="queue-item-remove" onclick="removeSong(event, ${index})" title="Remove from queue">✕</div>
+            <div class="queue-item-remove" onclick="removeSong(event, ${index + 1})" title="Remove from queue">✕</div>
           </div>
         `).join('');
       }
