@@ -9,6 +9,7 @@ import { fetch } from 'undici';
 import { getRecentlyPlayed } from '../utils/musicQueue.js';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
+import cookie from 'cookie';
 
 const ytDlpExec = ytDlpPkg;
 const { getData, getPreview, getTracks } = spotifyUrlInfo(fetch);
@@ -64,16 +65,19 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 // Session middleware
-app.use(cookieParser());
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'jerrybot_default_secret',
+const sessionSecret = process.env.SESSION_SECRET || 'jerrybot_default_secret';
+const sessionMiddleware = session({
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: { 
     secure: false, // Set to true in production with HTTPS
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   }
-}));
+});
+
+app.use(cookieParser());
+app.use(sessionMiddleware);
 
 // Store connected clients
 const clients = new Set();
@@ -543,32 +547,70 @@ app.post('/api/queue/add', async (req, res) => {
   }
 });
 
-// WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('Web client connected');
-  clients.add(ws);
+// WebSocket connection handling with authentication
+wss.on('connection', (ws, req) => {
+  // Parse session cookie to verify authentication
+  const cookies = cookie.parse(req.headers.cookie || '');
+  const sessionId = cookies['connect.sid'];
   
-  // Send current state immediately (include recently played from musicQueue)
-  const stateWithRecentlyPlayed = { ...currentState, recentlyPlayed: getRecentlyPlayed() };
-  ws.send(JSON.stringify({ type: 'state', data: stateWithRecentlyPlayed }));
+  if (!sessionId) {
+    console.log('WebSocket connection rejected: No session cookie');
+    ws.close(4001, 'Unauthorized: No session');
+    return;
+  }
   
-  ws.on('close', () => {
-    console.log('Web client disconnected');
-    clients.delete(ws);
-  });
+  // Parse the signed session ID
+  const unsignedSessionId = cookieParser.signedCookie(
+    decodeURIComponent(sessionId),
+    sessionSecret
+  );
   
-  ws.on('message', (message) => {
-    try {
-      const data = JSON.parse(message);
-      console.log('Received from web client:', data);
-      
-      // Handle commands from web interface
-      if (data.type === 'command') {
-        handleWebCommand(data.command, data.guildId, data.username);
-      }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
+  if (!unsignedSessionId) {
+    console.log('WebSocket connection rejected: Invalid session signature');
+    ws.close(4001, 'Unauthorized: Invalid session');
+    return;
+  }
+  
+  // Use session middleware to get session data
+  // Create a mock req/res to use the session middleware
+  const mockReq = { headers: req.headers, connection: req.connection };
+  const mockRes = { end: () => {}, setHeader: () => {} };
+  
+  sessionMiddleware(mockReq, mockRes, () => {
+    if (!mockReq.session || !mockReq.session.user || !mockReq.session.user.hasAccess) {
+      console.log('WebSocket connection rejected: User not authenticated or no access');
+      ws.close(4001, 'Unauthorized: Access denied');
+      return;
     }
+    
+    // Store user info on websocket for command handling
+    ws.user = mockReq.session.user;
+    
+    console.log(`Web client connected: ${ws.user.username}`);
+    clients.add(ws);
+    
+    // Send current state immediately (include recently played from musicQueue)
+    const stateWithRecentlyPlayed = { ...currentState, recentlyPlayed: getRecentlyPlayed() };
+    ws.send(JSON.stringify({ type: 'state', data: stateWithRecentlyPlayed }));
+    
+    ws.on('close', () => {
+      console.log(`Web client disconnected: ${ws.user?.username || 'unknown'}`);
+      clients.delete(ws);
+    });
+    
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message);
+        console.log(`Received from ${ws.user.username}:`, data);
+        
+        // Handle commands from web interface
+        if (data.type === 'command') {
+          handleWebCommand(data.command, data.guildId, ws.user.username);
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    });
   });
 });
 
