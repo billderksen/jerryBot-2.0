@@ -10,8 +10,42 @@ import { getRecentlyPlayed } from '../utils/musicQueue.js';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
+import { platform } from 'os';
+import { existsSync } from 'fs';
+import { execSync } from 'child_process';
 
-const ytDlpExec = ytDlpPkg;
+// Detect system yt-dlp for Linux
+let ytDlpExec = ytDlpPkg;
+const isLinux = platform() === 'linux';
+
+if (isLinux) {
+  // Try to find system yt-dlp
+  let systemYtDlpPath = null;
+  const possiblePaths = ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp'];
+  
+  for (const p of possiblePaths) {
+    if (existsSync(p)) {
+      systemYtDlpPath = p;
+      break;
+    }
+  }
+  
+  if (!systemYtDlpPath) {
+    try {
+      systemYtDlpPath = execSync('which yt-dlp', { encoding: 'utf8' }).trim();
+    } catch (e) {
+      // yt-dlp not found in PATH
+    }
+  }
+  
+  if (systemYtDlpPath) {
+    console.log(`[server.js] Using system yt-dlp: ${systemYtDlpPath}`);
+    ytDlpExec = ytDlpPkg.create(systemYtDlpPath);
+  } else {
+    console.warn('[server.js] System yt-dlp not found, using bundled (may not work on Linux)');
+  }
+}
+
 const { getData, getPreview, getTracks } = spotifyUrlInfo(fetch);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,12 +98,23 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Session middleware
+// Session middleware with file-based store for persistence across restarts
 const sessionSecret = process.env.SESSION_SECRET || 'jerrybot_default_secret';
+import FileStoreFactory from 'session-file-store';
+const FileStore = FileStoreFactory(session);
+const sessionStore = new FileStore({
+  path: join(__dirname, '../../data/sessions'), // Store sessions in data/sessions folder
+  ttl: 7 * 24 * 60 * 60, // 7 days in seconds
+  retries: 0, // Don't retry on missing files (expected for expired/invalid sessions)
+  reapInterval: 3600, // Clean up expired sessions every hour
+  logFn: () => {} // Suppress session-file-store logging
+});
+
 const sessionMiddleware = session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
+  store: sessionStore,
   cookie: { 
     secure: false, // Set to true in production with HTTPS
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -571,20 +616,23 @@ wss.on('connection', (ws, req) => {
     return;
   }
   
-  // Use session middleware to get session data
-  // Create a mock req/res to use the session middleware
-  const mockReq = { headers: req.headers, connection: req.connection };
-  const mockRes = { end: () => {}, setHeader: () => {} };
-  
-  sessionMiddleware(mockReq, mockRes, () => {
-    if (!mockReq.session || !mockReq.session.user || !mockReq.session.user.hasAccess) {
+  // Load session from store using the session ID
+  sessionStore.get(unsignedSessionId, (err, sessionData) => {
+    // Treat missing session (ENOENT) as not authenticated, not as an error
+    if (err && err.code !== 'ENOENT') {
+      console.log('WebSocket connection rejected: Session store error', err);
+      ws.close(4001, 'Unauthorized: Session error');
+      return;
+    }
+    
+    if (!sessionData || !sessionData.user || !sessionData.user.hasAccess) {
       console.log('WebSocket connection rejected: User not authenticated or no access');
       ws.close(4001, 'Unauthorized: Access denied');
       return;
     }
     
     // Store user info on websocket for command handling
-    ws.user = mockReq.session.user;
+    ws.user = sessionData.user;
     
     console.log(`Web client connected: ${ws.user.username}`);
     clients.add(ws);
