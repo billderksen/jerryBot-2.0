@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/bash 
 
-# JerryBot 2.0 - Linux Setup Script
+# JerryBot 2.0 - Linux Setup Script lmao
 # Run this script on a fresh Debian/Ubuntu server
 
 set -e
