@@ -150,6 +150,10 @@ function broadcastState(seekPosition = null) {
   const firstQueue = queues.values().next().value;
   
   if (firstQueue) {
+    // Debug: log current song thumbnail
+    if (firstQueue.currentSong) {
+      console.log('Current song thumbnail:', firstQueue.currentSong.thumbnail || 'NO THUMBNAIL');
+    }
     webUpdateCallback({
       currentSong: firstQueue.currentSong,
       queue: firstQueue.songs,
@@ -432,7 +436,9 @@ export class MusicQueue {
     });
     
     if (resource.volume) {
-      resource.volume.setVolume(this.volume);
+      // Apply logarithmic volume curve for natural perception
+      const actualVolume = Math.pow(this.volume, 2);
+      resource.volume.setVolume(actualVolume);
     }
     this.currentResource = resource;
     
@@ -524,7 +530,9 @@ export class MusicQueue {
     });
     
     if (resource.volume) {
-      resource.volume.setVolume(this.volume);
+      // Apply logarithmic volume curve for natural perception
+      const actualVolume = Math.pow(this.volume, 2);
+      resource.volume.setVolume(actualVolume);
     }
     this.currentResource = resource;
     
@@ -588,9 +596,18 @@ export class MusicQueue {
   }
 
   setVolume(volume) {
+    // Store the linear volume for UI display
     this.volume = volume;
+    
+    // Apply logarithmic curve for more natural volume perception
+    // Human hearing is logarithmic, so linear sliders feel wrong
+    // Using a power curve: actual = linear^2 gives a nice feel
+    // At 0.5 (50%), actual volume will be 0.25 (25%)
+    // At 0.1 (10%), actual volume will be 0.01 (1%)
+    const actualVolume = Math.pow(volume, 2);
+    
     if (this.currentResource && this.currentResource.volume) {
-      this.currentResource.volume.setVolume(volume);
+      this.currentResource.volume.setVolume(actualVolume);
     }
     broadcastState();
   }

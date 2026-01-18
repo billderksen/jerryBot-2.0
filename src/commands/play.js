@@ -1,7 +1,37 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import play from 'play-dl';
 import ytDlpPkg from 'yt-dlp-exec';
-const ytDlpExec = ytDlpPkg;
+import { platform } from 'os';
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+
+// Use system yt-dlp if available
+let ytDlpExec = ytDlpPkg;
+let systemYtDlpPath = null;
+
+try {
+  if (platform() === 'win32') {
+    systemYtDlpPath = execSync('where yt-dlp.exe', { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
+  } else {
+    systemYtDlpPath = execSync('which yt-dlp', { encoding: 'utf8' }).trim();
+  }
+} catch (e) {
+  const commonPaths = platform() === 'win32' 
+    ? ['C:\\yt-dlp\\yt-dlp.exe', 'C:\\Program Files\\yt-dlp\\yt-dlp.exe']
+    : ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp'];
+  
+  for (const p of commonPaths) {
+    if (existsSync(p)) {
+      systemYtDlpPath = p;
+      break;
+    }
+  }
+}
+
+if (systemYtDlpPath) {
+  ytDlpExec = ytDlpPkg.create(systemYtDlpPath);
+}
+
 import { getQueue, createQueue } from '../utils/musicQueue.js';
 import { logCommandAction } from '../utils/activityLogger.js';
 import Spotify from 'spotify-url-info';

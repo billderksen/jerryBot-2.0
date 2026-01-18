@@ -1039,7 +1039,7 @@
       width: 100%;
       padding: 12px 20px;
       margin-top: 12px;
-      background: var(--surface-light);
+      background: var(--surface-light) !important;
       border: 2px solid var(--border);
       color: var(--text-secondary);
       font-size: 14px;
@@ -1068,7 +1068,7 @@
       background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
       border-radius: 8px;
       transition: width 0.05s linear;
-      z-index: 0;
+      z-index: 1;
     }
 
     .clear-queue-btn.holding {
@@ -1076,10 +1076,14 @@
     }
 
     .clear-queue-btn.ready {
-      background: #dc3545;
+      background: #dc3545 !important;
       border-color: #dc3545;
       color: white;
       cursor: pointer;
+    }
+
+    .clear-queue-btn.ready::before {
+      width: 100%;
     }
 
     .clear-queue-btn.ready:hover {
@@ -2436,13 +2440,24 @@
     // Clear queue button hover timer
     let clearQueueHoldTime = 0;
     let clearQueueHoldInterval = null;
-    const CLEAR_QUEUE_HOLD_TIME = 1000; // 1 second in milliseconds
+    let clearQueueDrainInterval = null;
+    const CLEAR_QUEUE_HOLD_TIME = 2000; // 2 seconds in milliseconds
 
     function setupClearQueueButton() {
       const clearQueueBtn = document.getElementById('clearQueueBtn');
       
       clearQueueBtn.addEventListener('mouseenter', () => {
-        clearQueueHoldTime = 0;
+        // Stop any drain animation
+        if (clearQueueDrainInterval) {
+          clearInterval(clearQueueDrainInterval);
+          clearQueueDrainInterval = null;
+        }
+        
+        // If already ready, stay ready
+        if (clearQueueBtn.classList.contains('ready')) {
+          return;
+        }
+        
         clearQueueBtn.classList.add('holding');
         
         // Update progress bar every 50ms
@@ -2453,6 +2468,7 @@
           
           if (clearQueueHoldTime >= CLEAR_QUEUE_HOLD_TIME) {
             clearInterval(clearQueueHoldInterval);
+            clearQueueHoldInterval = null;
             clearQueueBtn.classList.remove('holding');
             clearQueueBtn.classList.add('ready');
           }
@@ -2460,12 +2476,34 @@
       });
       
       clearQueueBtn.addEventListener('mouseleave', () => {
-        clearInterval(clearQueueHoldInterval);
-        clearQueueHoldInterval = null;
-        clearQueueHoldTime = 0;
+        // Stop the fill animation
+        if (clearQueueHoldInterval) {
+          clearInterval(clearQueueHoldInterval);
+          clearQueueHoldInterval = null;
+        }
+        
+        // If ready, stay ready (so user can click after leaving briefly)
+        // But start drain animation to slowly remove the red
         clearQueueBtn.classList.remove('holding');
-        clearQueueBtn.classList.remove('ready');
-        clearQueueBtn.style.setProperty('--progress', '0%');
+        
+        // Start draining the progress
+        clearQueueDrainInterval = setInterval(() => {
+          clearQueueHoldTime -= 50;
+          if (clearQueueHoldTime <= 0) {
+            clearQueueHoldTime = 0;
+            clearInterval(clearQueueDrainInterval);
+            clearQueueDrainInterval = null;
+            clearQueueBtn.classList.remove('ready');
+            clearQueueBtn.style.setProperty('--progress', '0%');
+            return;
+          }
+          const progress = (clearQueueHoldTime / CLEAR_QUEUE_HOLD_TIME) * 100;
+          clearQueueBtn.style.setProperty('--progress', progress + '%');
+          // Remove ready state once progress drops below 100%
+          if (progress < 100) {
+            clearQueueBtn.classList.remove('ready');
+          }
+        }, 50);
       });
       
       clearQueueBtn.addEventListener('click', (e) => {
@@ -2477,6 +2515,11 @@
         // Call the clear queue function
         clearQueue();
         // Reset state after click
+        clearQueueHoldTime = 0;
+        if (clearQueueDrainInterval) {
+          clearInterval(clearQueueDrainInterval);
+          clearQueueDrainInterval = null;
+        }
         clearQueueBtn.classList.remove('ready');
         clearQueueBtn.style.setProperty('--progress', '0%');
       });
@@ -2530,6 +2573,7 @@
 
       if (state.currentSong) {
         const song = state.currentSong;
+        console.log('Current song thumbnail (client):', song.thumbnail || 'NO THUMBNAIL');
         const currentProgress = song.duration > 0 ? Math.min((currentElapsed / song.duration) * 100, 100) : 0;
         const currentTimeStr = formatDuration(Math.floor(currentElapsed));
         
@@ -2777,9 +2821,11 @@
     // Thumbnail fallback chain for YouTube videos
     function handleThumbnailError(img) {
       const src = img.src;
+      console.log('Thumbnail error for:', src);
       const videoIdMatch = src.match(/\/vi\/([a-zA-Z0-9_-]{11})\//);
       if (!videoIdMatch) {
         // Not a YouTube thumbnail, hide or show placeholder
+        console.log('Not a YouTube thumbnail, showing placeholder');
         if (img.closest('.album-art')) {
           img.parentElement.innerHTML = '<div class="placeholder">🎵</div>';
         } else {
@@ -2791,13 +2837,17 @@
       
       // Fallback chain: maxresdefault -> hqdefault -> mqdefault -> default
       if (src.includes('maxresdefault')) {
+        console.log('Falling back to hqdefault');
         img.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
       } else if (src.includes('hqdefault')) {
+        console.log('Falling back to mqdefault');
         img.src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
       } else if (src.includes('mqdefault')) {
+        console.log('Falling back to default');
         img.src = `https://img.youtube.com/vi/${videoId}/default.jpg`;
       } else {
         // All fallbacks exhausted
+        console.log('All fallbacks exhausted, showing placeholder');
         if (img.closest('.album-art')) {
           img.parentElement.innerHTML = '<div class="placeholder">🎵</div>';
         } else {
