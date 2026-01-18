@@ -2275,7 +2275,8 @@
             title: song.title, 
             duration: song.duration, 
             thumbnail: song.thumbnail, 
-            guildId: state.guildId 
+            guildId: state.guildId,
+            requestedBy: '📻 Radio'
           })
         });
         
@@ -2291,6 +2292,19 @@
       if (radioSongs.length < 5 && state.currentSong) {
         fetchRadioSongs(state.currentSong.url);
       }
+    }
+
+    async function handleSkip() {
+      // Check if radio mode is on and queue will be empty after skip
+      const queueWillBeEmpty = !state.queue || state.queue.length === 0;
+      
+      // If radio is enabled and queue is empty, add a radio song first
+      if (state.radioEnabled && queueWillBeEmpty) {
+        await addRadioSong();
+      }
+      
+      // Send the skip command
+      sendCommand('skip');
     }
 
     function updateVolumeDisplay(value) {
@@ -2469,7 +2483,7 @@
             <button class="control-btn primary" onclick="sendCommand('${state.isPaused ? 'resume' : 'pause'}')" title="${state.isPaused ? 'Resume' : 'Pause'}">
               ${state.isPaused ? '▶' : '⏸'}
             </button>
-            <button class="control-btn secondary" onclick="sendCommand('skip')" title="Skip">
+            <button class="control-btn secondary" onclick="handleSkip()" title="Skip">
               ⏭
             </button>
             <button class="control-btn secondary" onclick="sendCommand('stop')" title="Stop">

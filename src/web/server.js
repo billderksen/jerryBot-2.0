@@ -421,14 +421,14 @@ app.get('/api/youtube/radio', async (req, res) => {
 
 // API endpoint to add song to queue
 app.post('/api/queue/add', async (req, res) => {
-  const { url, title, duration, thumbnail, guildId } = req.body;
+  const { url, title, duration, thumbnail, guildId, requestedBy: customRequestedBy } = req.body;
   
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
   
-  // Get the username from session
-  const requestedBy = req.session?.user?.username || 'Web Dashboard';
+  // Use custom requestedBy if provided (e.g., for Radio), otherwise use session username
+  const requestedBy = customRequestedBy || req.session?.user?.username || 'Web Dashboard';
   
   try {
     // Get full song info if needed
