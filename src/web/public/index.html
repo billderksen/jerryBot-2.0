@@ -391,6 +391,16 @@
       text-transform: uppercase;
     }
 
+    .youtube-badge {
+      background: #FF0000;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
     .spotify-thumb {
       background: linear-gradient(135deg, #1DB954 0%, #191414 100%);
     }
@@ -1331,6 +1341,10 @@
       return /^https?:\/\/(open\.)?spotify\.com\/(track|playlist|album)\//.test(text);
     }
 
+    function isYouTubePlaylistUrl(text) {
+      return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/(playlist\?list=|watch\?.*list=)/.test(text);
+    }
+
     searchInput.addEventListener('input', (e) => {
       const query = e.target.value.trim();
       searchClear.classList.toggle('visible', query.length > 0);
@@ -1350,17 +1364,24 @@
         currentSearchCount = 10;
       }
       
+      // Determine loading message
+      let loadingText = 'Searching...';
+      if (isSpotifyUrl(query)) loadingText = 'Loading Spotify...';
+      else if (isYouTubePlaylistUrl(query)) loadingText = 'Loading YouTube Playlist...';
+      
       searchResults.innerHTML = `
         <div class="search-loading">
           <div class="search-loading-spinner"></div>
-          ${isSpotifyUrl(query) ? 'Loading Spotify...' : 'Searching...'}
+          ${loadingText}
         </div>
       `;
       searchResults.classList.add('visible');
       
-      // Handle Spotify URLs differently
+      // Handle special URLs differently
       if (isSpotifyUrl(query)) {
         searchTimeout = setTimeout(() => handleSpotifyUrl(query), 100);
+      } else if (isYouTubePlaylistUrl(query)) {
+        searchTimeout = setTimeout(() => handleYouTubePlaylistUrl(query), 100);
       } else {
         searchTimeout = setTimeout(() => searchSongs(query, 10, false), 300);
       }
@@ -1674,6 +1695,190 @@
       }
     }
 
+    // Handle YouTube Playlist URLs
+    async function handleYouTubePlaylistUrl(url) {
+      try {
+        const response = await fetch(`/api/youtube/playlist?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        
+        displayYouTubePlaylist(data.tracks, data.name, data.total);
+      } catch (error) {
+        console.error('YouTube playlist error:', error);
+        searchResults.innerHTML = `
+          <div class="search-empty">
+            <div>❌</div>
+            <div>Failed to load YouTube playlist. Make sure it's a valid public playlist URL.</div>
+          </div>
+        `;
+      }
+    }
+
+    function displayYouTubePlaylist(tracks, playlistName, totalCount = 0) {
+      let html = '';
+      
+      // Show playlist header with "Add All" button
+      html += `
+        <div class="spotify-header youtube-header">
+          <div class="spotify-header-info">
+            <span class="spotify-icon">📺</span>
+            <span class="spotify-name">${escapeHtml(playlistName)}</span>
+            <span class="spotify-count">(${tracks.length}${totalCount > tracks.length ? ' of ' + totalCount : ''} videos)</span>
+          </div>
+          <button class="spotify-add-all" onclick="addAllYouTubePlaylistTracks(event, this)">
+            <span>+ Add All</span>
+          </button>
+        </div>
+      `;
+      
+      // Show individual tracks
+      html += tracks.map((track, index) => `
+        <div class="search-result-item youtube-playlist-track" 
+             data-url="${escapeHtml(track.url)}" 
+             data-title="${escapeHtml(track.title)}" 
+             data-duration="${track.duration}" 
+             data-thumbnail="${escapeHtml(track.thumbnail || '')}"
+             data-index="${index}">
+          <div class="search-result-thumb">
+            ${track.thumbnail 
+              ? `<img src="${track.thumbnail}" alt="" onerror="this.style.display='none'">`
+              : '<div class="mini-placeholder">🎵</div>'
+            }
+          </div>
+          <div class="search-result-info">
+            <div class="search-result-title">${escapeHtml(track.title)}</div>
+            <div class="search-result-meta">
+              <span class="youtube-badge">YouTube</span>
+              <span>•</span>
+              <span>${escapeHtml(track.channel)}</span>
+              <span>•</span>
+              <span>${formatDuration(track.duration)}</span>
+            </div>
+          </div>
+          <button class="search-result-add" onclick="addYouTubePlaylistTrack(event, this)">+ Add</button>
+        </div>
+      `).join('');
+      
+      searchResults.innerHTML = html;
+    }
+
+    // Add a single YouTube playlist track
+    async function addYouTubePlaylistTrack(event, button) {
+      event.stopPropagation();
+      const item = button.closest('.search-result-item');
+      const url = item.dataset.url;
+      const title = item.dataset.title;
+      const duration = parseInt(item.dataset.duration) || 0;
+      const thumbnail = item.dataset.thumbnail;
+      
+      button.disabled = true;
+      button.textContent = 'Adding...';
+      
+      try {
+        const response = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url, 
+            title, 
+            duration, 
+            thumbnail, 
+            guildId: state.guildId 
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          button.textContent = '✓ Added';
+          button.style.background = 'var(--bg-tertiary)';
+          showToast(`Added: ${title}`, 'success');
+        } else {
+          throw new Error(result.error || 'Failed to add song');
+        }
+      } catch (error) {
+        console.error('Error adding YouTube track:', error);
+        button.disabled = false;
+        button.textContent = '+ Add';
+        showToast(error.message || 'Failed to add song', 'error');
+      }
+    }
+
+    // Add all YouTube playlist tracks
+    async function addAllYouTubePlaylistTracks(event, button) {
+      event.stopPropagation();
+      
+      const trackItems = document.querySelectorAll('.youtube-playlist-track');
+      const totalTracks = trackItems.length;
+      let addedCount = 0;
+      let failedCount = 0;
+      
+      button.disabled = true;
+      button.innerHTML = `<span>Adding 0/${totalTracks}...</span>`;
+      
+      for (const item of trackItems) {
+        const addButton = item.querySelector('.search-result-add');
+        if (addButton.textContent === '✓ Added') {
+          addedCount++;
+          continue; // Skip already added tracks
+        }
+        
+        const url = item.dataset.url;
+        const title = item.dataset.title;
+        const duration = parseInt(item.dataset.duration) || 0;
+        const thumbnail = item.dataset.thumbnail;
+        
+        addButton.disabled = true;
+        addButton.textContent = 'Adding...';
+        
+        try {
+          const response = await fetch('/api/queue/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              url, 
+              title, 
+              duration, 
+              thumbnail, 
+              guildId: state.guildId 
+            })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            addButton.textContent = '✓ Added';
+            addButton.style.background = 'var(--bg-tertiary)';
+            addedCount++;
+          } else {
+            throw new Error('Failed');
+          }
+        } catch (error) {
+          console.error(`Failed to add: ${title}`, error);
+          addButton.disabled = false;
+          addButton.textContent = '+ Add';
+          failedCount++;
+        }
+        
+        button.innerHTML = `<span>Adding ${addedCount}/${totalTracks}...</span>`;
+        
+        // Small delay to prevent rate limiting
+        await new Promise(r => setTimeout(r, 100));
+      }
+      
+      button.innerHTML = `<span>✓ Added ${addedCount}</span>`;
+      button.style.background = 'var(--bg-tertiary)';
+      
+      if (failedCount > 0) {
+        showToast(`Added ${addedCount} videos (${failedCount} failed)`, 'warning');
+      } else {
+        showToast(`Added ${addedCount} videos from playlist`, 'success');
+      }
+    }
+
     async function addSong(event, button) {
       event.stopPropagation();
       const item = button.closest('.search-result-item');
@@ -1870,6 +2075,8 @@
       
       clearQueueBtn.addEventListener('mouseleave', () => {
         clearInterval(clearQueueHoldInterval);
+        clearQueueHoldInterval = null;
+        clearQueueHoldTime = 0;
         clearQueueBtn.classList.remove('holding');
         clearQueueBtn.classList.remove('ready');
         clearQueueBtn.style.setProperty('--progress', '0%');

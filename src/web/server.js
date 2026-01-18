@@ -188,6 +188,47 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
+// API endpoint to get YouTube playlist info
+app.get('/api/youtube/playlist', async (req, res) => {
+  const url = req.query.url;
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+  
+  try {
+    const results = await ytDlpExec(url, {
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+      flatPlaylist: true,
+      skipDownload: true
+    });
+    
+    // Check if it's a playlist
+    if (!results.entries || results.entries.length === 0) {
+      return res.status(400).json({ error: 'Not a valid playlist or playlist is empty' });
+    }
+    
+    const tracks = results.entries.slice(0, 100).map(video => ({
+      title: video.title || 'Unknown Title',
+      url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
+      duration: video.duration || 0,
+      thumbnail: video.thumbnail || video.thumbnails?.[0]?.url || null,
+      channel: video.channel || video.uploader || 'Unknown'
+    }));
+    
+    res.json({
+      type: 'playlist',
+      name: results.title || 'YouTube Playlist',
+      tracks,
+      total: results.playlist_count || tracks.length
+    });
+  } catch (error) {
+    console.error('YouTube playlist error:', error);
+    res.status(500).json({ error: 'Failed to get playlist data' });
+  }
+});
+
 // API endpoint to add song to queue
 app.post('/api/queue/add', async (req, res) => {
   const { url, title, duration, thumbnail, guildId } = req.body;
