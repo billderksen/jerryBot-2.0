@@ -441,6 +441,123 @@
       50% { opacity: 0.5; }
     }
 
+    /* User Profile */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px 6px 6px;
+      background: var(--bg-secondary);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .user-profile:hover {
+      background: var(--surface-light);
+    }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      overflow: hidden;
+    }
+
+    .user-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .user-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .user-name::after {
+      content: '▼';
+      font-size: 8px;
+      color: var(--text-muted);
+      transition: transform 0.2s;
+    }
+
+    .user-profile.open .user-name::after {
+      transform: rotate(180deg);
+    }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-width: 160px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.2s;
+      z-index: 1000;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .user-dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .user-dropdown-item.logout {
+      color: #ef4444;
+    }
+
+    .user-dropdown-item.logout:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+
     /* Main Layout */
     .main-content {
       display: grid;
@@ -1228,9 +1345,24 @@
         <div class="search-results" id="searchResults"></div>
       </div>
 
-      <div class="status">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Connecting...</span>
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div class="status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+        
+        <div class="user-profile" id="userProfile" onclick="toggleUserDropdown()">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <div class="user-info">
+            <span class="user-label">Logged in as</span>
+            <span class="user-name" id="userName">Loading...</span>
+          </div>
+          <div class="user-dropdown">
+            <a href="/logout" class="user-dropdown-item logout">
+              🚪 Logout
+            </a>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -1939,6 +2071,44 @@
         showToast(error.message || 'Failed to add song. Make sure someone is in a voice channel.', 'error');
       }
     }
+
+    // User profile functions
+    function toggleUserDropdown() {
+      const userProfile = document.getElementById('userProfile');
+      userProfile.classList.toggle('open');
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const userProfile = document.getElementById('userProfile');
+      if (userProfile && !userProfile.contains(e.target)) {
+        userProfile.classList.remove('open');
+      }
+    });
+
+    // Fetch and display user info
+    async function loadUserInfo() {
+      try {
+        const response = await fetch('/api/me');
+        if (response.ok) {
+          const user = await response.json();
+          
+          document.getElementById('userName').textContent = user.username;
+          
+          if (user.avatar) {
+            document.getElementById('userAvatar').innerHTML = 
+              `<img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">`;
+          } else {
+            document.getElementById('userAvatar').textContent = user.username.charAt(0).toUpperCase();
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user info:', error);
+      }
+    }
+
+    // Load user info on page load
+    loadUserInfo();
 
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

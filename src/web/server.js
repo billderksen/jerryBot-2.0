@@ -7,6 +7,8 @@ import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
 import { getRecentlyPlayed } from '../utils/musicQueue.js';
+import session from 'express-session';
+import cookieParser from 'cookie-parser';
 
 const ytDlpExec = ytDlpPkg;
 const { getData, getPreview, getTracks } = spotifyUrlInfo(fetch);
@@ -14,9 +16,28 @@ const { getData, getPreview, getTracks } = spotifyUrlInfo(fetch);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// OAuth2 Configuration - use getters to read at runtime after dotenv loads
+const getClientId = () => process.env.CLIENT_ID;
+const getClientSecret = () => process.env.CLIENT_SECRET;
+const getRedirectUri = () => process.env.OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback';
+const getRequiredRoleId = () => process.env.REQUIRED_ROLE_ID || '1462395138776236134';
+const getRequiredGuildId = () => process.env.GUILD_ID || '918554414220972032';
+
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
+
+// Session middleware
+app.use(cookieParser());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'jerrybot_default_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: false, // Set to true in production with HTTPS
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+}));
 
 // Store connected clients
 const clients = new Set();
@@ -31,8 +52,127 @@ let currentState = {
   guildName: ''
 };
 
-// Serve static files
-app.use(express.static(join(__dirname, 'public')));
+// Authentication middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.user && req.session.user.hasAccess) {
+    return next();
+  }
+  // For API routes, return JSON error
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  // For page routes, redirect to login
+  res.redirect('/login');
+}
+
+// Discord OAuth2 routes
+app.get('/login', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/auth/discord', (req, res) => {
+  const scope = 'identify guilds guilds.members.read';
+  const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${getClientId()}&redirect_uri=${encodeURIComponent(getRedirectUri())}&response_type=code&scope=${encodeURIComponent(scope)}`;
+  res.redirect(authUrl);
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) {
+    return res.redirect('/login?error=no_code');
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        client_id: getClientId(),
+        client_secret: getClientSecret(),
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: getRedirectUri()
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+    
+    if (tokenData.error) {
+      console.error('OAuth token error:', tokenData);
+      return res.redirect('/login?error=token_error');
+    }
+
+    const accessToken = tokenData.access_token;
+
+    // Get user info
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const userData = await userResponse.json();
+
+    // Get user's guild member info to check roles
+    const memberResponse = await fetch(`https://discord.com/api/users/@me/guilds/${getRequiredGuildId()}/member`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    let hasAccess = false;
+    
+    if (memberResponse.ok) {
+      const memberData = await memberResponse.json();
+      // Check if user has the required role
+      hasAccess = memberData.roles && memberData.roles.includes(getRequiredRoleId());
+    }
+
+    // Store user in session
+    req.session.user = {
+      id: userData.id,
+      username: userData.username,
+      discriminator: userData.discriminator,
+      avatar: userData.avatar,
+      hasAccess: hasAccess
+    };
+
+    if (hasAccess) {
+      res.redirect('/');
+    } else {
+      res.redirect('/access-denied');
+    }
+
+  } catch (error) {
+    console.error('OAuth error:', error);
+    res.redirect('/login?error=oauth_error');
+  }
+});
+
+app.get('/access-denied', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'access-denied.html'));
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+// API to get current user (no auth required - used on access-denied page)
+app.get('/api/me', (req, res) => {
+  if (req.session && req.session.user) {
+    res.json(req.session.user);
+  } else {
+    res.status(401).json({ error: 'Not logged in' });
+  }
+});
+
+// Protect the main dashboard
+app.get('/', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'index.html'));
+});
+
+// Protect all API routes EXCEPT /api/me (which is above this middleware)
+app.use('/api', requireAuth);
+
 app.use(express.json());
 
 // API endpoint to get current state
@@ -287,9 +427,12 @@ app.post('/api/queue/add', async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
   
+  // Get the username from session
+  const requestedBy = req.session?.user?.username || 'Web Dashboard';
+  
   try {
     // Get full song info if needed
-    let song = { url, title, duration, thumbnail, requestedBy: 'Web Dashboard', source: 'youtube' };
+    let song = { url, title, duration, thumbnail, requestedBy, source: 'youtube' };
     
     if (!title) {
       const videoInfo = await ytDlpExec(url, {
@@ -303,7 +446,7 @@ app.post('/api/queue/add', async (req, res) => {
         url: videoInfo.webpage_url || url,
         duration: videoInfo.duration || 0,
         thumbnail: videoInfo.thumbnail,
-        requestedBy: 'Web Dashboard',
+        requestedBy,
         source: 'youtube'
       };
     }

@@ -2,11 +2,17 @@ import { Client, Events, GatewayIntentBits, Collection, MessageFlags } from 'dis
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
+// Get directory path for .env file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables with explicit path
+dotenv.config({ path: join(__dirname, '..', '.env') });
+
 import { readdirSync } from 'fs';
 import { startWebServer, updateState, setCommandHandler, setAddSongHandler } from './web/server.js';
 import { getQueue, createQueue, setWebUpdateCallback } from './utils/musicQueue.js';
-
-dotenv.config();
 
 // Store the last used voice channel for web dashboard
 let lastVoiceChannel = null;
@@ -24,8 +30,6 @@ const client = new Client({
 client.commands = new Collection();
 
 // Load commands
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const commandsPath = join(__dirname, 'commands');
 const commandFiles = readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 

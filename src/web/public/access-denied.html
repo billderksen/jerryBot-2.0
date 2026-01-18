@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Denied - JerryBot Music</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #141414;
+      --border: #333333;
+      --text-primary: #ffffff;
+      --text-secondary: #a3a3a3;
+      --text-muted: #737373;
+      --error-color: #ef4444;
+      --discord-color: #5865F2;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      background: var(--bg-secondary);
+      border-radius: 24px;
+      padding: 48px;
+      text-align: center;
+      max-width: 450px;
+      width: 90%;
+      border: 1px solid var(--border);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .icon {
+      font-size: 72px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--error-color);
+    }
+
+    .message {
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .user-info {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--discord-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .user-avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .user-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--discord-color);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #4752c4;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-secondary);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .help-text {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">🚫</div>
+    <h1>Access Denied</h1>
+    
+    <div id="userInfo" class="user-info" style="display: none;">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <span class="user-name" id="userName">Loading...</span>
+    </div>
+    
+    <p class="message">
+      Sorry, you don't have permission to access the JerryBot Music Dashboard.
+      <br><br>
+      You need to have the required role in the Discord server to use this dashboard.
+    </p>
+    
+    <div class="buttons">
+      <a href="/auth/discord" class="btn btn-primary">
+        🔄 Try Different Account
+      </a>
+      <a href="/logout" class="btn btn-secondary">
+        🚪 Logout
+      </a>
+    </div>
+    
+    <p class="help-text">
+      If you believe you should have access, please contact a server administrator to get the required role assigned to your account.
+    </p>
+  </div>
+
+  <script>
+    // Fetch user info
+    fetch('/api/me')
+      .then(res => res.json())
+      .then(user => {
+        if (user && user.username) {
+          document.getElementById('userInfo').style.display = 'flex';
+          document.getElementById('userName').textContent = user.username;
+          
+          if (user.avatar) {
+            document.getElementById('userAvatar').innerHTML = 
+              `<img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">`;
+          } else {
+            document.getElementById('userAvatar').textContent = user.username.charAt(0).toUpperCase();
+          }
+        }
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
