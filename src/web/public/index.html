@@ -1179,59 +1179,43 @@
 
     .clear-queue-btn {
       display: none;
-      width: 100%;
+      width: calc(100% - 24px);
       padding: 12px 20px;
-      margin-top: 12px;
-      background: var(--surface-light) !important;
+      margin: 12px;
+      background: var(--surface-light);
       border: 2px solid var(--border);
       color: var(--text-secondary);
       font-size: 14px;
       font-weight: 600;
       border-radius: 10px;
-      cursor: not-allowed;
+      cursor: pointer;
       transition: all 0.2s;
-      position: relative;
-      overflow: hidden;
       align-items: center;
       justify-content: center;
     }
 
-    .clear-queue-btn-text {
-      position: relative;
-      z-index: 2;
+    .clear-queue-btn:hover {
+      background: var(--bg-hover);
+      border-color: #dc3545;
+      color: var(--text-primary);
     }
 
-    .clear-queue-btn::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      height: 100%;
-      width: var(--progress, 0%);
-      background: linear-gradient(90deg, #dc3545 0%, #c82333 100%);
-      border-radius: 8px;
-      transition: width 0.05s linear;
-      z-index: 1;
-    }
-
-    .clear-queue-btn.holding {
-      color: white;
-    }
-
-    .clear-queue-btn.ready {
-      background: #dc3545 !important;
+    .clear-queue-btn.confirm {
+      background: #dc3545;
       border-color: #dc3545;
       color: white;
-      cursor: pointer;
+      animation: pulse-danger 0.5s ease-in-out;
     }
 
-    .clear-queue-btn.ready::before {
-      width: 100%;
-    }
-
-    .clear-queue-btn.ready:hover {
+    .clear-queue-btn.confirm:hover {
+      background: #c82333;
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    }
+
+    @keyframes pulse-danger {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
     }
 
     .clear-queue-btn.visible {
@@ -1724,9 +1708,7 @@
         <div class="queue-list" id="queueList">
           <!-- Queue items will be inserted here -->
         </div>
-        <button class="clear-queue-btn" id="clearQueueBtn">
-          <span class="clear-queue-btn-text">🗑️ Clear Queue</span>
-        </button>
+        <button class="clear-queue-btn" id="clearQueueBtn">🗑️ Clear Queue</button>
         <div class="queue-list" id="historyList" style="display: none;">
           <!-- Recently played items will be inserted here -->
         </div>
@@ -3089,78 +3071,58 @@
       }
     }
 
-    // Clear queue button hover timer
-    let clearQueueHoldTime = 0;
-    let clearQueueHoldInterval = null;
-    let clearQueueResetTimeout = null;
-    const CLEAR_QUEUE_HOLD_TIME = 2000; // 2 seconds in milliseconds
+    // Clear queue button - click once to arm, click again to confirm
+    let clearQueueConfirmTimeout = null;
 
     function setupClearQueueButton() {
       const clearQueueBtn = document.getElementById('clearQueueBtn');
       
-      clearQueueBtn.addEventListener('mouseenter', () => {
-        // Stop any reset timeout
-        if (clearQueueResetTimeout) {
-          clearTimeout(clearQueueResetTimeout);
-          clearQueueResetTimeout = null;
-        }
-        
-        // If already ready, stay ready
-        if (clearQueueBtn.classList.contains('ready')) {
-          return;
-        }
-        
-        clearQueueBtn.classList.add('holding');
-        
-        // Update progress bar every 50ms
-        clearQueueHoldInterval = setInterval(() => {
-          clearQueueHoldTime += 50;
-          const progress = (clearQueueHoldTime / CLEAR_QUEUE_HOLD_TIME) * 100;
-          clearQueueBtn.style.setProperty('--progress', Math.min(progress, 100) + '%');
+      clearQueueBtn.addEventListener('click', () => {
+        if (clearQueueBtn.classList.contains('confirm')) {
+          // Second click - actually clear the queue
+          clearQueue();
+          resetClearQueueButton();
+        } else {
+          // First click - enter confirm mode
+          clearQueueBtn.classList.add('confirm');
+          clearQueueBtn.textContent = '⚠️ Click again to confirm';
           
-          if (clearQueueHoldTime >= CLEAR_QUEUE_HOLD_TIME) {
-            clearInterval(clearQueueHoldInterval);
-            clearQueueHoldInterval = null;
-            clearQueueBtn.classList.remove('holding');
-            clearQueueBtn.classList.add('ready');
-          }
-        }, 50);
+          // Reset after 3 seconds if not confirmed
+          clearQueueConfirmTimeout = setTimeout(() => {
+            resetClearQueueButton();
+          }, 3000);
+        }
       });
       
       clearQueueBtn.addEventListener('mouseleave', () => {
-        // Stop the fill animation
-        if (clearQueueHoldInterval) {
-          clearInterval(clearQueueHoldInterval);
-          clearQueueHoldInterval = null;
+        // Reset after leaving if in confirm mode (give 1.5s grace period)
+        if (clearQueueBtn.classList.contains('confirm')) {
+          if (clearQueueConfirmTimeout) clearTimeout(clearQueueConfirmTimeout);
+          clearQueueConfirmTimeout = setTimeout(() => {
+            resetClearQueueButton();
+          }, 1500);
         }
-        
-        clearQueueBtn.classList.remove('holding');
-        
-        // After 2 seconds of not hovering, completely reset
-        clearQueueResetTimeout = setTimeout(() => {
-          clearQueueHoldTime = 0;
-          clearQueueBtn.classList.remove('ready');
-          clearQueueBtn.style.setProperty('--progress', '0%');
-        }, 2000);
       });
       
-      clearQueueBtn.addEventListener('click', (e) => {
-        if (!clearQueueBtn.classList.contains('ready')) {
-          e.preventDefault();
-          e.stopPropagation();
-          return false;
+      clearQueueBtn.addEventListener('mouseenter', () => {
+        // Cancel reset if mouse re-enters while in confirm mode
+        if (clearQueueBtn.classList.contains('confirm') && clearQueueConfirmTimeout) {
+          clearTimeout(clearQueueConfirmTimeout);
+          clearQueueConfirmTimeout = setTimeout(() => {
+            resetClearQueueButton();
+          }, 3000);
         }
-        // Call the clear queue function
-        clearQueue();
-        // Reset state after click
-        clearQueueHoldTime = 0;
-        if (clearQueueResetTimeout) {
-          clearTimeout(clearQueueResetTimeout);
-          clearQueueResetTimeout = null;
-        }
-        clearQueueBtn.classList.remove('ready');
-        clearQueueBtn.style.setProperty('--progress', '0%');
       });
+    }
+    
+    function resetClearQueueButton() {
+      const clearQueueBtn = document.getElementById('clearQueueBtn');
+      if (clearQueueConfirmTimeout) {
+        clearTimeout(clearQueueConfirmTimeout);
+        clearQueueConfirmTimeout = null;
+      }
+      clearQueueBtn.classList.remove('confirm');
+      clearQueueBtn.textContent = '🗑️ Clear Queue';
     }
 
     function clearQueue() {
