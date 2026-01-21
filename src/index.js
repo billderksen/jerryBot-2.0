@@ -12,7 +12,7 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
 import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, broadcastListeners } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback } from './utils/musicQueue.js';
+import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 
 // Store the last used voice channel for web dashboard
@@ -174,11 +174,26 @@ setAddSongHandler(async (song, guildId) => {
 let emptyChannelTimeout = null;
 
 client.on(Events.VoiceStateUpdate, (oldState, newState) => {
-  // Track when bot joins a voice channel
+  // Track when bot joins or is moved to a voice channel
   if (newState.member?.id === client.user?.id && newState.channel) {
+    const wasMoved = oldState.channel && oldState.channelId !== newState.channelId;
     lastVoiceChannel = newState.channel;
     lastGuildId = newState.guild.id;
-    // Clear any pending leave timeout when bot joins
+
+    // Update the queue's voice channel reference when bot is moved
+    const queue = getQueue(lastGuildId);
+    if (queue) {
+      queue.voiceChannel = newState.channel;
+      queue.voiceChannelName = newState.channel.name;
+      // Broadcast state to update UI with new channel name
+      if (wasMoved) {
+        console.log(`Bot moved to channel: ${newState.channel.name}`);
+        triggerStateBroadcast();
+        broadcastListeners();
+      }
+    }
+
+    // Clear any pending leave timeout when bot joins/moves
     if (emptyChannelTimeout) {
       clearTimeout(emptyChannelTimeout);
       emptyChannelTimeout = null;

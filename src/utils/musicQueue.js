@@ -498,6 +498,10 @@ export async function getVoiceChannelMembers() {
 }
 
 // Broadcast state to web dashboard
+export function triggerStateBroadcast() {
+  broadcastState();
+}
+
 function broadcastState(seekPosition = null) {
   if (!webUpdateCallback) return;
   
