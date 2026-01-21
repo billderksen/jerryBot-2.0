@@ -3641,13 +3641,27 @@
     // Listeners list functionality
     let currentListeners = [];
 
+    // Helper to compare listener lists
+    function listenersEqual(a, b) {
+      if (a.length !== b.length) return false;
+      const idsA = a.map(l => l.id).sort().join(',');
+      const idsB = b.map(l => l.id).sort().join(',');
+      return idsA === idsB;
+    }
+
     function updateListenersList(listeners) {
-      currentListeners = listeners || [];
+      const newListeners = listeners || [];
       const listenersList = document.getElementById('listenersList');
       const listenersCount = document.getElementById('listenersCount');
       
       if (!listenersList || !listenersCount) return;
       
+      // Only update DOM if listeners actually changed
+      if (listenersEqual(currentListeners, newListeners)) {
+        return;
+      }
+      
+      currentListeners = newListeners;
       listenersCount.textContent = currentListeners.length;
       
       if (currentListeners.length === 0) {
