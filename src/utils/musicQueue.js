@@ -268,6 +268,18 @@ export class MusicQueue {
   }
 
   addSong(song) {
+    // Check if this is a radio song
+    const isRadioSong = song.requestedBy && song.requestedBy.toLowerCase().includes('radio');
+
+    // If this is NOT a radio song, remove any radio songs from the queue
+    if (!isRadioSong) {
+      const radioSongsRemoved = this.songs.filter(s => s.requestedBy && s.requestedBy.toLowerCase().includes('radio')).length;
+      if (radioSongsRemoved > 0) {
+        this.songs = this.songs.filter(s => !(s.requestedBy && s.requestedBy.toLowerCase().includes('radio')));
+        console.log(`Removed ${radioSongsRemoved} radio song(s) from queue (user added a song)`);
+      }
+    }
+
     this.songs.push(song);
     console.log(`Song added: ${song.title}, Queue length now: ${this.songs.length}`);
     broadcastState();
