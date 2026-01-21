@@ -87,6 +87,10 @@ setCommandHandler((command, guildId) => {
     const fromIndex = parseInt(parts[1]);
     const toIndex = parseInt(parts[2]);
     queue.reorder(fromIndex, toIndex);
+  } else if (command === 'loop') {
+    queue.cycleLoopMode();
+  } else if (command === '24/7') {
+    queue.toggle24_7();
   }
 });
 

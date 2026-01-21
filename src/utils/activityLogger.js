@@ -106,6 +106,18 @@ export async function logWebAction(username, action, details = '') {
     case 'reorder':
       message = `↕️ **${username}** (web) reordered the queue`;
       break;
+    case 'loop':
+      message = `🔁 **${username}** (web) changed loop mode`;
+      break;
+    case '24/7':
+      message = `🌙 **${username}** (web) toggled 24/7 mode`;
+      break;
+    case 'sleep-set':
+      message = `💤 **${username}** (web) set sleep timer for **${details} minutes**`;
+      break;
+    case 'sleep-cancel':
+      message = `💤 **${username}** (web) cancelled sleep timer`;
+      break;
     default:
       message = `🎮 **${username}** (web) used **${action}**${details ? `: ${details}` : ''}`;
   }

@@ -52,23 +52,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Helper function to get highest quality YouTube thumbnail
+// Note: maxresdefault.jpg (1280x720) is not always available and returns a gray placeholder
+// hqdefault.jpg (480x360) is reliably available for all videos
 function getHighQualityThumbnail(video) {
-  // FIRST: Try to construct maxresdefault URL from video ID (highest quality)
+  // FIRST: Try to construct hqdefault URL from video ID (reliably available)
   const videoId = video.id || extractVideoId(video.url) || extractVideoId(video.webpage_url);
   if (videoId) {
-    return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+    return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
   }
-  
-  // SECOND: Upgrade existing thumbnail URL to higher quality
+
+  // SECOND: Upgrade existing thumbnail URL to hqdefault quality
   if (video.thumbnail) {
     return video.thumbnail
-      .replace(/\/default\.jpg/, '/maxresdefault.jpg')
-      .replace(/\/mqdefault\.jpg/, '/maxresdefault.jpg')
-      .replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg')
-      .replace(/\/sddefault\.jpg/, '/maxresdefault.jpg')
+      .replace(/\/default\.jpg/, '/hqdefault.jpg')
+      .replace(/\/mqdefault\.jpg/, '/hqdefault.jpg')
+      .replace(/\/sddefault\.jpg/, '/hqdefault.jpg')
+      .replace(/\/maxresdefault\.jpg/, '/hqdefault.jpg')
       .replace(/\?.*$/, '');
   }
-  
+
   // THIRD: If thumbnails array exists, find the highest resolution one
   if (video.thumbnails && Array.isArray(video.thumbnails) && video.thumbnails.length > 0) {
     const sorted = [...video.thumbnails].sort((a, b) => (b.width || 0) - (a.width || 0));
@@ -76,7 +78,7 @@ function getHighQualityThumbnail(video) {
       return sorted[0].url;
     }
   }
-  
+
   return null;
 }
 
@@ -754,6 +756,15 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard') {
       logWebAction(username, 'seek', `${mins}:${secs.toString().padStart(2, '0')}`);
     } else if (command.startsWith('reorder:')) {
       logWebAction(username, 'reorder');
+    } else if (command === 'loop') {
+      logWebAction(username, 'loop');
+    } else if (command === '24/7') {
+      logWebAction(username, '24/7');
+    } else if (command.startsWith('sleep-set:')) {
+      const minutes = command.split(':')[1];
+      logWebAction(username, 'sleep-set', minutes);
+    } else if (command === 'sleep-cancel') {
+      logWebAction(username, 'sleep-cancel');
     }
   }
 }

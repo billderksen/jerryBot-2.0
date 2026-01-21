@@ -690,6 +690,10 @@
       text-decoration: underline;
     }
 
+    .cached-badge-container {
+      display: inline;
+    }
+
     .cached-badge {
       color: var(--accent);
       font-size: 20px;
@@ -777,6 +781,27 @@
     }
 
     /* Controls */
+    .controls-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .controls-primary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+    }
+
+    .controls-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
     .controls {
       display: flex;
       align-items: center;
@@ -810,43 +835,150 @@
       font-size: 24px;
     }
 
-    .control-btn.radio-btn {
-      position: relative;
-      opacity: 0.4;
+    .control-btn.mini {
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+      opacity: 0.5;
       color: var(--text-muted);
     }
 
-    .control-btn.radio-btn:hover {
-      opacity: 0.7;
+    .control-btn.mini:hover {
+      opacity: 0.8;
+    }
+
+    .control-btn.mini.active {
+      opacity: 1;
+      color: var(--accent);
+    }
+
+    /* Toggle buttons - add pulse animation when active */
+    .control-btn.radio-btn {
+      position: relative;
     }
 
     .control-btn.radio-btn.active {
-      opacity: 1;
-      color: var(--accent);
-      animation: radio-pulse 2s ease-in-out infinite;
+      animation: mode-pulse 2s ease-in-out infinite;
     }
 
-    .control-btn.radio-btn.active:hover {
-      opacity: 1;
-    }
-
-    @keyframes radio-pulse {
+    @keyframes mode-pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.6; }
     }
 
-    .control-btn.shuffle-btn {
+    /* Loop button styles */
+    .control-btn.loop-btn {
       position: relative;
-      opacity: 0.4;
-      color: var(--text-muted);
     }
 
-    .control-btn.shuffle-btn:hover {
-      opacity: 0.7;
+    .loop-badge {
+      position: absolute;
+      top: 0px;
+      right: 0px;
+      font-size: 9px;
+      font-weight: bold;
+      color: var(--accent);
+    }
+
+    /* 24/7 mode button styles */
+    .control-btn.mode-247-btn {
+      position: relative;
+    }
+
+    .control-btn.mode-247-btn.active {
+      animation: mode-pulse 2s ease-in-out infinite;
+    }
+
+    /* Sleep timer styles */
+    .sleep-timer-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .control-btn.sleep-btn {
+      position: relative;
+    }
+
+    .sleep-time {
+      font-size: 9px;
+      margin-left: 2px;
+      font-family: monospace;
+      color: var(--accent);
+    }
+
+    .sleep-timer-menu {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      min-width: 150px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      z-index: 100;
+    }
+
+    .sleep-timer-menu.visible {
+      display: block;
+    }
+
+    .sleep-timer-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .sleep-timer-option {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      margin: 4px 0;
+      background: var(--surface);
+      border: none;
+      border-radius: 4px;
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 13px;
+      text-align: center;
+      transition: background 0.2s;
+    }
+
+    .sleep-timer-option:hover {
+      background: var(--bg-hover);
+    }
+
+    .sleep-timer-active {
+      text-align: center;
+      color: var(--accent);
+      font-size: 14px;
+    }
+
+    .sleep-timer-active span {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .sleep-timer-cancel {
+      padding: 6px 16px;
+      background: #dc3545;
+      border: none;
+      border-radius: 4px;
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .sleep-timer-cancel:hover {
+      background: #c82333;
     }
 
     .control-btn.shuffle-btn:active {
-      opacity: 1;
       color: var(--accent);
       transform: scale(0.95);
     }
@@ -1626,7 +1758,9 @@
       isPlaying: false,
       isPaused: false,
       volume: 1.0,
-      radioEnabled: localStorage.getItem('radioEnabled') === 'true'
+      radioEnabled: localStorage.getItem('radioEnabled') === 'true',
+      loopMode: localStorage.getItem('loopMode') || 'off',
+      is24_7: localStorage.getItem('is24_7') === 'true'
     };
     
     // Current active tab
@@ -2291,6 +2425,10 @@
       if (userProfile && !userProfile.contains(e.target)) {
         userProfile.classList.remove('open');
       }
+      // Close sleep timer menu when clicking outside
+      if (!e.target.closest('.sleep-timer-wrapper')) {
+        closeSleepTimerMenu();
+      }
     });
 
     // Fetch and display user info
@@ -2349,11 +2487,28 @@
           const prevRadioEnabled = state.radioEnabled;
           const isInitialLoad = prevSong === undefined || prevSong === null;
           
-          // Preserve radioEnabled state (it's client-side only, stored in localStorage)
+          // Preserve client-side states
           const radioEnabled = state.radioEnabled;
           state = message.data;
           state.radioEnabled = radioEnabled;
-          
+
+          // Sync loop mode and 24/7 mode to localStorage when received from server
+          // This allows persistence even when queue doesn't exist
+          if (state.loopMode && state.loopMode !== 'off') {
+            localStorage.setItem('loopMode', state.loopMode);
+          }
+          if (state.is24_7) {
+            localStorage.setItem('is24_7', 'true');
+          }
+
+          // If server sends defaults (no queue), use localStorage fallback
+          if (!state.currentSong && !state.isPlaying) {
+            const savedLoopMode = localStorage.getItem('loopMode');
+            const savedIs24_7 = localStorage.getItem('is24_7') === 'true';
+            if (savedLoopMode) state.loopMode = savedLoopMode;
+            if (savedIs24_7) state.is24_7 = savedIs24_7;
+          }
+
           updateUI();
           
           // Handle progress tracking
@@ -2408,8 +2563,9 @@
           }
           
           // Start/stop progress tracking based on play state
-          if (isNowPlaying && !progressInterval) {
-            console.log('Starting progress tracking');
+          // Only start tracking when songStartTime is set (means audio actually started on server)
+          if (isNowPlaying && !progressInterval && state.songStartTime) {
+            console.log('Starting progress tracking - songStartTime:', state.songStartTime);
             startProgressTracking();
           } else if (!isNowPlaying && progressInterval) {
             // Save current position when paused
@@ -2440,6 +2596,335 @@
       }
     }
 
+    // Sleep timer state
+    let sleepTimer = null;
+    let sleepEndTime = null;
+    let sleepTimerInterval = null;
+
+    // Restore sleep timer from localStorage on page load
+    (function restoreSleepTimer() {
+      const savedSleepEndTime = localStorage.getItem('sleepEndTime');
+      if (savedSleepEndTime) {
+        const endTime = parseInt(savedSleepEndTime);
+        const remaining = endTime - Date.now();
+        if (remaining > 0) {
+          sleepEndTime = endTime;
+          sleepTimer = setTimeout(() => {
+            sendCommand('stop');
+            showToast('💤 Sleep timer - Playback stopped', 'info');
+            sleepTimer = null;
+            sleepEndTime = null;
+            localStorage.removeItem('sleepEndTime');
+            clearInterval(sleepTimerInterval);
+            sleepTimerInterval = null;
+            updateSleepTimerDisplay();
+          }, remaining);
+          sleepTimerInterval = setInterval(() => {
+            updateSleepTimerDisplay();
+          }, 1000);
+        } else {
+          localStorage.removeItem('sleepEndTime');
+        }
+      }
+    })();
+
+    // Track last rendered song to avoid unnecessary re-renders
+    let lastRenderedSongUrl = null;
+
+    // Update only dynamic elements without rebuilding DOM (preserves animations)
+    function updateDynamicElements() {
+      if (!state.currentSong) return;
+
+      const song = state.currentSong;
+      const currentProgress = song.duration > 0 ? Math.min((currentElapsed / song.duration) * 100, 100) : 0;
+      const currentTimeStr = formatDuration(Math.floor(currentElapsed));
+
+      // Update progress bar
+      const progressFill = document.querySelector('.progress-fill');
+      if (progressFill) progressFill.style.width = currentProgress + '%';
+
+      // Update time display
+      const progressCurrent = document.querySelector('.progress-current');
+      if (progressCurrent) progressCurrent.textContent = currentTimeStr;
+
+      // Update album art playing state (just add/remove class, don't rebuild)
+      const albumArt = document.querySelector('.album-art');
+      if (albumArt) {
+        if (state.isPlaying && !state.isPaused) {
+          albumArt.classList.add('playing');
+        } else {
+          albumArt.classList.remove('playing');
+        }
+      }
+
+      // Update play/pause button
+      const playPauseBtn = document.querySelector('.play-pause-btn');
+      if (playPauseBtn) {
+        playPauseBtn.innerHTML = state.isPaused ? '▶' : '⏸';
+        playPauseBtn.title = state.isPaused ? 'Resume' : 'Pause';
+      }
+
+      // Update shuffle button disabled state
+      const shuffleBtn = document.querySelector('.shuffle-btn');
+      if (shuffleBtn) {
+        shuffleBtn.disabled = !(state.queue && state.queue.length >= 2);
+      }
+
+      // Update previous button disabled state
+      const prevBtn = document.querySelector('.prev-btn');
+      if (prevBtn) {
+        prevBtn.disabled = !(state.recentlyPlayed && state.recentlyPlayed.length > 0);
+      }
+
+      // Update radio button
+      const radioBtn = document.querySelector('.radio-btn');
+      if (radioBtn) {
+        radioBtn.classList.toggle('active', state.radioEnabled);
+      }
+
+      // Update loop button
+      const loopBtn = document.querySelector('.loop-btn');
+      const loopBadge = document.querySelector('.loop-badge');
+      if (loopBtn) {
+        loopBtn.classList.toggle('active', state.loopMode !== 'off');
+        loopBtn.classList.toggle('loop-song', state.loopMode === 'song');
+        loopBtn.title = `Loop Mode: ${state.loopMode === 'off' ? 'Off' : state.loopMode === 'song' ? 'Song' : 'Queue'} (L)`;
+      }
+      if (loopBadge) {
+        loopBadge.style.display = state.loopMode === 'song' ? 'inline' : 'none';
+      }
+
+      // Update 24/7 button
+      const mode247Btn = document.querySelector('.mode-247-btn');
+      if (mode247Btn) {
+        mode247Btn.classList.toggle('active', state.is24_7);
+      }
+
+      // Update sleep timer button
+      const sleepBtn = document.querySelector('.sleep-btn');
+      const sleepTime = document.querySelector('.sleep-btn .sleep-time');
+      if (sleepBtn) {
+        sleepBtn.classList.toggle('active', !!sleepEndTime);
+      }
+      if (sleepTime) {
+        sleepTime.textContent = sleepEndTime ? getSleepTimerRemaining() : '';
+      }
+
+      // Update sleep timer menu content
+      const sleepTimerContent = document.querySelector('.sleep-timer-content');
+      if (sleepTimerContent) {
+        if (sleepEndTime) {
+          sleepTimerContent.innerHTML = `
+            <div class="sleep-timer-active">
+              <span>Stopping in: ${getSleepTimerRemaining()}</span>
+              <button onclick="cancelSleepTimer()" class="sleep-timer-cancel">Cancel</button>
+            </div>
+          `;
+        } else {
+          sleepTimerContent.innerHTML = `
+            <button onclick="setSleepTimer(15)" class="sleep-timer-option">15 minutes</button>
+            <button onclick="setSleepTimer(30)" class="sleep-timer-option">30 minutes</button>
+            <button onclick="setSleepTimer(45)" class="sleep-timer-option">45 minutes</button>
+            <button onclick="setSleepTimer(60)" class="sleep-timer-option">1 hour</button>
+            <button onclick="setSleepTimer(90)" class="sleep-timer-option">1.5 hours</button>
+          `;
+        }
+      }
+
+      // Update volume slider (only if not focused to avoid fighting with user input)
+      const volumeSlider = document.getElementById('volumeSlider');
+      const volumeDisplay = document.getElementById('volumeDisplay');
+      if (volumeSlider && document.activeElement !== volumeSlider) {
+        volumeSlider.value = state.volume * 100;
+      }
+      if (volumeDisplay && document.activeElement !== volumeDisplay) {
+        volumeDisplay.value = Math.round(state.volume * 100);
+      }
+
+      // Update cached badge
+      const cachedBadgeContainer = document.querySelector('.cached-badge-container');
+      if (cachedBadgeContainer) {
+        if (state.isCached && !cachedBadgeContainer.querySelector('.cached-badge')) {
+          cachedBadgeContainer.innerHTML = `<span class="cached-badge animate" title="Cached - Instant seeking enabled">✓</span>`;
+        } else if (!state.isCached) {
+          cachedBadgeContainer.innerHTML = '';
+        }
+      }
+    }
+
+    // Helper function for play/pause toggle
+    function togglePlayPause() {
+      sendCommand(state.isPaused ? 'resume' : 'pause');
+    }
+
+    // Keyboard shortcuts
+    let previousVolume = 1.0; // For mute toggle
+
+    document.addEventListener('keydown', (e) => {
+      // Skip if typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch(e.key) {
+        case ' ':
+          e.preventDefault();
+          if (state.currentSong) {
+            sendCommand(state.isPaused ? 'resume' : 'pause');
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          handleSkip();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          sendCommand('previous');
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          cycleLoopMode();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          adjustVolume(0.05);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          adjustVolume(-0.05);
+          break;
+      }
+    });
+
+    function toggleMute() {
+      if (state.volume > 0) {
+        previousVolume = state.volume;
+        sendCommand('volume:0');
+        showToast('🔇 Muted', 'info');
+      } else {
+        sendCommand('volume:' + Math.round(previousVolume * 100));
+        showToast('🔊 Unmuted', 'info');
+      }
+    }
+
+    function adjustVolume(delta) {
+      const newVolume = Math.max(0, Math.min(1, state.volume + delta));
+      sendCommand('volume:' + Math.round(newVolume * 100));
+    }
+
+    // Sleep timer functions
+    function setSleepTimer(minutes) {
+      // Clear any existing timer
+      if (sleepTimer) {
+        clearTimeout(sleepTimer);
+      }
+      if (sleepTimerInterval) {
+        clearInterval(sleepTimerInterval);
+      }
+
+      sleepEndTime = Date.now() + (minutes * 60 * 1000);
+
+      sleepTimer = setTimeout(() => {
+        sendCommand('stop');
+        showToast('💤 Sleep timer - Playback stopped', 'info');
+        sleepTimer = null;
+        sleepEndTime = null;
+        localStorage.removeItem('sleepEndTime');
+        clearInterval(sleepTimerInterval);
+        sleepTimerInterval = null;
+        updateSleepTimerDisplay();
+      }, minutes * 60 * 1000);
+
+      // Update only the timer display every second (not the entire UI)
+      sleepTimerInterval = setInterval(() => {
+        updateSleepTimerDisplay();
+      }, 1000);
+
+      // Save to localStorage for persistence across page refresh
+      localStorage.setItem('sleepEndTime', sleepEndTime.toString());
+
+      // Log the action to Discord
+      sendCommand('sleep-set:' + minutes);
+
+      showToast(`💤 Sleep timer set for ${minutes} minutes`, 'success');
+      closeSleepTimerMenu();
+      updateUI();
+    }
+
+    function cancelSleepTimer() {
+      if (sleepTimer) {
+        clearTimeout(sleepTimer);
+        sleepTimer = null;
+      }
+      if (sleepTimerInterval) {
+        clearInterval(sleepTimerInterval);
+        sleepTimerInterval = null;
+      }
+      sleepEndTime = null;
+      localStorage.removeItem('sleepEndTime');
+
+      // Log the action to Discord
+      sendCommand('sleep-cancel');
+
+      showToast('💤 Sleep timer cancelled', 'info');
+      closeSleepTimerMenu();
+      // Update UI to refresh the menu content (shows timer options instead of cancel)
+      updateUI();
+    }
+
+    function getSleepTimerRemaining() {
+      if (!sleepEndTime) return null;
+      const remaining = Math.max(0, sleepEndTime - Date.now());
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    // Update only sleep timer display elements (doesn't reset animations)
+    function updateSleepTimerDisplay() {
+      const remaining = getSleepTimerRemaining();
+
+      // Update the button's time display
+      const sleepTimeSpan = document.querySelector('.sleep-btn .sleep-time');
+      if (sleepTimeSpan) {
+        sleepTimeSpan.textContent = remaining || '';
+      }
+
+      // Update the menu's countdown display
+      const sleepTimerActive = document.querySelector('.sleep-timer-active span');
+      if (sleepTimerActive && remaining) {
+        sleepTimerActive.textContent = `Stopping in: ${remaining}`;
+      }
+
+      // Update button active state
+      const sleepBtn = document.querySelector('.sleep-btn');
+      if (sleepBtn) {
+        if (sleepEndTime) {
+          sleepBtn.classList.add('active');
+        } else {
+          sleepBtn.classList.remove('active');
+        }
+      }
+    }
+
+    function toggleSleepTimerMenu() {
+      const menu = document.getElementById('sleepTimerMenu');
+      if (menu) {
+        menu.classList.toggle('visible');
+      }
+    }
+
+    function closeSleepTimerMenu() {
+      const menu = document.getElementById('sleepTimerMenu');
+      if (menu) {
+        menu.classList.remove('visible');
+      }
+    }
+
     // Radio mode state
     let radioSongs = []; // Pre-fetched radio songs
     let fetchingRadio = false;
@@ -2448,7 +2933,7 @@
       state.radioEnabled = !state.radioEnabled;
       localStorage.setItem('radioEnabled', state.radioEnabled);
       updateUI();
-      
+
       if (state.radioEnabled) {
         showToast('📻 Radio mode enabled - Similar songs will auto-play', 'success');
         // Pre-fetch radio songs if we have a current song
@@ -2458,6 +2943,46 @@
       } else {
         showToast('📻 Radio mode disabled', 'info');
         radioSongs = [];
+      }
+    }
+
+    function cycleLoopMode() {
+      sendCommand('loop');
+      // Optimistic UI update - will be confirmed by server state
+      const modes = ['off', 'song', 'queue'];
+      const currentIndex = modes.indexOf(state.loopMode);
+      const newMode = modes[(currentIndex + 1) % 3];
+
+      // Save to localStorage for persistence
+      if (newMode === 'off') {
+        localStorage.removeItem('loopMode');
+        showToast('🔁 Loop mode: Off', 'info');
+      } else {
+        localStorage.setItem('loopMode', newMode);
+        if (newMode === 'song') {
+          showToast('🔁 Loop mode: Song (repeat current)', 'success');
+        } else {
+          showToast('🔁 Loop mode: Queue (repeat all)', 'success');
+        }
+      }
+    }
+
+    function toggle24_7() {
+      sendCommand('24/7');
+      // Optimistic UI update - will be confirmed by server state
+      const willBeEnabled = !state.is24_7;
+
+      // Save to localStorage for persistence
+      if (willBeEnabled) {
+        localStorage.setItem('is24_7', 'true');
+      } else {
+        localStorage.removeItem('is24_7');
+      }
+
+      if (willBeEnabled) {
+        showToast('🌙 24/7 mode enabled - Bot will stay connected', 'success');
+      } else {
+        showToast('🌙 24/7 mode disabled', 'info');
       }
     }
 
@@ -2684,88 +3209,119 @@
         if (!state.currentSong) visualizer.style.display = 'none';
       }
 
+      const currentSongUrl = state.currentSong?.url || null;
+      const songChanged = currentSongUrl !== lastRenderedSongUrl;
+
       if (state.currentSong) {
         const song = state.currentSong;
-        console.log('Current song thumbnail (client):', song.thumbnail || 'NO THUMBNAIL');
-        const currentProgress = song.duration > 0 ? Math.min((currentElapsed / song.duration) * 100, 100) : 0;
-        const currentTimeStr = formatDuration(Math.floor(currentElapsed));
-        
-        // Determine if we should animate the cached badge
-        const shouldAnimateBadge = state.isCached && !cachedAnimationShown;
-        if (state.isCached && !cachedAnimationShown) {
-          cachedAnimationShown = true;
+
+        // Only do full re-render if song changed or player content is empty/showing idle state
+        if (songChanged || playerContent.querySelector('.idle-state')) {
+          console.log('Full re-render: song changed or idle state');
+          lastRenderedSongUrl = currentSongUrl;
+          cachedAnimationShown = false; // Reset for new song
+
+          const shouldAnimateBadge = state.isCached && !cachedAnimationShown;
+          if (state.isCached) {
+            cachedAnimationShown = true;
+          }
+
+          playerContent.innerHTML = `
+            <div class="album-art-container">
+              <div class="album-art ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
+                ${song.thumbnail
+                  ? `<img src="${song.thumbnail}" alt="Album Art" onerror="handleThumbnailError(this)">`
+                  : '<div class="placeholder">🎵</div>'
+                }
+              </div>
+            </div>
+
+            <div class="track-info">
+              <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a><span class="cached-badge-container">${state.isCached ? `<span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>` : ''}</span></div>
+              <div class="track-requested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
+            </div>
+
+            <div class="progress-container">
+              <div class="progress-bar" id="progressBar" title="Click or drag to seek">
+                <div class="progress-fill" style="width: 0%"></div>
+              </div>
+              <div class="progress-time">
+                <span class="progress-current">0:00</span>
+                <span class="progress-duration">${formatDuration(song.duration)}</span>
+              </div>
+            </div>
+
+            <div class="controls-wrapper">
+              <div class="controls-primary">
+                <button class="control-btn secondary prev-btn" onclick="sendCommand('previous')" title="Previous (←)">
+                  ⏮
+                </button>
+                <button class="control-btn primary play-pause-btn" onclick="togglePlayPause()" title="Pause (Space)">
+                  ⏸
+                </button>
+                <button class="control-btn secondary" onclick="handleSkip()" title="Skip (→)">
+                  ⏭
+                </button>
+              </div>
+              <div class="controls-secondary">
+                <button class="control-btn mini shuffle-btn" onclick="shuffleQueue()" title="Shuffle queue">
+                  ⇌
+                </button>
+                <button class="control-btn mini" onclick="sendCommand('stop')" title="Stop playback">
+                  ⏹
+                </button>
+                <button class="control-btn mini radio-btn" onclick="toggleRadio()" title="Radio Mode - Auto-play similar songs">
+                  📻
+                </button>
+                <button class="control-btn mini loop-btn" onclick="cycleLoopMode()" title="Loop Mode (L)">
+                  🔁<span class="loop-badge" style="display: none;">1</span>
+                </button>
+                <button class="control-btn mini mode-247-btn" onclick="toggle24_7()" title="24/7 Mode - Stay connected">
+                  🌙
+                </button>
+                <div class="sleep-timer-wrapper">
+                  <button class="control-btn mini sleep-btn" onclick="toggleSleepTimerMenu()" title="Sleep Timer">
+                    💤<span class="sleep-time"></span>
+                  </button>
+                  <div id="sleepTimerMenu" class="sleep-timer-menu">
+                    <div class="sleep-timer-title">Sleep Timer</div>
+                    <div class="sleep-timer-content"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="volume-control">
+              <span class="volume-icon">🔊</span>
+              <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="${state.volume * 100}"
+                oninput="updateVolumeDisplay(this.value)"
+                onchange="sendCommand('volume:' + this.value)">
+              <input type="number" id="volumeDisplay" class="volume-input" min="0" max="100" value="${Math.round(state.volume * 100)}"
+                onchange="updateVolumeFromInput(this.value)"
+                onkeydown="if(event.key==='Enter') this.blur()">
+              <span style="font-size: 12px; color: var(--text-muted)">%</span>
+            </div>
+          `;
+
+          // Setup progress bar drag events after full render
+          setTimeout(setupProgressBarEvents, 0);
         }
-        
-        playerContent.innerHTML = `
-          <div class="album-art-container">
-            <div class="album-art ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
-              ${song.thumbnail 
-                ? `<img src="${song.thumbnail}" alt="Album Art" onerror="handleThumbnailError(this)">`
-                : '<div class="placeholder">🎵</div>'
-              }
-            </div>
-          </div>
 
-          <div class="track-info">
-            <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a>${state.isCached ? ` <span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>` : ''}</div>
-            <div class="track-requested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
-          </div>
+        // Always update dynamic elements (doesn't reset animations)
+        updateDynamicElements();
 
-          <div class="progress-container">
-            <div class="progress-bar" id="progressBar" title="Click or drag to seek">
-              <div class="progress-fill" style="width: ${currentProgress}%"></div>
-            </div>
-            <div class="progress-time">
-              <span>${currentTimeStr}</span>
-              <span>${formatDuration(song.duration)}</span>
-            </div>
-          </div>
-
-          <div class="controls">
-            <button class="control-btn secondary shuffle-btn" onclick="shuffleQueue()" title="Shuffle queue" ${state.queue && state.queue.length >= 2 ? '' : 'disabled'}>
-              ⇌
-            </button>
-            <button class="control-btn secondary" onclick="sendCommand('previous')" title="Previous" ${(state.recentlyPlayed && state.recentlyPlayed.length > 0) ? '' : 'disabled'}>
-              ⏮
-            </button>
-            <button class="control-btn primary" onclick="sendCommand('${state.isPaused ? 'resume' : 'pause'}')" title="${state.isPaused ? 'Resume' : 'Pause'}">
-              ${state.isPaused ? '▶' : '⏸'}
-            </button>
-            <button class="control-btn secondary" onclick="handleSkip()" title="Skip">
-              ⏭
-            </button>
-            <button class="control-btn secondary" onclick="sendCommand('stop')" title="Stop">
-              ⏹
-            </button>
-            <button class="control-btn secondary radio-btn ${state.radioEnabled ? 'active' : ''}" onclick="toggleRadio()" title="Radio Mode - Auto-play similar songs">
-              📻
-            </button>
-          </div>
-
-          <div class="volume-control">
-            <span class="volume-icon">🔊</span>
-            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="${state.volume * 100}" 
-              oninput="updateVolumeDisplay(this.value)"
-              onchange="sendCommand('volume:' + this.value)">
-            <input type="number" id="volumeDisplay" class="volume-input" min="0" max="100" value="${Math.round(state.volume * 100)}" 
-              onchange="updateVolumeFromInput(this.value)" 
-              onkeydown="if(event.key==='Enter') this.blur()">
-            <span style="font-size: 12px; color: var(--text-muted)">%</span>
-          </div>
-        `;
       } else {
-        playerContent.innerHTML = `
-          <div class="idle-state">
-            <div class="idle-icon">🎧</div>
-            <div class="idle-text">Nothing Playing</div>
-            <div class="idle-subtext">Search for songs above or use /play in Discord</div>
-          </div>
-        `;
-      }
-
-      // Setup progress bar drag events after HTML is updated
-      if (state.currentSong) {
-        setTimeout(setupProgressBarEvents, 0);
+        // No song playing - show idle state
+        if (lastRenderedSongUrl !== null || !playerContent.querySelector('.idle-state')) {
+          lastRenderedSongUrl = null;
+          playerContent.innerHTML = `
+            <div class="idle-state">
+              <div class="idle-icon">🎧</div>
+              <div class="idle-text">Nothing Playing</div>
+              <div class="idle-subtext">Search for songs above or use /play in Discord</div>
+            </div>
+          `;
+        }
       }
 
       // Queue only shows upcoming songs, not the current song

@@ -80,6 +80,7 @@ process.env.FFMPEG_PATH = ffmpegPath;
 
 // Recently played persistence
 const RECENTLY_PLAYED_FILE = join(__dirname, '..', '..', 'data', 'recentlyPlayed.json');
+const SETTINGS_FILE = join(__dirname, '..', '..', 'data', 'playerSettings.json');
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Load recently played from file
@@ -117,6 +118,72 @@ function saveRecentlyPlayed(recentlyPlayed) {
 // Global recently played list (shared across all guilds for persistence)
 let globalRecentlyPlayed = loadRecentlyPlayed();
 console.log(`Loaded ${globalRecentlyPlayed.length} recently played songs from storage`);
+
+// Player settings persistence
+function loadSettings() {
+  try {
+    if (existsSync(SETTINGS_FILE)) {
+      const data = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'));
+      // Check if sleep timer has expired
+      if (data.sleepEndTime && data.sleepEndTime < Date.now()) {
+        data.sleepEndTime = null;
+      }
+      return {
+        loopMode: data.loopMode || 'off',
+        is24_7: data.is24_7 || false,
+        sleepEndTime: data.sleepEndTime || null
+      };
+    }
+  } catch (error) {
+    console.error('Error loading settings:', error);
+  }
+  return { loopMode: 'off', is24_7: false, sleepEndTime: null };
+}
+
+function saveSettings() {
+  try {
+    const dataDir = dirname(SETTINGS_FILE);
+    if (!existsSync(dataDir)) {
+      mkdirSync(dataDir, { recursive: true });
+    }
+    writeFileSync(SETTINGS_FILE, JSON.stringify(globalSettings, null, 2));
+  } catch (error) {
+    console.error('Error saving settings:', error);
+  }
+}
+
+// Global settings (shared across all clients)
+let globalSettings = loadSettings();
+let sleepTimer = null;
+console.log(`Loaded player settings: loopMode=${globalSettings.loopMode}, is24_7=${globalSettings.is24_7}, sleepEndTime=${globalSettings.sleepEndTime}`);
+
+// Setup sleep timer if one was persisted
+function setupSleepTimer() {
+  if (globalSettings.sleepEndTime) {
+    const remaining = globalSettings.sleepEndTime - Date.now();
+    if (remaining > 0) {
+      console.log(`Restoring sleep timer with ${Math.round(remaining / 1000)}s remaining`);
+      sleepTimer = setTimeout(() => {
+        // Stop playback when timer expires
+        const firstQueue = queues.values().next().value;
+        if (firstQueue) {
+          firstQueue.stop();
+          firstQueue.leave();
+        }
+        globalSettings.sleepEndTime = null;
+        saveSettings();
+        broadcastState();
+        console.log('Sleep timer expired - playback stopped');
+      }, remaining);
+    } else {
+      globalSettings.sleepEndTime = null;
+      saveSettings();
+    }
+  }
+}
+
+// Call after queues Map is defined
+setTimeout(setupSleepTimer, 100);
 
 // Export getter for recently played (used by web server for initial state)
 export function getRecentlyPlayed() {
@@ -167,7 +234,10 @@ function broadcastState(seekPosition = null) {
       voiceChannelName: firstQueue.voiceChannelName,
       seekPosition: seekPosition,
       isCached: !!(firstQueue.cachedAudioPath && existsSync(firstQueue.cachedAudioPath)),
-      songStartTime: firstQueue.songStartTime
+      songStartTime: firstQueue.songStartTime,
+      loopMode: globalSettings.loopMode,
+      is24_7: globalSettings.is24_7,
+      sleepEndTime: globalSettings.sleepEndTime
     });
   } else {
     webUpdateCallback({
@@ -177,7 +247,10 @@ function broadcastState(seekPosition = null) {
       isPlaying: false,
       isPaused: false,
       volume: 1.0,
-      guildId: null
+      guildId: null,
+      loopMode: globalSettings.loopMode,
+      is24_7: globalSettings.is24_7,
+      sleepEndTime: globalSettings.sleepEndTime
     });
   }
 }
@@ -204,6 +277,7 @@ export class MusicQueue {
     this.seekOffset = 0; // Offset in seconds for when song started (for seeking)
     this.historyIndex = -1; // Current position in recently played history (-1 = not navigating history)
     this.playingFromHistory = false; // Flag to prevent re-adding history songs
+    // Note: loopMode, is24_7, and sleepEndTime are now in globalSettings for persistence
 
     // Handle player state changes - use arrow function to preserve 'this'
     this.player.on(AudioPlayerStatus.Idle, () => {
@@ -584,7 +658,23 @@ export class MusicQueue {
 
   async playNext() {
     console.log('playNext called, songs in queue:', this.songs.length);
-    
+
+    // Handle loop modes before cleanup
+    if (this.currentSong && globalSettings.loopMode !== 'off') {
+      const songToLoop = { ...this.currentSong };
+      delete songToLoop.playedAt; // Remove playedAt if present
+
+      if (globalSettings.loopMode === 'song') {
+        // Loop single: add to front of queue
+        this.songs.unshift(songToLoop);
+        console.log('Loop mode (song): Re-queued current song');
+      } else if (globalSettings.loopMode === 'queue') {
+        // Loop queue: add to end of queue
+        this.songs.push(songToLoop);
+        console.log('Loop mode (queue): Added current song to end of queue');
+      }
+    }
+
     // Clean up previous FFmpeg process and cached audio
     if (this.currentFFmpeg) {
       this.currentFFmpeg.kill();
@@ -603,13 +693,18 @@ export class MusicQueue {
       await new Promise(resolve => setTimeout(resolve, 500));
       await this.play();
     } else {
-      console.log('Queue empty, will disconnect in 60 seconds if no new songs');
-      // Queue finished, disconnect after a delay
-      setTimeout(() => {
-        if (this.songs.length === 0 && !this.isPlaying) {
-          this.leave();
-        }
-      }, 60000); // 1 minute
+      // Handle 24/7 mode - don't disconnect
+      if (globalSettings.is24_7) {
+        console.log('Queue empty, but 24/7 mode is active - staying connected');
+      } else {
+        console.log('Queue empty, will disconnect in 60 seconds if no new songs');
+        // Queue finished, disconnect after a delay
+        setTimeout(() => {
+          if (this.songs.length === 0 && !this.isPlaying && !globalSettings.is24_7) {
+            this.leave();
+          }
+        }, 60000); // 1 minute
+      }
     }
   }
 
@@ -640,6 +735,26 @@ export class MusicQueue {
 
   skip() {
     this.player.stop();
+  }
+
+  // Cycle through loop modes: off -> song -> queue -> off
+  cycleLoopMode() {
+    const modes = ['off', 'song', 'queue'];
+    const currentIndex = modes.indexOf(globalSettings.loopMode);
+    globalSettings.loopMode = modes[(currentIndex + 1) % 3];
+    saveSettings();
+    console.log('Loop mode changed to:', globalSettings.loopMode);
+    broadcastState();
+    return globalSettings.loopMode;
+  }
+
+  // Toggle 24/7 mode (prevents auto-disconnect)
+  toggle24_7() {
+    globalSettings.is24_7 = !globalSettings.is24_7;
+    saveSettings();
+    console.log('24/7 mode:', globalSettings.is24_7 ? 'enabled' : 'disabled');
+    broadcastState();
+    return globalSettings.is24_7;
   }
 
   // Seek to a specific position in the current song (in seconds)
