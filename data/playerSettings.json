@@ -1,5 +1,5 @@
 {
-  "loopMode": "off",
+  "loopMode": "queue",
   "is24_7": false,
   "sleepEndTime": null
 }

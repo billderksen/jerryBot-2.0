@@ -11,9 +11,9 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
-import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback } from './utils/musicQueue.js';
-import { setDiscordClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
+import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, broadcastListeners } from './web/server.js';
+import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient } from './utils/musicQueue.js';
+import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 
 // Store the last used voice channel for web dashboard
 let lastVoiceChannel = null;
@@ -24,6 +24,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMembers,
   ]
 });
 
@@ -176,11 +177,36 @@ client.on(Events.VoiceStateUpdate, (oldState, newState) => {
     lastVoiceChannel = newState.channel;
     lastGuildId = newState.guild.id;
   }
+  
+  // Update listeners when someone joins/leaves the bot's voice channel
+  const botVoiceChannel = lastVoiceChannel;
+  if (botVoiceChannel) {
+    const isRelevantChannel = 
+      oldState.channelId === botVoiceChannel.id || 
+      newState.channelId === botVoiceChannel.id;
+    
+    if (isRelevantChannel) {
+      // Broadcast updated listeners list
+      broadcastListeners();
+    }
+  }
+});
+
+// Update listeners when a guild member's nickname changes
+client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+  // Check if display name changed
+  if (oldMember.displayName !== newMember.displayName) {
+    // Broadcast updated listeners to refresh nicknames
+    broadcastListeners();
+  }
 });
 
 // Ready event
 client.once(Events.ClientReady, readyClient => {
   console.log(`✅ Ready! Logged in as ${readyClient.user.tag}`);
+  
+  // Set Discord client for musicQueue (for voice channel member tracking)
+  setMusicQueueClient(readyClient);
   
   // Set bot info for web dashboard
   setBotInfo({
@@ -190,12 +216,17 @@ client.once(Events.ClientReady, readyClient => {
   });
   
   // Set Discord client for activity logger
-  setDiscordClient(readyClient);
+  setActivityLoggerClient(readyClient);
   
   // Pass logger to web server for web dashboard actions
   setActivityLogger({ logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong });
   
   startWebServer();
+  
+  // Periodically refresh listeners to catch any nickname changes (every 30 seconds)
+  setInterval(() => {
+    broadcastListeners();
+  }, 30000);
 });
 
 // Interaction handler

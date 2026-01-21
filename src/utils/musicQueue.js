@@ -81,6 +81,7 @@ process.env.FFMPEG_PATH = ffmpegPath;
 // Recently played persistence
 const RECENTLY_PLAYED_FILE = join(__dirname, '..', '..', 'data', 'recentlyPlayed.json');
 const SETTINGS_FILE = join(__dirname, '..', '..', 'data', 'playerSettings.json');
+const STATS_FILE = join(__dirname, '..', '..', 'data', 'listeningStats.json');
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Load recently played from file
@@ -118,6 +119,169 @@ function saveRecentlyPlayed(recentlyPlayed) {
 // Global recently played list (shared across all guilds for persistence)
 let globalRecentlyPlayed = loadRecentlyPlayed();
 console.log(`Loaded ${globalRecentlyPlayed.length} recently played songs from storage`);
+
+// Listening stats persistence
+function loadStats() {
+  try {
+    if (existsSync(STATS_FILE)) {
+      return JSON.parse(readFileSync(STATS_FILE, 'utf8'));
+    }
+  } catch (error) {
+    console.error('Error loading listening stats:', error);
+  }
+  return { users: {}, songs: {}, totalSongsPlayed: 0, totalListeningTime: 0 };
+}
+
+function saveStats() {
+  try {
+    const dataDir = dirname(STATS_FILE);
+    if (!existsSync(dataDir)) {
+      mkdirSync(dataDir, { recursive: true });
+    }
+    writeFileSync(STATS_FILE, JSON.stringify(listeningStats, null, 2));
+  } catch (error) {
+    console.error('Error saving listening stats:', error);
+  }
+}
+
+// Track when a song starts playing (increment play count for requester)
+async function trackSongStarted(song) {
+  if (!song || !song.requestedBy) return;
+  
+  const songKey = song.url || song.title;
+  
+  // Skip tracking for radio auto-adds
+  const requestedBy = song.requestedBy || '';
+  if (requestedBy.toLowerCase().includes('radio')) return;
+  
+  // Get requester's user ID
+  const userId = song.requestedById;
+  
+  // Only track if we have a user ID
+  if (userId) {
+    // Try to get the current displayName from voice channel members
+    const voiceMembers = await getVoiceChannelMembers();
+    const voiceMember = voiceMembers.find(m => m.id === userId);
+    const displayName = voiceMember?.displayName || voiceMember?.username || song.requestedBy;
+    
+    // Initialize user stats if needed (for the requester - songs played count)
+    if (!listeningStats.users[userId]) {
+      listeningStats.users[userId] = {
+        displayName: displayName,
+        songsPlayed: 0,
+        totalListeningTime: 0,
+        firstSeen: Date.now(),
+        lastSeen: Date.now()
+      };
+    }
+    // Always update display name to latest
+    listeningStats.users[userId].displayName = displayName;
+    listeningStats.users[userId].songsPlayed++;
+    listeningStats.users[userId].lastSeen = Date.now();
+  }
+  
+  // Initialize song stats if needed
+  if (!listeningStats.songs[songKey]) {
+    listeningStats.songs[songKey] = {
+      title: song.title,
+      url: song.url,
+      thumbnail: song.thumbnail,
+      playCount: 0,
+      totalListeningTime: 0,
+      duration: song.duration || 0,
+      requestedBy: {} // Track request counts per user
+    };
+  }
+  listeningStats.songs[songKey].playCount++;
+  
+  // Track who requested this song
+  if (userId) {
+    const voiceMembers = await getVoiceChannelMembers();
+    const voiceMember = voiceMembers.find(m => m.id === userId);
+    const displayName = voiceMember?.displayName || voiceMember?.username || song.requestedBy;
+    
+    if (!listeningStats.songs[songKey].requestedBy) {
+      listeningStats.songs[songKey].requestedBy = {};
+    }
+    if (!listeningStats.songs[songKey].requestedBy[userId]) {
+      listeningStats.songs[songKey].requestedBy[userId] = { displayName, count: 0 };
+    }
+    listeningStats.songs[songKey].requestedBy[userId].displayName = displayName;
+    listeningStats.songs[songKey].requestedBy[userId].count++;
+  }
+  
+  // Update global song count
+  listeningStats.totalSongsPlayed++;
+  
+  scheduleSaveStats();
+}
+
+// Track actual listening time when song ends - for ALL voice channel members
+async function trackListeningTime(song, actualSecondsListened) {
+  if (!song || actualSecondsListened <= 0) return;
+  
+  const songKey = song.url || song.title;
+  
+  // Cap at song duration to avoid over-counting
+  const maxDuration = song.duration || actualSecondsListened;
+  const timeToAdd = Math.min(actualSecondsListened, maxDuration);
+  
+  // Get all members in the voice channel
+  const voiceMembers = await getVoiceChannelMembers();
+  
+  // Track time for each voice channel member
+  for (const member of voiceMembers) {
+    const userId = member.id;
+    const displayName = member.displayName || member.username;
+    
+    // Initialize user stats if needed
+    if (!listeningStats.users[userId]) {
+      listeningStats.users[userId] = {
+        displayName: displayName,
+        songsPlayed: 0,
+        totalListeningTime: 0,
+        firstSeen: Date.now(),
+        lastSeen: Date.now()
+      };
+    }
+    // Always update display name to latest
+    listeningStats.users[userId].displayName = displayName;
+    listeningStats.users[userId].totalListeningTime += timeToAdd;
+    listeningStats.users[userId].lastSeen = Date.now();
+  }
+  
+  // Update song listening time (once per song, not per user)
+  if (listeningStats.songs[songKey]) {
+    listeningStats.songs[songKey].totalListeningTime += timeToAdd;
+  }
+  
+  // Update global total (once per song)
+  listeningStats.totalListeningTime += timeToAdd;
+  
+  const memberNames = voiceMembers.map(m => m.displayName || m.username).join(', ');
+  console.log(`Tracked ${Math.round(timeToAdd)}s listening time for ${voiceMembers.length} members (${memberNames}) on "${song.title}"`);
+  
+  scheduleSaveStats();
+}
+
+// Debounced save
+function scheduleSaveStats() {
+  if (!saveStatsTimeout) {
+    saveStatsTimeout = setTimeout(() => {
+      saveStats();
+      saveStatsTimeout = null;
+    }, 5000);
+  }
+}
+
+let listeningStats = loadStats();
+let saveStatsTimeout = null;
+console.log(`Loaded listening stats: ${listeningStats.totalSongsPlayed} total songs played`);
+
+// Export getter for listening stats
+export function getListeningStats() {
+  return listeningStats;
+}
 
 // Player settings persistence
 function loadSettings() {
@@ -196,6 +360,9 @@ const queues = new Map();
 // Web dashboard update function (will be set by index.js)
 let webUpdateCallback = null;
 
+// Discord client reference (will be set by index.js)
+let discordClient = null;
+
 // Activity logger callbacks (will be set by index.js)
 let logNowPlayingCallback = null;
 let resetLastLoggedSongCallback = null;
@@ -204,9 +371,77 @@ export function setWebUpdateCallback(callback) {
   webUpdateCallback = callback;
 }
 
+export function setDiscordClient(client) {
+  discordClient = client;
+}
+
 export function setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong) {
   logNowPlayingCallback = logNowPlaying;
   resetLastLoggedSongCallback = resetLastLoggedSong;
+}
+
+// Fetch a member's display name from Discord by user ID
+export async function getMemberDisplayName(userId) {
+  if (!discordClient) return null;
+  
+  const firstQueue = queues.values().next().value;
+  if (!firstQueue || !firstQueue.voiceChannel) return null;
+  
+  try {
+    const guild = firstQueue.voiceChannel.guild;
+    const member = await guild.members.fetch(userId);
+    return {
+      displayName: member.displayName,
+      username: member.user.username,
+      avatar: member.user.avatar
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Get members in the bot's current voice channel
+export async function getVoiceChannelMembers() {
+  if (!discordClient) return [];
+  
+  const firstQueue = queues.values().next().value;
+  if (!firstQueue || !firstQueue.connection) return [];
+  
+  const voiceChannel = firstQueue.voiceChannel;
+  if (!voiceChannel) return [];
+  
+  // Fetch fresh channel data to get updated nicknames
+  const freshChannel = discordClient.channels.cache.get(voiceChannel.id);
+  if (!freshChannel) return [];
+  
+  const members = [];
+  
+  // Iterate over voice channel members and fetch fresh guild member data
+  for (const [memberId, member] of freshChannel.members) {
+    // Exclude bots
+    if (member.user.bot) continue;
+    
+    try {
+      // Fetch fresh member data from Discord API to get updated nickname
+      const freshMember = await freshChannel.guild.members.fetch(memberId);
+      members.push({
+        id: freshMember.user.id,
+        username: freshMember.user.username,
+        displayName: freshMember.displayName,
+        avatar: freshMember.user.avatar
+      });
+    } catch (e) {
+      // Fallback to cached data if fetch fails
+      members.push({
+        id: member.user.id,
+        username: member.user.username,
+        displayName: member.displayName,
+        avatar: member.user.avatar
+      });
+    }
+  }
+  
+  return members;
 }
 
 // Broadcast state to web dashboard
@@ -260,6 +495,7 @@ export class MusicQueue {
     this.guildId = guildId;
     this.guildName = guildInfo?.name || null;
     this.guildIcon = guildInfo?.icon || null;
+    this.voiceChannel = null; // Reference to the voice channel
     this.voiceChannelName = null;
     this.songs = [];
     this.isPlaying = false;
@@ -316,6 +552,7 @@ export class MusicQueue {
   }
 
   async join(voiceChannel) {
+    this.voiceChannel = voiceChannel; // Store reference to voice channel
     this.voiceChannelName = voiceChannel.name;
     this.connection = joinVoiceChannel({
       channelId: voiceChannel.id,
@@ -392,6 +629,7 @@ export class MusicQueue {
       duration: previousSong.duration,
       thumbnail: previousSong.thumbnail,
       requestedBy: previousSong.requestedBy || 'Previous',
+      requestedById: previousSong.requestedById || null,
       source: previousSong.source || 'youtube'
     };
     
@@ -441,6 +679,9 @@ export class MusicQueue {
       }
       // Save to file for persistence
       saveRecentlyPlayed(globalRecentlyPlayed);
+      
+      // Track song started in listening stats (play count only, time tracked when song ends)
+      trackSongStarted(this.currentSong);
     }
     // Clear the flag for next song
     this.playingFromHistory = false;
@@ -659,6 +900,13 @@ export class MusicQueue {
   async playNext() {
     console.log('playNext called, songs in queue:', this.songs.length);
 
+    // Track actual listening time for the song that just ended
+    if (this.currentSong && this.songStartTime) {
+      const actualListenedMs = Date.now() - this.songStartTime;
+      const actualListenedSeconds = Math.floor(actualListenedMs / 1000);
+      trackListeningTime(this.currentSong, actualListenedSeconds);
+    }
+
     // Handle loop modes before cleanup
     if (this.currentSong && globalSettings.loopMode !== 'off') {
       const songToLoop = { ...this.currentSong };
@@ -874,6 +1122,13 @@ export class MusicQueue {
   }
 
   stop() {
+    // Track listening time for current song before stopping
+    if (this.currentSong && this.songStartTime) {
+      const actualListenedMs = Date.now() - this.songStartTime;
+      const actualListenedSeconds = Math.floor(actualListenedMs / 1000);
+      trackListeningTime(this.currentSong, actualListenedSeconds);
+    }
+    
     this.songs = [];
     this.player.stop();
     // Reset logged song tracker since we're stopping
@@ -884,6 +1139,13 @@ export class MusicQueue {
   }
 
   leave() {
+    // Track listening time for current song before leaving
+    if (this.currentSong && this.songStartTime) {
+      const actualListenedMs = Date.now() - this.songStartTime;
+      const actualListenedSeconds = Math.floor(actualListenedMs / 1000);
+      trackListeningTime(this.currentSong, actualListenedSeconds);
+    }
+    
     if (this.connection) {
       this.connection.destroy();
     }

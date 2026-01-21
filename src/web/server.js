@@ -6,7 +6,7 @@ import { dirname, join } from 'path';
 import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
-import { getRecentlyPlayed } from '../utils/musicQueue.js';
+import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName } from '../utils/musicQueue.js';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
@@ -293,6 +293,43 @@ app.get('/api/state', (req, res) => {
   res.json(currentState);
 });
 
+// API endpoint to get listening stats
+app.get('/api/stats', (req, res) => {
+  const stats = getListeningStats();
+  
+  // Process stats for the frontend
+  const topUsers = Object.entries(stats.users || {})
+    .map(([id, data]) => ({
+      id,
+      displayName: data.displayName || id,
+      ...data
+    }))
+    .sort((a, b) => b.totalListeningTime - a.totalListeningTime)
+    .slice(0, 20);
+  
+  const topSongs = Object.entries(stats.songs || {})
+    .map(([key, data]) => ({
+      key,
+      ...data
+    }))
+    .sort((a, b) => b.playCount - a.playCount)
+    .slice(0, 50);
+  
+  res.json({
+    topUsers,
+    topSongs,
+    totalSongsPlayed: stats.totalSongsPlayed || 0,
+    totalListeningTime: stats.totalListeningTime || 0,
+    uniqueUsers: Object.keys(stats.users || {}).length,
+    uniqueSongs: Object.keys(stats.songs || {}).length
+  });
+});
+
+// Serve stats page
+app.get('/stats', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'stats.html'));
+});
+
 // API endpoint to search for songs
 app.get('/api/search', async (req, res) => {
   const query = req.query.q;
@@ -542,13 +579,14 @@ app.post('/api/queue/add', async (req, res) => {
   
   // Use custom requestedBy if provided (e.g., for Radio), otherwise use session username
   const requestedBy = customRequestedBy || req.session?.user?.username || 'Web Dashboard';
+  const requestedById = req.session?.user?.id || null;
   const isRadio = customRequestedBy && customRequestedBy.toLowerCase().includes('radio');
   
   try {
-    // Get full song info if needed
-    let song = { url, title, duration, thumbnail, requestedBy, source: 'youtube' };
+    // Get full song info if needed (skip if we already have title, duration, and thumbnail)
+    let song = { url, title, duration, thumbnail, requestedBy, requestedById, source: 'youtube' };
     
-    if (!title) {
+    if (!title || !duration || !thumbnail) {
       const videoInfo = await ytDlpExec(url, {
         dumpSingleJson: true,
         noCheckCertificates: true,
@@ -556,11 +594,12 @@ app.post('/api/queue/add', async (req, res) => {
         skipDownload: true
       });
       song = {
-        title: videoInfo.title,
+        title: title || videoInfo.title,
         url: videoInfo.webpage_url || url,
-        duration: videoInfo.duration || 0,
-        thumbnail: getHighQualityThumbnail(videoInfo),
+        duration: duration || videoInfo.duration || 0,
+        thumbnail: thumbnail || getHighQualityThumbnail(videoInfo),
         requestedBy,
+        requestedById,
         source: 'youtube'
       };
     }
@@ -669,25 +708,42 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// Get list of currently connected listeners
-function getConnectedListeners() {
-  const listeners = [];
-  clients.forEach(client => {
+// Get list of users viewing the web dashboard
+async function getWebViewers() {
+  const viewers = [];
+  const seenUserIds = new Set();
+  
+  for (const client of clients) {
     if (client.readyState === 1 && client.user) {
-      listeners.push({
-        id: client.user.id,
-        username: client.user.username,
-        avatar: client.user.avatar
-      });
+      // Deduplicate by user ID
+      if (!seenUserIds.has(client.user.id)) {
+        seenUserIds.add(client.user.id);
+        
+        // Try to fetch fresh display name from Discord
+        const memberData = await getMemberDisplayName(client.user.id);
+        
+        viewers.push({
+          id: client.user.id,
+          username: memberData?.username || client.user.username,
+          displayName: memberData?.displayName || client.user.username,
+          avatar: memberData?.avatar || client.user.avatar
+        });
+      }
     }
-  });
-  return listeners;
+  }
+  return viewers;
 }
 
-// Broadcast listeners update to all clients
-function broadcastListeners() {
-  const listeners = getConnectedListeners();
-  broadcast('listeners', listeners);
+// Get list of users in voice channel with the bot
+async function getVoiceListeners() {
+  return await getVoiceChannelMembers();
+}
+
+// Broadcast listeners update to all clients (both web viewers and voice channel members)
+export async function broadcastListeners() {
+  const webViewers = await getWebViewers();
+  const voiceListeners = await getVoiceListeners();
+  broadcast('listeners', { webViewers, voiceListeners });
 }
 
 // Broadcast to all connected clients

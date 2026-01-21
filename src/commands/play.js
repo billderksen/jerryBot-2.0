@@ -148,7 +148,8 @@ export default {
           url: ytResult.url,
           duration: Math.floor(spotifyTrack.duration / 1000) || 0,
           thumbnail: spotifyTrack.image,
-          requestedBy: interaction.user.tag,
+          requestedBy: interaction.member.displayName,
+          requestedById: interaction.user.id,
           source: 'spotify'
         };
       } else {
@@ -166,7 +167,8 @@ export default {
           url: videoInfo.webpage_url || songUrl,
           duration: videoInfo.duration || 0,
           thumbnail: videoInfo.thumbnail,
-          requestedBy: interaction.user.tag,
+          requestedBy: interaction.member.displayName,
+          requestedById: interaction.user.id,
           source: 'youtube'
         };
       }

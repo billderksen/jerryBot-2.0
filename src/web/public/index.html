@@ -599,10 +599,62 @@
     }
 
     @media (max-width: 768px) {
+      .container {
+        padding: 12px;
+      }
+
+      .header {
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      /* Logo on left */
+      .logo {
+        order: 1;
+      }
+
+      .logo-icon {
+        width: 36px;
+        height: 36px;
+      }
+
+      .logo-text {
+        font-size: 16px;
+      }
+
+      /* Hide status/connected text */
+      .status {
+        display: none !important;
+      }
+
+      /* User profile on right, compact */
+      .header > div:last-child {
+        order: 2;
+        margin-left: auto;
+      }
+
+      .user-profile .user-info {
+        display: none;
+      }
+
+      .user-profile {
+        padding: 4px;
+      }
+
+      .user-profile .user-avatar {
+        width: 32px;
+        height: 32px;
+      }
+
+      /* Search bar full width below */
       .search-container {
         order: 3;
-        max-width: 100%;
         width: 100%;
+        flex-basis: 100%;
+      }
+
+      .search-input {
+        font-size: 16px;
       }
     }
 
@@ -613,6 +665,13 @@
       padding: 40px;
       position: relative;
       overflow: hidden;
+      min-height: 650px;
+    }
+
+    #playerContent {
+      min-height: 550px;
+      display: flex;
+      flex-direction: column;
     }
 
     .now-playing::before {
@@ -645,6 +704,7 @@
     }
 
     .album-art {
+      position: relative;
       width: 100%;
       aspect-ratio: 1;
       background: var(--bg-tertiary);
@@ -660,11 +720,41 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .album-art img.loaded {
+      opacity: 1;
     }
 
     .album-art .placeholder {
       font-size: 120px;
       opacity: 0.3;
+    }
+
+    /* Skeleton loading animation */
+    .album-art.loading::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        90deg,
+        var(--bg-tertiary) 0%,
+        var(--bg-hover) 50%,
+        var(--bg-tertiary) 100%
+      );
+      background-size: 200% 100%;
+      animation: skeleton 1.5s ease-in-out infinite;
+      border-radius: 12px;
+    }
+
+    @keyframes skeleton {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
     }
 
     .album-art.playing {
@@ -1578,6 +1668,11 @@
     .idle-state {
       text-align: center;
       padding: 80px 40px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
 
     .idle-icon {
@@ -1640,6 +1735,30 @@
     .listeners-section {
       padding: 16px 0;
       margin-top: 30px;
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .listeners-group {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .listeners-divider {
+      width: 1px;
+      background: var(--border);
+      align-self: stretch;
+    }
+
+    @media (max-width: 600px) {
+      .listeners-section {
+        flex-direction: column;
+      }
+      .listeners-divider {
+        width: 100%;
+        height: 1px;
+      }
     }
 
     .listeners-header {
@@ -1817,6 +1936,9 @@
     <symbol id="icon-warning" viewBox="0 0 24 24">
       <path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
     </symbol>
+    <symbol id="icon-stats" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/>
+    </symbol>
   </svg>
 
   <div class="container">
@@ -1848,6 +1970,10 @@
             <span class="user-name" id="userName">Loading...</span>
           </div>
           <div class="user-dropdown">
+            <a href="/stats" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-stats"/></svg>
+              Listening Stats
+            </a>
             <a href="/logout" class="user-dropdown-item logout">
               🚪 Logout
             </a>
@@ -1896,13 +2022,26 @@
 
     <!-- Listeners Section -->
     <footer class="listeners-section">
-      <div class="listeners-header">
-        <span class="listeners-header-icon">👥</span>
-        <span>Currently Listening</span>
-        <span class="listeners-count" id="listenersCount">0</span>
+      <div class="listeners-group">
+        <div class="listeners-header">
+          <span class="listeners-header-icon">🌐</span>
+          <span>On Website</span>
+          <span class="listeners-count" id="webViewersCount">0</span>
+        </div>
+        <div class="listeners-list" id="webViewersList">
+          <span class="listeners-empty">No one else is here...</span>
+        </div>
       </div>
-      <div class="listeners-list" id="listenersList">
-        <span class="listeners-empty">No one else is here yet...</span>
+      <div class="listeners-divider"></div>
+      <div class="listeners-group">
+        <div class="listeners-header">
+          <span class="listeners-header-icon">🎧</span>
+          <span>In Voice Channel</span>
+          <span class="listeners-count" id="voiceListenersCount">0</span>
+        </div>
+        <div class="listeners-list" id="voiceListenersList">
+          <span class="listeners-empty">No one is in the voice channel...</span>
+        </div>
       </div>
     </footer>
   </div>
@@ -2791,6 +2930,8 @@
 
     // Track last rendered song to avoid unnecessary re-renders
     let lastRenderedSongUrl = null;
+    let playerStructureCreated = false;
+    let idleStateTimeout = null;
 
     // Update only dynamic elements without rebuilding DOM (preserves animations)
     function updateDynamicElements() {
@@ -3413,110 +3554,211 @@
       }
 
       const currentSongUrl = state.currentSong?.url || null;
-      const songChanged = currentSongUrl !== lastRenderedSongUrl;
+      const songChanged = currentSongUrl !== lastRenderedSongUrl && currentSongUrl !== null;
 
-      if (state.currentSong) {
+      // Cancel any pending idle state transition when we have a song
+      if (state.currentSong && idleStateTimeout) {
+        clearTimeout(idleStateTimeout);
+        idleStateTimeout = null;
+      }
+
+      // Create the player structure once (only from idle state)
+      if (!playerStructureCreated && state.currentSong) {
         const song = state.currentSong;
-
-        // Only do full re-render if song changed or player content is empty/showing idle state
-        if (songChanged || playerContent.querySelector('.idle-state')) {
-          console.log('Full re-render: song changed or idle state');
-          lastRenderedSongUrl = currentSongUrl;
-          cachedAnimationShown = false; // Reset for new song
-
-          const shouldAnimateBadge = state.isCached && !cachedAnimationShown;
-          if (state.isCached) {
-            cachedAnimationShown = true;
-          }
-
-          playerContent.innerHTML = `
-            <div class="album-art-container">
-              <div class="album-art ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
-                ${song.thumbnail
-                  ? `<img src="${song.thumbnail}" alt="Album Art" onerror="handleThumbnailError(this)">`
-                  : '<div class="placeholder">🎵</div>'
-                }
-              </div>
+        console.log('Creating player structure');
+        playerStructureCreated = true;
+        lastRenderedSongUrl = currentSongUrl;
+        cachedAnimationShown = false;
+        
+        // Create the static player structure with current song data
+        playerContent.innerHTML = `
+          <div class="album-art-container">
+            <div class="album-art loading ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
+              ${song.thumbnail 
+                ? `<img id="albumArtImg" src="${song.thumbnail}" alt="Album Art" onload="this.classList.add('loaded'); this.parentElement.classList.remove('loading');" onerror="handleThumbnailError(this)">`
+                : '<div class="placeholder">🎵</div>'}
             </div>
+          </div>
 
-            <div class="track-info">
-              <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a><span class="cached-badge-container">${state.isCached ? `<span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>` : ''}</span></div>
-              <div class="track-requested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
+          <div class="track-info">
+            <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a><span class="cached-badge-container" id="cachedBadgeContainer">${state.isCached ? '<span class="cached-badge animate" title="Cached - Instant seeking enabled">✓</span>' : ''}</span></div>
+            <div class="track-requested" id="trackRequested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
+          </div>
+
+          <div class="progress-container">
+            <div class="progress-bar" id="progressBar" title="Click or drag to seek">
+              <div class="progress-fill" style="width: 0%"></div>
             </div>
-
-            <div class="progress-container">
-              <div class="progress-bar" id="progressBar" title="Click or drag to seek">
-                <div class="progress-fill" style="width: 0%"></div>
-              </div>
-              <div class="progress-time">
-                <span class="progress-current">0:00</span>
-                <span class="progress-duration">${formatDuration(song.duration)}</span>
-              </div>
+            <div class="progress-time">
+              <span class="progress-current">0:00</span>
+              <span class="progress-duration" id="trackDuration">${formatDuration(song.duration)}</span>
             </div>
+          </div>
 
-            <div class="controls-wrapper">
-              <div class="controls-primary">
-                <button class="control-btn secondary prev-btn" onclick="sendCommand('previous')" title="Previous (←)">
-                  <svg><use href="#icon-skip-prev"/></svg>
+          <div class="controls-wrapper">
+            <div class="controls-primary">
+              <button class="control-btn secondary prev-btn" onclick="sendCommand('previous')" title="Previous (←)">
+                <svg><use href="#icon-skip-prev"/></svg>
+              </button>
+              <button class="control-btn primary play-pause-btn" onclick="togglePlayPause()" title="Pause (Space)">
+                <svg><use href="#icon-pause"/></svg>
+              </button>
+              <button class="control-btn secondary" onclick="handleSkip()" title="Skip (→)">
+                <svg><use href="#icon-skip-next"/></svg>
+              </button>
+            </div>
+            <div class="controls-secondary">
+              <button class="control-btn mini shuffle-btn" onclick="shuffleQueue()" title="Shuffle queue">
+                <svg><use href="#icon-shuffle"/></svg>
+              </button>
+              <button class="control-btn mini" onclick="sendCommand('stop')" title="Stop playback">
+                <svg><use href="#icon-stop"/></svg>
+              </button>
+              <button class="control-btn mini radio-btn" onclick="toggleRadio()" title="Radio Mode - Auto-play similar songs">
+                <svg><use href="#icon-radio"/></svg>
+              </button>
+              <button class="control-btn mini loop-btn" onclick="cycleLoopMode()" title="Loop Mode (L)">
+                <svg class="loop-icon"><use href="#icon-loop"/></svg><span class="loop-badge" style="display: none;">1</span>
+              </button>
+              <button class="control-btn mini mode-247-btn" onclick="toggle24_7()" title="24/7 Mode - Stay connected">
+                <svg><use href="#icon-moon"/></svg>
+              </button>
+              <div class="sleep-timer-wrapper">
+                <button class="control-btn mini sleep-btn" onclick="toggleSleepTimerMenu()" title="Sleep Timer">
+                  <svg><use href="#icon-sleep"/></svg><span class="sleep-time"></span>
                 </button>
-                <button class="control-btn primary play-pause-btn" onclick="togglePlayPause()" title="Pause (Space)">
-                  <svg><use href="#icon-pause"/></svg>
-                </button>
-                <button class="control-btn secondary" onclick="handleSkip()" title="Skip (→)">
-                  <svg><use href="#icon-skip-next"/></svg>
-                </button>
-              </div>
-              <div class="controls-secondary">
-                <button class="control-btn mini shuffle-btn" onclick="shuffleQueue()" title="Shuffle queue">
-                  <svg><use href="#icon-shuffle"/></svg>
-                </button>
-                <button class="control-btn mini" onclick="sendCommand('stop')" title="Stop playback">
-                  <svg><use href="#icon-stop"/></svg>
-                </button>
-                <button class="control-btn mini radio-btn" onclick="toggleRadio()" title="Radio Mode - Auto-play similar songs">
-                  <svg><use href="#icon-radio"/></svg>
-                </button>
-                <button class="control-btn mini loop-btn" onclick="cycleLoopMode()" title="Loop Mode (L)">
-                  <svg class="loop-icon"><use href="#icon-loop"/></svg><span class="loop-badge" style="display: none;">1</span>
-                </button>
-                <button class="control-btn mini mode-247-btn" onclick="toggle24_7()" title="24/7 Mode - Stay connected">
-                  <svg><use href="#icon-moon"/></svg>
-                </button>
-                <div class="sleep-timer-wrapper">
-                  <button class="control-btn mini sleep-btn" onclick="toggleSleepTimerMenu()" title="Sleep Timer">
-                    <svg><use href="#icon-sleep"/></svg><span class="sleep-time"></span>
-                  </button>
-                  <div id="sleepTimerMenu" class="sleep-timer-menu">
-                    <div class="sleep-timer-title">Sleep Timer</div>
-                    <div class="sleep-timer-content"></div>
-                  </div>
+                <div id="sleepTimerMenu" class="sleep-timer-menu">
+                  <div class="sleep-timer-title">Sleep Timer</div>
+                  <div class="sleep-timer-content"></div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div class="volume-control">
-              <span class="volume-icon" id="volumeIcon" onclick="toggleMute()" title="Click to mute/unmute"><svg><use href="#icon-volume"/></svg></span>
-              <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="${state.volume * 100}"
-                oninput="updateVolumeDisplay(this.value)"
-                onchange="sendCommand('volume:' + this.value)">
-              <input type="number" id="volumeDisplay" class="volume-input" min="0" max="100" value="${Math.round(state.volume * 100)}"
-                onchange="updateVolumeFromInput(this.value)"
-                onkeydown="if(event.key==='Enter') this.blur()">
-              <span style="font-size: 12px; color: var(--text-muted)">%</span>
-            </div>
-          `;
+          <div class="volume-control">
+            <span class="volume-icon" id="volumeIcon" onclick="toggleMute()" title="Click to mute/unmute"><svg><use href="#icon-volume"/></svg></span>
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="${state.volume * 100}"
+              oninput="updateVolumeDisplay(this.value)"
+              onchange="sendCommand('volume:' + this.value)">
+            <input type="number" id="volumeDisplay" class="volume-input" min="0" max="100" value="${Math.round(state.volume * 100)}"
+              onchange="updateVolumeFromInput(this.value)"
+              onkeydown="if(event.key==='Enter') this.blur()">
+            <span style="font-size: 12px; color: var(--text-muted)">%</span>
+          </div>
+        `;
 
-          // Setup progress bar drag events after full render
-          setTimeout(setupProgressBarEvents, 0);
+        if (state.isCached) cachedAnimationShown = true;
+        
+        // Setup progress bar drag events after creating structure
+        setTimeout(setupProgressBarEvents, 0);
+      }
+      
+      // If player structure exists and song changed, only update song-specific elements
+      if (playerStructureCreated && songChanged) {
+        const song = state.currentSong;
+        console.log('Song changed, updating dynamic content only');
+        lastRenderedSongUrl = currentSongUrl;
+        cachedAnimationShown = false;
+
+        // Update thumbnail with loading state
+        const albumArt = playerContent.querySelector('.album-art');
+        const albumArtImg = document.getElementById('albumArtImg');
+        if (albumArt) {
+          albumArt.classList.add('loading');
+          if (albumArtImg) {
+            albumArtImg.classList.remove('loaded');
+            if (song.thumbnail) {
+              albumArtImg.src = song.thumbnail;
+              albumArtImg.style.display = '';
+            } else {
+              albumArtImg.style.display = 'none';
+              albumArt.classList.remove('loading');
+            }
+          } else if (song.thumbnail) {
+            // No img element exists (was placeholder), need to create one
+            albumArt.innerHTML = `<img id="albumArtImg" src="${song.thumbnail}" alt="Album Art" onload="this.classList.add('loaded'); this.parentElement.classList.remove('loading');" onerror="handleThumbnailError(this)">`;
+          }
         }
 
-        // Always update dynamic elements (doesn't reset animations)
-        updateDynamicElements();
+        // Update track title and link
+        const trackTitleLink = document.getElementById('trackTitleLink');
+        if (trackTitleLink) {
+          trackTitleLink.href = song.url;
+          trackTitleLink.dataset.baseUrl = song.url;
+          trackTitleLink.textContent = song.title;
+        }
 
-      } else {
-        // No song playing - show idle state
-        if (lastRenderedSongUrl !== null || !playerContent.querySelector('.idle-state')) {
-          lastRenderedSongUrl = null;
+        // Update requested by
+        const trackRequested = document.getElementById('trackRequested');
+        if (trackRequested) {
+          trackRequested.textContent = `Requested by ${song.requestedBy || 'Unknown'}`;
+        }
+
+        // Update duration
+        const trackDuration = document.getElementById('trackDuration');
+        if (trackDuration) {
+          trackDuration.textContent = formatDuration(song.duration);
+        }
+
+        // Reset progress
+        const progressFill = playerContent.querySelector('.progress-fill');
+        const progressCurrent = playerContent.querySelector('.progress-current');
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressCurrent) progressCurrent.textContent = '0:00';
+      }
+
+      // Update elements that need updating regardless of song change
+      if (playerStructureCreated) {
+        // Update cached badge
+        const cachedBadgeContainer = document.getElementById('cachedBadgeContainer');
+        if (cachedBadgeContainer) {
+          const shouldAnimateBadge = state.isCached && !cachedAnimationShown;
+          if (state.isCached) {
+            cachedAnimationShown = true;
+            cachedBadgeContainer.innerHTML = `<span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>`;
+          } else {
+            cachedBadgeContainer.innerHTML = '';
+          }
+        }
+
+        // Update album art playing animation
+        const albumArt = playerContent.querySelector('.album-art');
+        if (albumArt) {
+          if (state.isPlaying && !state.isPaused) {
+            albumArt.classList.add('playing');
+          } else {
+            albumArt.classList.remove('playing');
+          }
+        }
+
+        // Always update dynamic elements (progress, play/pause state, etc.)
+        updateDynamicElements();
+      }
+
+      // Only show idle state if truly stopped (with delay to handle transitions)
+      if (!state.currentSong && playerStructureCreated) {
+        // Don't immediately switch to idle - wait a bit for next song
+        if (!idleStateTimeout) {
+          idleStateTimeout = setTimeout(() => {
+            // Double-check we still have no song
+            if (!state.currentSong) {
+              console.log('Transitioning to idle state');
+              playerStructureCreated = false;
+              lastRenderedSongUrl = null;
+              playerContent.innerHTML = `
+                <div class="idle-state">
+                  <div class="idle-icon"><svg><use href="#icon-headphones"/></svg></div>
+                  <div class="idle-text">Nothing Playing</div>
+                  <div class="idle-subtext">Search for songs above or use /play in Discord</div>
+                </div>
+              `;
+            }
+            idleStateTimeout = null;
+          }, 2000); // 2 second delay before showing idle state
+        }
+      } else if (!state.currentSong && !playerStructureCreated) {
+        // Show idle state immediately if structure was never created
+        if (!playerContent.querySelector('.idle-state')) {
           playerContent.innerHTML = `
             <div class="idle-state">
               <div class="idle-icon"><svg><use href="#icon-headphones"/></svg></div>
@@ -3550,7 +3792,7 @@
         `;
       } else {
         queueList.innerHTML = queueSongs.map((song, index) => `
-          <div class="queue-item" data-index="${index + 1}" draggable="true" onclick="skipToSong(${index + 1})" title="Click to play • Drag to reorder">
+          <div class="queue-item" data-index="${index + 1}" draggable="true" onclick="skipToSong(${index + 1})" title="${escapeHtml(song.title)}">
             <div class="queue-item-drag" onmousedown="event.stopPropagation()" title="Drag to reorder">⋮⋮</div>
             <div class="queue-item-number">
               <span>${index + 1}</span>
@@ -3594,7 +3836,7 @@
         `;
       } else {
         historyList.innerHTML = recentlyPlayed.map((song, index) => `
-          <div class="queue-item history-item" onclick="replaySong(${index})" title="Click to play again">
+          <div class="queue-item history-item" onclick="replaySong(${index})" title="${escapeHtml(song.title)}">
             <div class="queue-item-number">
               <span>${index + 1}</span>
             </div>
@@ -3742,52 +3984,70 @@
     }
 
     // Listeners list functionality
-    let currentListeners = [];
+    let currentWebViewers = [];
+    let currentVoiceListeners = [];
 
-    // Helper to compare listener lists
+    // Helper to compare listener lists (includes displayName to detect nickname changes)
     function listenersEqual(a, b) {
       if (a.length !== b.length) return false;
-      const idsA = a.map(l => l.id).sort().join(',');
-      const idsB = b.map(l => l.id).sort().join(',');
-      return idsA === idsB;
+      const stringifyList = (list) => list
+        .map(l => `${l.id}:${l.displayName || l.username}`)
+        .sort()
+        .join(',');
+      return stringifyList(a) === stringifyList(b);
     }
 
-    function updateListenersList(listeners) {
-      const newListeners = listeners || [];
-      const listenersList = document.getElementById('listenersList');
-      const listenersCount = document.getElementById('listenersCount');
-      
-      if (!listenersList || !listenersCount) return;
-      
-      // Only update DOM if listeners actually changed
-      if (listenersEqual(currentListeners, newListeners)) {
-        return;
-      }
-      
-      currentListeners = newListeners;
-      listenersCount.textContent = currentListeners.length;
-      
-      if (currentListeners.length === 0) {
-        listenersList.innerHTML = '<span class="listeners-empty">No one else is here yet...</span>';
+    function renderListenersList(listeners, listElement, emptyMessage) {
+      if (listeners.length === 0) {
+        listElement.innerHTML = `<span class="listeners-empty">${emptyMessage}</span>`;
       } else {
-        listenersList.innerHTML = currentListeners.map(listener => {
+        listElement.innerHTML = listeners.map(listener => {
           const avatarUrl = listener.avatar 
             ? `https://cdn.discordapp.com/avatars/${listener.id}/${listener.avatar}.png?size=64`
             : null;
+          const displayName = listener.displayName || listener.username;
           
           return `
-            <div class="listener-item" title="${escapeHtml(listener.username)}">
+            <div class="listener-item" title="${escapeHtml(displayName)}">
               <div class="listener-avatar">
                 ${avatarUrl 
                   ? `<img src="${avatarUrl}" alt="" onerror="this.parentElement.innerHTML='👤'">`
                   : '👤'
                 }
               </div>
-              <span class="listener-name">${escapeHtml(listener.username)}</span>
+              <span class="listener-name">${escapeHtml(displayName)}</span>
               <div class="listener-pulse"></div>
             </div>
           `;
         }).join('');
+      }
+    }
+
+    function updateListenersList(data) {
+      // Handle new format with webViewers and voiceListeners
+      const webViewers = data?.webViewers || [];
+      const voiceListeners = data?.voiceListeners || [];
+      
+      // Update web viewers
+      const webViewersList = document.getElementById('webViewersList');
+      const webViewersCount = document.getElementById('webViewersCount');
+      if (webViewersList && webViewersCount) {
+        if (!listenersEqual(currentWebViewers, webViewers)) {
+          currentWebViewers = webViewers;
+          webViewersCount.textContent = currentWebViewers.length;
+          renderListenersList(currentWebViewers, webViewersList, 'No one else is here...');
+        }
+      }
+      
+      // Update voice listeners
+      const voiceListenersList = document.getElementById('voiceListenersList');
+      const voiceListenersCount = document.getElementById('voiceListenersCount');
+      if (voiceListenersList && voiceListenersCount) {
+        if (!listenersEqual(currentVoiceListeners, voiceListeners)) {
+          currentVoiceListeners = voiceListeners;
+          voiceListenersCount.textContent = currentVoiceListeners.length;
+          renderListenersList(currentVoiceListeners, voiceListenersList, 'No one is in the voice channel...');
+        }
       }
     }
 

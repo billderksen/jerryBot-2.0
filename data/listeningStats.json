@@ -1,0 +1,68 @@
+{
+  "users": {
+    "81784467353513984": {
+      "displayName": "Shmerman MonkMonk",
+      "songsPlayed": 17,
+      "totalListeningTime": 639,
+      "firstSeen": 1768992649301,
+      "lastSeen": 1768994045789
+    },
+    "210093094241042433": {
+      "displayName": "Dre Haas",
+      "songsPlayed": 1,
+      "totalListeningTime": 270,
+      "firstSeen": 1768992712889,
+      "lastSeen": 1768992953890
+    }
+  },
+  "songs": {
+    "https://www.youtube.com/watch?v=asfwADW1xL4": {
+      "title": "GERARD JOLING - Ticket To The Tropics",
+      "url": "https://www.youtube.com/watch?v=asfwADW1xL4",
+      "thumbnail": "https://img.youtube.com/vi/asfwADW1xL4/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 60,
+      "duration": 178,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=lu8A_LHcCyQ": {
+      "title": "qwqweqwe (Reupload)",
+      "url": "https://www.youtube.com/watch?v=lu8A_LHcCyQ",
+      "thumbnail": "https://img.youtube.com/vi/lu8A_LHcCyQ/hqdefault.jpg",
+      "playCount": 13,
+      "totalListeningTime": 361,
+      "duration": 31,
+      "requestedBy": {
+        "210093094241042433": {
+          "displayName": "Dre Haas",
+          "count": 1
+        },
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 12
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=TMIcjY_TQRQ": {
+      "title": "Tiny en Lau scheld compilatie",
+      "url": "https://www.youtube.com/watch?v=TMIcjY_TQRQ",
+      "thumbnail": "https://img.youtube.com/vi/TMIcjY_TQRQ/hqdefault.jpg",
+      "playCount": 4,
+      "totalListeningTime": 370,
+      "duration": 408,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 4
+        }
+      }
+    }
+  },
+  "totalSongsPlayed": 18,
+  "totalListeningTime": 1059
+}
