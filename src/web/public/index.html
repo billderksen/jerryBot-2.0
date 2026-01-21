@@ -127,9 +127,18 @@
       left: 18px;
       top: 50%;
       transform: translateY(-50%);
-      font-size: 18px;
+      width: 18px;
+      height: 18px;
       color: var(--text-muted);
       pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .search-icon svg {
+      width: 100%;
+      height: 100%;
     }
 
     .search-clear {
@@ -820,6 +829,11 @@
       justify-content: center;
     }
 
+    .control-btn svg {
+      width: 100%;
+      height: 100%;
+    }
+
     .control-btn:hover {
       color: var(--accent);
       transform: scale(1.1);
@@ -835,12 +849,22 @@
       font-size: 24px;
     }
 
+    .control-btn.secondary svg {
+      width: 28px;
+      height: 28px;
+    }
+
     .control-btn.mini {
       width: 36px;
       height: 36px;
       font-size: 16px;
       opacity: 0.5;
       color: var(--text-muted);
+    }
+
+    .control-btn.mini svg {
+      width: 20px;
+      height: 20px;
     }
 
     .control-btn.mini:hover {
@@ -994,6 +1018,11 @@
       transform: scale(1.1);
     }
 
+    .control-btn.primary svg {
+      width: 28px;
+      height: 28px;
+    }
+
     .control-btn:disabled {
       opacity: 0.3;
       cursor: not-allowed;
@@ -1014,11 +1043,19 @@
     }
 
     .volume-icon {
-      font-size: 20px;
       color: var(--text-secondary);
-      min-width: 20px;
-      width: 20px;
+      min-width: 24px;
+      width: 24px;
+      height: 24px;
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .volume-icon svg {
+      width: 20px;
+      height: 20px;
     }
 
     .volume-slider {
@@ -1192,6 +1229,13 @@
       transition: all 0.2s;
       align-items: center;
       justify-content: center;
+      gap: 8px;
+    }
+
+    .clear-queue-btn svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
     }
 
     .clear-queue-btn:hover {
@@ -1331,7 +1375,8 @@
     }
 
     .queue-item-remove {
-      font-size: 18px;
+      width: 18px;
+      height: 18px;
       color: var(--text-muted);
       cursor: pointer;
       padding: 8px;
@@ -1340,6 +1385,14 @@
       user-select: none;
       opacity: 0;
       pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .queue-item-remove svg {
+      width: 100%;
+      height: 100%;
     }
 
     .queue-item:hover .queue-item-remove {
@@ -1446,9 +1499,16 @@
     }
 
     .queue-empty-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
       opacity: 0.5;
+      color: var(--text-muted);
+    }
+
+    .queue-empty-icon svg {
+      width: 100%;
+      height: 100%;
     }
 
     /* Visualizer */
@@ -1489,9 +1549,16 @@
     }
 
     .idle-icon {
-      font-size: 80px;
+      width: 80px;
+      height: 80px;
       margin-bottom: 24px;
       opacity: 0.3;
+      color: var(--text-primary);
+    }
+
+    .idle-icon svg {
+      width: 100%;
+      height: 100%;
     }
 
     .idle-text {
@@ -1640,6 +1707,77 @@
   </style>
 </head>
 <body>
+  <!-- SVG Icon Definitions -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+    <symbol id="icon-play" viewBox="0 0 24 24">
+      <polygon fill="currentColor" points="5,3 19,12 5,21"/>
+    </symbol>
+    <symbol id="icon-pause" viewBox="0 0 24 24">
+      <rect fill="currentColor" x="5" y="3" width="4" height="18"/>
+      <rect fill="currentColor" x="15" y="3" width="4" height="18"/>
+    </symbol>
+    <symbol id="icon-skip-next" viewBox="0 0 24 24">
+      <polygon fill="currentColor" points="5,4 15,12 5,20"/>
+      <rect fill="currentColor" x="16" y="4" width="3" height="16"/>
+    </symbol>
+    <symbol id="icon-skip-prev" viewBox="0 0 24 24">
+      <polygon fill="currentColor" points="19,4 9,12 19,20"/>
+      <rect fill="currentColor" x="5" y="4" width="3" height="16"/>
+    </symbol>
+    <symbol id="icon-stop" viewBox="0 0 24 24">
+      <rect fill="currentColor" x="5" y="5" width="14" height="14" rx="1"/>
+    </symbol>
+    <symbol id="icon-shuffle" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+    </symbol>
+    <symbol id="icon-radio" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M3.24 6.15C2.51 6.43 2 7.17 2 8v12c0 1.1.89 2 2 2h16c1.11 0 2-.9 2-2V8c0-1.11-.89-2-2-2H8.3l8.26-3.34-.75-1.85L3.24 6.15zM7 20c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-8h-2v-2h-2v2H4V8h16v4z"/>
+    </symbol>
+    <symbol id="icon-loop" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+    </symbol>
+    <symbol id="icon-loop-one" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+      <text x="12" y="14.5" text-anchor="middle" font-size="7" font-weight="bold" fill="currentColor">1</text>
+    </symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+    </symbol>
+    <symbol id="icon-sleep" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M11.5 2C6.81 2 3 5.81 3 10.5S6.81 19 11.5 19h.5v3l3-3h1c4.69 0 8.5-3.81 8.5-8.5S20.69 2 16 2h-4.5zM9.5 6h5l-5 5v1h5v-1.5h-3.5l5-5V5h-6.5v1z"/>
+    </symbol>
+    <symbol id="icon-volume" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+    </symbol>
+    <symbol id="icon-volume-mute" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+    </symbol>
+    <symbol id="icon-music" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+    </symbol>
+    <symbol id="icon-headphones" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/>
+    </symbol>
+    <symbol id="icon-queue-empty" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+    </symbol>
+    <symbol id="icon-history" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+    </symbol>
+    <symbol id="icon-warning" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+    </symbol>
+  </svg>
+
   <div class="container">
     <header class="header">
       <div class="logo">
@@ -1649,9 +1787,9 @@
 
       <div class="search-container">
         <div class="search-input-wrapper">
-          <span class="search-icon">🔍</span>
+          <span class="search-icon"><svg><use href="#icon-search"/></svg></span>
           <input type="text" class="search-input" id="searchInput" placeholder="Search for songs..." autocomplete="off">
-          <button class="search-clear" id="searchClear">✕</button>
+          <button class="search-clear" id="searchClear"><svg style="width:14px;height:14px;"><use href="#icon-close"/></svg></button>
         </div>
         <div class="search-results" id="searchResults"></div>
       </div>
@@ -1708,7 +1846,7 @@
         <div class="queue-list" id="queueList">
           <!-- Queue items will be inserted here -->
         </div>
-        <button class="clear-queue-btn" id="clearQueueBtn">🗑️ Clear Queue</button>
+        <button class="clear-queue-btn" id="clearQueueBtn"><svg><use href="#icon-trash"/></svg> Clear Queue</button>
         <div class="queue-list" id="historyList" style="display: none;">
           <!-- Recently played items will be inserted here -->
         </div>
@@ -2642,8 +2780,8 @@
       // Update play/pause button
       const playPauseBtn = document.querySelector('.play-pause-btn');
       if (playPauseBtn) {
-        playPauseBtn.innerHTML = state.isPaused ? '▶' : '⏸';
-        playPauseBtn.title = state.isPaused ? 'Resume' : 'Pause';
+        playPauseBtn.innerHTML = state.isPaused ? '<svg><use href="#icon-play"/></svg>' : '<svg><use href="#icon-pause"/></svg>';
+        playPauseBtn.title = state.isPaused ? 'Resume (Space)' : 'Pause (Space)';
       }
 
       // Update shuffle button disabled state
@@ -3085,7 +3223,7 @@
         } else {
           // First click - enter confirm mode
           clearQueueBtn.classList.add('confirm');
-          clearQueueBtn.textContent = '⚠️ Click again to confirm';
+          clearQueueBtn.innerHTML = '<svg><use href="#icon-warning"/></svg> Click again to confirm';
           
           // Reset after 3 seconds if not confirmed
           clearQueueConfirmTimeout = setTimeout(() => {
@@ -3122,7 +3260,7 @@
         clearQueueConfirmTimeout = null;
       }
       clearQueueBtn.classList.remove('confirm');
-      clearQueueBtn.textContent = '🗑️ Clear Queue';
+      clearQueueBtn.innerHTML = '<svg><use href="#icon-trash"/></svg> Clear Queue';
     }
 
     function clearQueue() {
@@ -3216,34 +3354,34 @@
             <div class="controls-wrapper">
               <div class="controls-primary">
                 <button class="control-btn secondary prev-btn" onclick="sendCommand('previous')" title="Previous (←)">
-                  ⏮
+                  <svg><use href="#icon-skip-prev"/></svg>
                 </button>
                 <button class="control-btn primary play-pause-btn" onclick="togglePlayPause()" title="Pause (Space)">
-                  ⏸
+                  <svg><use href="#icon-pause"/></svg>
                 </button>
                 <button class="control-btn secondary" onclick="handleSkip()" title="Skip (→)">
-                  ⏭
+                  <svg><use href="#icon-skip-next"/></svg>
                 </button>
               </div>
               <div class="controls-secondary">
                 <button class="control-btn mini shuffle-btn" onclick="shuffleQueue()" title="Shuffle queue">
-                  ⇌
+                  <svg><use href="#icon-shuffle"/></svg>
                 </button>
                 <button class="control-btn mini" onclick="sendCommand('stop')" title="Stop playback">
-                  ⏹
+                  <svg><use href="#icon-stop"/></svg>
                 </button>
                 <button class="control-btn mini radio-btn" onclick="toggleRadio()" title="Radio Mode - Auto-play similar songs">
-                  📻
+                  <svg><use href="#icon-radio"/></svg>
                 </button>
                 <button class="control-btn mini loop-btn" onclick="cycleLoopMode()" title="Loop Mode (L)">
-                  🔁<span class="loop-badge" style="display: none;">1</span>
+                  <svg class="loop-icon"><use href="#icon-loop"/></svg><span class="loop-badge" style="display: none;">1</span>
                 </button>
                 <button class="control-btn mini mode-247-btn" onclick="toggle24_7()" title="24/7 Mode - Stay connected">
-                  🌙
+                  <svg><use href="#icon-moon"/></svg>
                 </button>
                 <div class="sleep-timer-wrapper">
                   <button class="control-btn mini sleep-btn" onclick="toggleSleepTimerMenu()" title="Sleep Timer">
-                    💤<span class="sleep-time"></span>
+                    <svg><use href="#icon-sleep"/></svg><span class="sleep-time"></span>
                   </button>
                   <div id="sleepTimerMenu" class="sleep-timer-menu">
                     <div class="sleep-timer-title">Sleep Timer</div>
@@ -3254,7 +3392,7 @@
             </div>
 
             <div class="volume-control">
-              <span class="volume-icon">🔊</span>
+              <span class="volume-icon"><svg><use href="#icon-volume"/></svg></span>
               <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="${state.volume * 100}"
                 oninput="updateVolumeDisplay(this.value)"
                 onchange="sendCommand('volume:' + this.value)">
@@ -3278,7 +3416,7 @@
           lastRenderedSongUrl = null;
           playerContent.innerHTML = `
             <div class="idle-state">
-              <div class="idle-icon">🎧</div>
+              <div class="idle-icon"><svg><use href="#icon-headphones"/></svg></div>
               <div class="idle-text">Nothing Playing</div>
               <div class="idle-subtext">Search for songs above or use /play in Discord</div>
             </div>
@@ -3303,7 +3441,7 @@
       if (queueSongs.length === 0) {
         queueList.innerHTML = `
           <div class="queue-empty">
-            <div class="queue-empty-icon">📭</div>
+            <div class="queue-empty-icon"><svg><use href="#icon-queue-empty"/></svg></div>
             <div>Queue is empty</div>
           </div>
         `;
@@ -3325,7 +3463,7 @@
               <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
             </div>
             <div class="queue-item-duration">${formatDuration(song.duration)}</div>
-            <div class="queue-item-remove" onclick="removeSong(event, ${index + 1})" title="Remove from queue">✕</div>
+            <div class="queue-item-remove" onclick="removeSong(event, ${index + 1})" title="Remove from queue"><svg><use href="#icon-close"/></svg></div>
           </div>
         `).join('');
         
@@ -3347,7 +3485,7 @@
       if (recentlyPlayed.length === 0) {
         historyList.innerHTML = `
           <div class="queue-empty">
-            <div class="queue-empty-icon">🕐</div>
+            <div class="queue-empty-icon"><svg><use href="#icon-history"/></svg></div>
             <div>No recently played songs</div>
           </div>
         `;
