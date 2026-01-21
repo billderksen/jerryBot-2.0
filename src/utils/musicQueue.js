@@ -413,6 +413,9 @@ let discordClient = null;
 let logNowPlayingCallback = null;
 let resetLastLoggedSongCallback = null;
 
+// Presence update callback (will be set by index.js)
+let updatePresenceCallback = null;
+
 export function setWebUpdateCallback(callback) {
   webUpdateCallback = callback;
 }
@@ -424,6 +427,10 @@ export function setDiscordClient(client) {
 export function setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong) {
   logNowPlayingCallback = logNowPlaying;
   resetLastLoggedSongCallback = resetLastLoggedSong;
+}
+
+export function setPresenceCallback(callback) {
+  updatePresenceCallback = callback;
 }
 
 // Fetch a member's display name from Discord by user ID
@@ -740,6 +747,11 @@ export class MusicQueue {
       logNowPlayingCallback(this.currentSong);
     }
 
+    // Update Discord presence with now playing
+    if (updatePresenceCallback && this.currentSong) {
+      updatePresenceCallback(this.currentSong.title);
+    }
+
     try {
       // Get the audio URL for streaming
       // Format priority: opus (best quality) > m4a/aac > webm/vorbis > any audio > any format
@@ -987,6 +999,10 @@ export class MusicQueue {
       await new Promise(resolve => setTimeout(resolve, 500));
       await this.play();
     } else {
+      // Clear Discord presence when queue is empty
+      if (updatePresenceCallback) {
+        updatePresenceCallback(null);
+      }
       // Handle 24/7 mode - don't disconnect
       if (globalSettings.is24_7) {
         console.log('Queue empty, but 24/7 mode is active - staying connected');
@@ -1206,6 +1222,10 @@ export class MusicQueue {
     // Reset logged song tracker on cleanup
     if (resetLastLoggedSongCallback) {
       resetLastLoggedSongCallback();
+    }
+    // Clear Discord presence
+    if (updatePresenceCallback) {
+      updatePresenceCallback(null);
     }
     queues.delete(this.guildId);
     broadcastState();

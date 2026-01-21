@@ -569,6 +569,79 @@ app.get('/api/youtube/radio', async (req, res) => {
   }
 });
 
+// API endpoint to get lyrics for a song
+app.get('/api/lyrics', async (req, res) => {
+  const { title, artist } = req.query;
+
+  if (!title) {
+    return res.status(400).json({ error: 'Title is required' });
+  }
+
+  try {
+    // Clean up title - remove common suffixes like (Official Video), [Lyrics], etc.
+    let cleanTitle = title
+      .replace(/\(official\s*(music\s*)?video\)/gi, '')
+      .replace(/\(lyric\s*video\)/gi, '')
+      .replace(/\(audio\)/gi, '')
+      .replace(/\[.*?\]/g, '')
+      .replace(/\s*-\s*$/, '')
+      .trim();
+
+    // Try to extract artist from title if not provided (format: "Artist - Song")
+    let searchArtist = artist || '';
+    let searchTitle = cleanTitle;
+
+    if (!artist && cleanTitle.includes(' - ')) {
+      const parts = cleanTitle.split(' - ');
+      searchArtist = parts[0].trim();
+      searchTitle = parts.slice(1).join(' - ').trim();
+    }
+
+    // First try: search with artist and title
+    let lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(searchArtist + ' ' + searchTitle)}`;
+    let response = await fetch(lrclibUrl);
+    let results = await response.json();
+
+    // If no results, try with just the clean title
+    if (!results || results.length === 0) {
+      lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(cleanTitle)}`;
+      response = await fetch(lrclibUrl);
+      results = await response.json();
+    }
+
+    // If still no results, try with original title
+    if (!results || results.length === 0) {
+      lrclibUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(title)}`;
+      response = await fetch(lrclibUrl);
+      results = await response.json();
+    }
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({ error: 'Lyrics not found' });
+    }
+
+    // Get the first result (best match)
+    const bestMatch = results[0];
+
+    // Return synced lyrics if available, otherwise plain lyrics
+    const lyrics = {
+      title: bestMatch.trackName,
+      artist: bestMatch.artistName,
+      synced: !!bestMatch.syncedLyrics,
+      lyrics: bestMatch.syncedLyrics || bestMatch.plainLyrics || null
+    };
+
+    if (!lyrics.lyrics) {
+      return res.status(404).json({ error: 'Lyrics not found' });
+    }
+
+    res.json(lyrics);
+  } catch (error) {
+    console.error('Lyrics fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch lyrics' });
+  }
+});
+
 // API endpoint to add song to queue
 app.post('/api/queue/add', async (req, res) => {
   const { url, title, duration, thumbnail, guildId, requestedBy: customRequestedBy } = req.body;

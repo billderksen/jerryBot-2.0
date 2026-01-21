@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, Collection, MessageFlags } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Collection, MessageFlags, ActivityType } from 'discord.js';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -12,7 +12,7 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
 import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, broadcastListeners } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled } from './utils/musicQueue.js';
+import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 
 // Store the last used voice channel for web dashboard
@@ -270,7 +270,18 @@ client.once(Events.ClientReady, readyClient => {
   
   // Set Discord client for musicQueue (for voice channel member tracking)
   setMusicQueueClient(readyClient);
-  
+
+  // Set presence callback for now playing status
+  setPresenceCallback((songTitle) => {
+    if (songTitle) {
+      // Truncate title if too long (Discord has a limit)
+      const displayTitle = songTitle.length > 100 ? songTitle.substring(0, 97) + '...' : songTitle;
+      readyClient.user.setActivity(displayTitle, { type: ActivityType.Listening });
+    } else {
+      readyClient.user.setActivity(null);
+    }
+  });
+
   // Set bot info for web dashboard
   setBotInfo({
     username: readyClient.user.username,

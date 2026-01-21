@@ -2,10 +2,10 @@
   "users": {
     "81784467353513984": {
       "displayName": "Shmerman MonkMonk",
-      "songsPlayed": 17,
-      "totalListeningTime": 639,
+      "songsPlayed": 55,
+      "totalListeningTime": 3830,
       "firstSeen": 1768992649301,
-      "lastSeen": 1768994045789
+      "lastSeen": 1769008658747
     },
     "210093094241042433": {
       "displayName": "Dre Haas",
@@ -34,8 +34,8 @@
       "title": "qwqweqwe (Reupload)",
       "url": "https://www.youtube.com/watch?v=lu8A_LHcCyQ",
       "thumbnail": "https://img.youtube.com/vi/lu8A_LHcCyQ/hqdefault.jpg",
-      "playCount": 13,
-      "totalListeningTime": 361,
+      "playCount": 15,
+      "totalListeningTime": 371,
       "duration": 31,
       "requestedBy": {
         "210093094241042433": {
@@ -43,8 +43,8 @@
           "count": 1
         },
         "81784467353513984": {
-          "displayName": "Shmerman MonkMonk",
-          "count": 12
+          "displayName": "bill0000",
+          "count": 14
         }
       }
     },
@@ -52,17 +52,115 @@
       "title": "Tiny en Lau scheld compilatie",
       "url": "https://www.youtube.com/watch?v=TMIcjY_TQRQ",
       "thumbnail": "https://img.youtube.com/vi/TMIcjY_TQRQ/hqdefault.jpg",
-      "playCount": 4,
-      "totalListeningTime": 370,
+      "playCount": 7,
+      "totalListeningTime": 810,
       "duration": 408,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "bill0000",
+          "count": 7
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=xSDfCwDmJNo": {
+      "title": "Tame Impala: Tiny Desk Concert",
+      "url": "https://www.youtube.com/watch?v=xSDfCwDmJNo",
+      "thumbnail": "https://img.youtube.com/vi/xSDfCwDmJNo/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 194,
+      "duration": 1223,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=OfEtQLHOpiw": {
+      "title": "Ticket to the tropics (lyrics) - Gerard Joling",
+      "url": "https://www.youtube.com/watch?v=OfEtQLHOpiw",
+      "thumbnail": "https://img.youtube.com/vi/OfEtQLHOpiw/hqdefault.jpg",
+      "playCount": 21,
+      "totalListeningTime": 3230,
+      "duration": 222,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "bill0000",
+          "count": 21
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=PeGv-QtHyaA": {
+      "title": "Cygnus - Endless Space 2 Original Soundtrack",
+      "url": "https://www.youtube.com/watch?v=PeGv-QtHyaA",
+      "thumbnail": "https://img.youtube.com/vi/PeGv-QtHyaA/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 0,
+      "duration": 343,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=XyRuMR5EW3c": {
+      "title": "Gerard Joling - No More Bolero",
+      "url": "https://www.youtube.com/watch?v=XyRuMR5EW3c",
+      "thumbnail": "https://img.youtube.com/vi/XyRuMR5EW3c/hqdefault.jpg",
+      "playCount": 4,
+      "totalListeningTime": 291,
+      "duration": 245,
       "requestedBy": {
         "81784467353513984": {
           "displayName": "Shmerman MonkMonk",
           "count": 4
         }
       }
+    },
+    "https://www.youtube.com/watch?v=xV81WZgpYvU": {
+      "title": "Gerard Joling - Spanish Heart (Lyrics) || High Quality Audio",
+      "url": "https://www.youtube.com/watch?v=xV81WZgpYvU",
+      "thumbnail": "https://img.youtube.com/vi/xV81WZgpYvU/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 5,
+      "duration": 264,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=R22urvGcWy4": {
+      "title": "André Hazes - Zeg Maar Niets Meer",
+      "url": "https://www.youtube.com/watch?v=R22urvGcWy4",
+      "thumbnail": "https://img.youtube.com/vi/R22urvGcWy4/hqdefault.jpg",
+      "playCount": 4,
+      "totalListeningTime": 394,
+      "duration": 169,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 4
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=VAc9opfAEYQ": {
+      "title": "André Hazes - Zij Gelooft In Mij",
+      "url": "https://www.youtube.com/watch?v=VAc9opfAEYQ",
+      "thumbnail": "https://img.youtube.com/vi/VAc9opfAEYQ/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 80,
+      "duration": 255,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
     }
   },
-  "totalSongsPlayed": 18,
-  "totalListeningTime": 1059
+  "totalSongsPlayed": 56,
+  "totalListeningTime": 14658
 }
