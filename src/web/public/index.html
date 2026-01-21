@@ -3211,8 +3211,13 @@
 
     // Clear queue button - click once to arm, click again to confirm
     let clearQueueConfirmTimeout = null;
+    let clearQueueButtonSetup = false;
 
     function setupClearQueueButton() {
+      // Only set up once to prevent duplicate listeners
+      if (clearQueueButtonSetup) return;
+      clearQueueButtonSetup = true;
+      
       const clearQueueBtn = document.getElementById('clearQueueBtn');
       
       clearQueueBtn.addEventListener('click', () => {

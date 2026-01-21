@@ -1,56 +1,36 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { chatWithAI } from '../utils/openrouter.js';
 
+const GROK_MODEL = 'x-ai/grok-4.1-fast';
+
 export default {
   data: new SlashCommandBuilder()
     .setName('chat')
-    .setDescription('Ask a question to the AI')
+    .setDescription('Ask a question to Grok AI')
     .addStringOption(option =>
       option
         .setName('question')
-        .setDescription('Your question for the AI')
+        .setDescription('Your question for Grok')
         .setRequired(true)
-    )
-    .addStringOption(option =>
-      option
-        .setName('model')
-        .setDescription('Choose a model (optional)')
-        .setRequired(false)
-        .setAutocomplete(true)
     ),
-
-  async autocomplete(interaction) {
-    const focusedValue = interaction.options.getFocused().toLowerCase();
-    const choices = [
-      { name: 'x-ai/grok-4.1-fast', value: 'x-ai/grok-4.1-fast' },
-      { name: 'xiaomi/mimo-v2-flash:free', value: 'xiaomi/mimo-v2-flash:free' },
-      { name: 'google/gemini-2.5-flash', value: 'google/gemini-2.5-flash' },
-      { name: 'openai/gpt-4o-mini', value: 'openai/gpt-4o-mini' }
-    ];
-    const filtered = choices.filter(choice => 
-      choice.name.toLowerCase().includes(focusedValue)
-    );
-    await interaction.respond(filtered.slice(0, 25));
-  },
   
   async execute(interaction) {
     const question = interaction.options.getString('question');
-    const selectedModel = interaction.options.getString('model') || process.env.OPENROUTER_MODEL || 'openai/gpt-4o';
 
     // Log question to terminal
     console.log(`\n[${new Date().toISOString()}] Question from ${interaction.user.tag} (${interaction.user.id}):`);
-    console.log(`Model: ${selectedModel}`);
+    console.log(`Model: ${GROK_MODEL}`);
     console.log(`Question: ${question}\n`);
 
     // Defer reply since AI might take a moment
     await interaction.deferReply();
 
     try {
-      // Get AI response using selected model or default
+      // Get AI response from Grok
       const { content: aiResponse, modelUsed, usage } = await chatWithAI(
         question,
         process.env.OPENROUTER_API_KEY,
-        selectedModel
+        GROK_MODEL
       );
 
       // Discord has a 2000 character limit for messages
