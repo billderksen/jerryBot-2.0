@@ -283,6 +283,11 @@ export function getListeningStats() {
   return listeningStats;
 }
 
+// Export getter for 24/7 mode status
+export function is24_7Enabled() {
+  return globalSettings.is24_7;
+}
+
 // Player settings persistence
 function loadSettings() {
   try {
@@ -348,6 +353,47 @@ function setupSleepTimer() {
 
 // Call after queues Map is defined
 setTimeout(setupSleepTimer, 100);
+
+// Sleep timer control functions (called from web server)
+export function setSleepTimer(minutes) {
+  // Clear existing timer if any
+  if (sleepTimer) {
+    clearTimeout(sleepTimer);
+    sleepTimer = null;
+  }
+
+  globalSettings.sleepEndTime = Date.now() + (minutes * 60 * 1000);
+  saveSettings();
+
+  sleepTimer = setTimeout(() => {
+    // Stop playback when timer expires
+    const firstQueue = queues.values().next().value;
+    if (firstQueue) {
+      firstQueue.stop();
+      firstQueue.leave();
+    }
+    globalSettings.sleepEndTime = null;
+    sleepTimer = null;
+    saveSettings();
+    broadcastState();
+    console.log('Sleep timer expired - playback stopped');
+  }, minutes * 60 * 1000);
+
+  console.log(`Sleep timer set for ${minutes} minutes`);
+  broadcastState();
+  return globalSettings.sleepEndTime;
+}
+
+export function cancelSleepTimer() {
+  if (sleepTimer) {
+    clearTimeout(sleepTimer);
+    sleepTimer = null;
+  }
+  globalSettings.sleepEndTime = null;
+  saveSettings();
+  console.log('Sleep timer cancelled');
+  broadcastState();
+}
 
 // Export getter for recently played (used by web server for initial state)
 export function getRecentlyPlayed() {

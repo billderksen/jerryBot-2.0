@@ -507,25 +507,6 @@
       `).join('');
     }
 
-    // Get top requester for a song
-    function getTopRequester(song) {
-      if (!song.requestedBy || Object.keys(song.requestedBy).length === 0) {
-        return null;
-      }
-      
-      let topUser = null;
-      let topCount = 0;
-      
-      for (const [userId, data] of Object.entries(song.requestedBy)) {
-        if (data.count > topCount) {
-          topCount = data.count;
-          topUser = data.displayName;
-        }
-      }
-      
-      return topUser;
-    }
-
     // Render top songs list
     function renderTopSongs(songs) {
       const list = document.getElementById('topSongsList');
@@ -540,9 +521,7 @@
         return;
       }
 
-      list.innerHTML = songs.map((song, index) => {
-        const topRequester = getTopRequester(song);
-        return `
+      list.innerHTML = songs.map((song, index) => `
           <div class="list-item clickable" data-url="${escapeHtml(song.url)}" data-title="${escapeHtml(song.title)}" data-thumbnail="${escapeHtml(song.thumbnail || '')}" data-duration="${song.duration || 0}" onclick="addSongToQueue(this)">
             <div class="rank ${getRankClass(index)}">${index + 1}</div>
             <div class="song-thumbnail">
@@ -553,12 +532,11 @@
             </div>
             <div class="song-info">
               <div class="song-title" title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</div>
-              <div class="song-playtime">${formatDuration(song.totalListeningTime || 0)} played${topRequester ? ` · Most requested by ${escapeHtml(topRequester)}` : ''}</div>
+              <div class="song-playtime">${formatDuration(song.totalListeningTime || 0)} played</div>
             </div>
             <div class="play-count">${song.playCount}×</div>
           </div>
-        `;
-      }).join('');
+        `).join('');
     }
 
     // Load stats from API

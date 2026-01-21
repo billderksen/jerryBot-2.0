@@ -12,7 +12,7 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
 import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, broadcastListeners } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient } from './utils/musicQueue.js';
+import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 
 // Store the last used voice channel for web dashboard
@@ -171,23 +171,86 @@ setAddSongHandler(async (song, guildId) => {
 });
 
 // Track voice channel usage
+let emptyChannelTimeout = null;
+
 client.on(Events.VoiceStateUpdate, (oldState, newState) => {
   // Track when bot joins a voice channel
   if (newState.member?.id === client.user?.id && newState.channel) {
     lastVoiceChannel = newState.channel;
     lastGuildId = newState.guild.id;
+    // Clear any pending leave timeout when bot joins
+    if (emptyChannelTimeout) {
+      clearTimeout(emptyChannelTimeout);
+      emptyChannelTimeout = null;
+    }
   }
-  
+
+  // Track when bot leaves/is disconnected from a voice channel
+  if (oldState.member?.id === client.user?.id && !newState.channel) {
+    lastVoiceChannel = null;
+    lastGuildId = null;
+    if (emptyChannelTimeout) {
+      clearTimeout(emptyChannelTimeout);
+      emptyChannelTimeout = null;
+    }
+  }
+
   // Update listeners when someone joins/leaves the bot's voice channel
   const botVoiceChannel = lastVoiceChannel;
   if (botVoiceChannel) {
-    const isRelevantChannel = 
-      oldState.channelId === botVoiceChannel.id || 
+    const isRelevantChannel =
+      oldState.channelId === botVoiceChannel.id ||
       newState.channelId === botVoiceChannel.id;
-    
+
     if (isRelevantChannel) {
       // Broadcast updated listeners list
       broadcastListeners();
+
+      // Check if someone left the bot's channel (not the bot itself)
+      if (oldState.channelId === botVoiceChannel.id && oldState.member?.id !== client.user?.id) {
+        // Get fresh channel data to check member count
+        const freshChannel = client.channels.cache.get(botVoiceChannel.id);
+        if (freshChannel) {
+          // Count non-bot members
+          const humanMembers = freshChannel.members.filter(m => !m.user.bot).size;
+
+          if (humanMembers === 0 && !is24_7Enabled()) {
+            // Channel is empty (only bot), start leave timeout if not in 24/7 mode
+            console.log('Voice channel empty, will leave in 30 seconds if no one joins...');
+
+            // Clear any existing timeout
+            if (emptyChannelTimeout) {
+              clearTimeout(emptyChannelTimeout);
+            }
+
+            emptyChannelTimeout = setTimeout(() => {
+              // Re-check before leaving
+              const recheckChannel = client.channels.cache.get(botVoiceChannel.id);
+              const recheckHumans = recheckChannel?.members.filter(m => !m.user.bot).size || 0;
+
+              if (recheckHumans === 0 && !is24_7Enabled()) {
+                console.log('Voice channel still empty, leaving...');
+                const queue = getQueue(lastGuildId);
+                if (queue) {
+                  queue.leave();
+                }
+                lastVoiceChannel = null;
+                lastGuildId = null;
+              }
+              emptyChannelTimeout = null;
+            }, 30000); // 30 seconds
+          }
+        }
+      }
+
+      // Cancel leave timeout if someone joins
+      if (newState.channelId === botVoiceChannel.id && newState.member?.id !== client.user?.id) {
+        if (emptyChannelTimeout) {
+          console.log('Someone joined, cancelling leave timeout');
+          clearTimeout(emptyChannelTimeout);
+          emptyChannelTimeout = null;
+        }
+      }
     }
   }
 });

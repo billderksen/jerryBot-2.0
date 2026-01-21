@@ -2782,9 +2782,6 @@
         
         if (message.type === 'state') {
           const prevSong = state.currentSong?.url;
-          const wasPlaying = state.isPlaying && !state.isPaused;
-          const prevQueueLength = state.queue.length;
-          const prevRadioEnabled = state.radioEnabled;
           const isInitialLoad = prevSong === undefined || prevSong === null;
           
           // Preserve client-side states
@@ -2978,6 +2975,13 @@
         prevBtn.disabled = !(state.recentlyPlayed && state.recentlyPlayed.length > 0);
       }
 
+      // Update skip button disabled state (disabled if queue empty and radio off)
+      const skipBtn = document.querySelector('.skip-btn');
+      if (skipBtn) {
+        const hasQueuedSongs = state.queue && state.queue.length > 0;
+        skipBtn.disabled = !hasQueuedSongs && !state.radioEnabled;
+      }
+
       // Update radio button
       const radioBtn = document.querySelector('.radio-btn');
       if (radioBtn) {
@@ -3066,8 +3070,6 @@
     }
 
     // Keyboard shortcuts
-    let previousVolume = 1.0; // For mute toggle
-
     document.addEventListener('keydown', (e) => {
       // Skip if typing in an input field
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -3107,17 +3109,6 @@
           break;
       }
     });
-
-    function toggleMute() {
-      if (state.volume > 0) {
-        previousVolume = state.volume;
-        sendCommand('volume:0');
-        showToast('🔇 Muted', 'info');
-      } else {
-        sendCommand('volume:' + Math.round(previousVolume * 100));
-        showToast('🔊 Unmuted', 'info');
-      }
-    }
 
     function adjustVolume(delta) {
       const newVolume = Math.max(0, Math.min(1, state.volume + delta));
@@ -3236,6 +3227,7 @@
     // Radio mode state
     let radioSongs = []; // Pre-fetched radio songs
     let fetchingRadio = false;
+    let addingRadioSong = false; // Prevent concurrent addRadioSong calls
 
     function toggleRadio() {
       state.radioEnabled = !state.radioEnabled;
@@ -3250,6 +3242,7 @@
         }
       } else {
         showToast('📻 Radio mode disabled', 'info');
+        addingRadioSong = false; // Reset flag when disabled
         radioSongs = [];
       }
     }
@@ -3296,13 +3289,14 @@
 
     async function fetchRadioSongs(videoUrl) {
       if (fetchingRadio || !videoUrl) return;
-      
+
       fetchingRadio = true;
       try {
         const response = await fetch(`/api/youtube/radio?url=${encodeURIComponent(videoUrl)}`);
         const data = await response.json();
-        
-        if (data.tracks && data.tracks.length > 0) {
+
+        // Only set radioSongs if radio is still enabled (user may have toggled off during fetch)
+        if (data.tracks && data.tracks.length > 0 && state.radioEnabled) {
           radioSongs = data.tracks;
           console.log('Fetched', radioSongs.length, 'radio songs');
         }
@@ -3313,25 +3307,34 @@
     }
 
     async function addRadioSong() {
-      if (!state.radioEnabled || radioSongs.length === 0) return;
-      
+      // Prevent concurrent calls and check radio is still enabled
+      if (!state.radioEnabled || radioSongs.length === 0 || addingRadioSong) return;
+
+      addingRadioSong = true;
+
       // Pick the first song from radio queue
       const song = radioSongs.shift();
-      
+
       try {
+        // Re-check radio is still enabled before making API call
+        if (!state.radioEnabled) {
+          addingRadioSong = false;
+          return;
+        }
+
         const response = await fetch('/api/queue/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            url: song.url, 
-            title: song.title, 
-            duration: song.duration, 
-            thumbnail: song.thumbnail, 
+          body: JSON.stringify({
+            url: song.url,
+            title: song.title,
+            duration: song.duration,
+            thumbnail: song.thumbnail,
             guildId: state.guildId,
             requestedBy: '📻 Radio'
           })
         });
-        
+
         const result = await response.json();
         if (result.success) {
           showToast(`📻 Radio: Added ${song.title}`, 'success');
@@ -3339,9 +3342,11 @@
       } catch (error) {
         console.error('Error adding radio song:', error);
       }
-      
-      // If running low on radio songs, fetch more
-      if (radioSongs.length < 5 && state.currentSong) {
+
+      addingRadioSong = false;
+
+      // If running low on radio songs, fetch more (only if radio still enabled)
+      if (state.radioEnabled && radioSongs.length < 5 && state.currentSong) {
         fetchRadioSongs(state.currentSong.url);
       }
     }
@@ -3603,7 +3608,7 @@
               <button class="control-btn primary play-pause-btn" onclick="togglePlayPause()" title="Pause (Space)">
                 <svg><use href="#icon-pause"/></svg>
               </button>
-              <button class="control-btn secondary" onclick="handleSkip()" title="Skip (→)">
+              <button class="control-btn secondary skip-btn" onclick="handleSkip()" title="Skip (→)">
                 <svg><use href="#icon-skip-next"/></svg>
               </button>
             </div>
