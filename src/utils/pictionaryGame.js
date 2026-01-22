@@ -217,6 +217,24 @@ export class Room {
   }
 
   addPlayer(player) {
+    // Check if player already exists (reconnection)
+    if (this.players.has(player.id)) {
+      const existingPlayer = this.players.get(player.id);
+      existingPlayer.connected = true;
+      existingPlayer.displayName = player.displayName; // Update in case it changed
+      existingPlayer.avatar = player.avatar;
+      return { success: true, reconnected: true };
+    }
+
+    // Check if was a spectator reconnecting
+    if (this.spectators.has(player.id)) {
+      const spectator = this.spectators.get(player.id);
+      spectator.connected = true;
+      spectator.displayName = player.displayName;
+      spectator.avatar = player.avatar;
+      return { success: true, asSpectator: true, reconnected: true };
+    }
+
     if (this.players.size >= this.maxPlayers) {
       return { success: false, error: 'Room is full' };
     }
@@ -228,6 +246,11 @@ export class Room {
     this.players.set(player.id, player);
     this.broadcast('room:playerJoined', { player: player.toJSON() });
     return { success: true };
+  }
+
+  // Check if a player or spectator exists in the room (for reconnection)
+  hasPlayer(playerId) {
+    return this.players.has(playerId) || this.spectators.has(playerId);
   }
 
   addSpectator(player) {

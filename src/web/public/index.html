@@ -2051,6 +2051,12 @@
     <symbol id="icon-pictionary" viewBox="0 0 24 24">
       <path fill="currentColor" d="M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z"/>
     </symbol>
+    <symbol id="icon-hitster" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+    </symbol>
+    <symbol id="icon-pesten" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+    </symbol>
   </svg>
 
   <div class="container">
@@ -2089,6 +2095,14 @@
             <a href="/pictionary" class="user-dropdown-item">
               <svg style="width:16px;height:16px;"><use href="#icon-pictionary"/></svg>
               Pictionary Game
+            </a>
+            <a href="/hitster" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-hitster"/></svg>
+              Hitster Music Game
+            </a>
+            <a href="/pesten" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-pesten"/></svg>
+              Pesten Card Game
             </a>
             <a href="/logout" class="user-dropdown-item logout">
               🚪 Logout
@@ -2174,7 +2188,7 @@
       isPlaying: false,
       isPaused: false,
       volume: 1.0,
-      radioEnabled: localStorage.getItem('radioEnabled') === 'true',
+      radioEnabled: false, // Will be synced from server
       loopMode: localStorage.getItem('loopMode') || 'off',
       is24_7: localStorage.getItem('is24_7') === 'true'
     };
@@ -2900,12 +2914,9 @@
           const prevSong = state.currentSong?.url;
           const isInitialLoad = prevSong === undefined || prevSong === null;
           
-          // Preserve client-side states
-          const radioEnabled = state.radioEnabled;
           state = message.data;
-          state.radioEnabled = radioEnabled;
 
-          // Sync loop mode and 24/7 mode to localStorage when received from server
+          // Sync loop mode, 24/7 mode, and radio mode to localStorage when received from server
           // This allows persistence even when queue doesn't exist
           if (state.loopMode && state.loopMode !== 'off') {
             localStorage.setItem('loopMode', state.loopMode);
@@ -3648,8 +3659,9 @@
     let radioFetchController = null; // AbortController for in-flight radio fetch requests
 
     function toggleRadio() {
+      sendCommand('radio');
+      // Optimistic UI update - will be confirmed by server state
       state.radioEnabled = !state.radioEnabled;
-      localStorage.setItem('radioEnabled', state.radioEnabled);
       updateUI();
 
       if (state.radioEnabled) {

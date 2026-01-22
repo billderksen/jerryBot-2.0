@@ -8,6 +8,8 @@ import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
 import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer } from '../utils/musicQueue.js';
 import { createRoom, getRoom, deleteRoom, getRoomList, getLeaderboard, Player, setActivityLogger as setPictionaryActivityLogger } from '../utils/pictionaryGame.js';
+import { createRoom as createHitsterRoom, getRoom as getHitsterRoom, deleteRoom as deleteHitsterRoom, getRoomList as getHitsterRoomList, getLeaderboard as getHitsterLeaderboard } from '../utils/hitsterGame.js';
+import { createRoom as createPestenRoom, getRoom as getPestenRoom, deleteRoom as deletePestenRoom, getRoomList as getPestenRoomList, getLeaderboard as getPestenLeaderboard } from '../utils/pestenGame.js';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
@@ -133,6 +135,12 @@ const clients = new Set();
 // Store pictionary room clients (roomId -> Set of ws)
 const pictionaryClients = new Map();
 
+// Store hitster room clients (roomId -> Set of ws)
+const hitsterClients = new Map();
+
+// Store pesten room clients (roomId -> Set of ws)
+const pestenClients = new Map();
+
 // Store current state
 let currentState = {
   currentSong: null,
@@ -162,7 +170,7 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/auth/discord', (req, res) => {
-  const scope = 'identify guilds guilds.members.read';
+  const scope = 'identify guilds.members.read';
   const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${getClientId()}&redirect_uri=${encodeURIComponent(getRedirectUri())}&response_type=code&scope=${encodeURIComponent(scope)}`;
   res.redirect(authUrl);
 });
@@ -348,6 +356,34 @@ app.get('/api/pictionary/leaderboard', (req, res) => {
 
 app.get('/api/pictionary/rooms', (req, res) => {
   res.json(getRoomList());
+});
+
+// Serve Hitster game page
+app.get('/hitster', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'hitster.html'));
+});
+
+// Hitster API endpoints
+app.get('/api/hitster/leaderboard', (req, res) => {
+  res.json(getHitsterLeaderboard());
+});
+
+app.get('/api/hitster/rooms', (req, res) => {
+  res.json(getHitsterRoomList());
+});
+
+// Serve Pesten game page
+app.get('/pesten', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'pesten.html'));
+});
+
+// Pesten API endpoints
+app.get('/api/pesten/leaderboard', (req, res) => {
+  res.json(getPestenLeaderboard());
+});
+
+app.get('/api/pesten/rooms', (req, res) => {
+  res.json(getPestenRoomList());
 });
 
 // API endpoint to search for songs
@@ -783,6 +819,10 @@ wss.on('connection', (ws, req) => {
       clients.delete(ws);
       // Clean up pictionary room membership
       cleanupPictionaryClient(ws);
+      // Clean up hitster room membership
+      cleanupHitsterClient(ws);
+      // Clean up pesten room membership
+      cleanupPestenClient(ws);
       // Broadcast updated listeners list after disconnect
       broadcastListeners();
     });
@@ -800,6 +840,16 @@ wss.on('connection', (ws, req) => {
         // Handle Pictionary messages
         if (data.type && data.type.startsWith('pictionary:')) {
           handlePictionaryMessage(ws, data);
+        }
+
+        // Handle Hitster messages
+        if (data.type && data.type.startsWith('hitster:')) {
+          handleHitsterMessage(ws, data);
+        }
+
+        // Handle Pesten messages
+        if (data.type && data.type.startsWith('pesten:')) {
+          handlePestenMessage(ws, data);
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -916,6 +966,8 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard') {
       logWebAction(username, 'loop');
     } else if (command === '24/7') {
       logWebAction(username, '24/7');
+    } else if (command === 'radio') {
+      logWebAction(username, 'radio');
     } else if (command.startsWith('sleep-set:')) {
       const minutes = parseInt(command.split(':')[1]);
       setSleepTimer(minutes);
@@ -1007,6 +1059,60 @@ function handlePictionaryMessage(ws, data) {
         }
       }
       broadcastRoomList();
+      break;
+    }
+
+    case 'pictionary:room:rejoin': {
+      const { roomId } = data;
+      const room = getRoom(roomId);
+      if (!room || !room.hasPlayer(user.id)) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:room:rejoinFailed',
+          data: {}
+        }));
+        return;
+      }
+      // Reconnect the player
+      const player = new Player(user.id, user.username, user.avatar);
+      const result = room.addPlayer(player);
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:room:rejoinFailed',
+          data: {}
+        }));
+        return;
+      }
+      ws.pictionaryRoomId = room.id;
+      ws.isSpectator = result.asSpectator || false;
+      addClientToRoom(ws, room.id);
+      ws.send(JSON.stringify({
+        type: 'pictionary:room:joined',
+        data: {
+          room: room.toJSON(),
+          isHost: room.hostId === user.id,
+          isSpectator: result.asSpectator || false
+        }
+      }));
+      // Send current draw state and game info if game is in progress
+      if (room.state === 'playing' || room.state === 'between_rounds') {
+        ws.send(JSON.stringify({
+          type: 'pictionary:draw:state',
+          data: room.getDrawState()
+        }));
+        // Send current game state
+        ws.send(JSON.stringify({
+          type: 'pictionary:game:state',
+          data: {
+            round: room.currentRound,
+            totalRounds: room.totalRounds,
+            drawerId: room.getCurrentDrawer()?.id,
+            drawerName: room.getCurrentDrawer()?.displayName,
+            hint: room.currentHint,
+            state: room.state,
+            players: room.getPlayerList()
+          }
+        }));
+      }
       break;
     }
 
@@ -1225,6 +1331,760 @@ function cleanupPictionaryClient(ws) {
     }
     removeClientFromRoom(ws, roomId);
     broadcastRoomList();
+  }
+}
+
+// Hitster WebSocket handlers
+function handleHitsterMessage(ws, data) {
+  const { type } = data;
+  const user = ws.user;
+
+  switch (type) {
+    case 'hitster:room:list': {
+      ws.send(JSON.stringify({
+        type: 'hitster:room:list',
+        rooms: getHitsterRoomList()
+      }));
+      break;
+    }
+
+    case 'hitster:leaderboard': {
+      ws.send(JSON.stringify({
+        type: 'hitster:leaderboard',
+        players: getHitsterLeaderboard()
+      }));
+      break;
+    }
+
+    case 'hitster:room:rejoin': {
+      const { roomId } = data;
+      const room = getHitsterRoom(roomId);
+      if (!room || !room.hasPlayer(user.id)) {
+        ws.send(JSON.stringify({ type: 'hitster:room:rejoinFailed' }));
+        return;
+      }
+      // Reconnect the player
+      const result = room.addPlayer(user.id, user.username);
+      if (!result.success) {
+        ws.send(JSON.stringify({ type: 'hitster:room:rejoinFailed' }));
+        return;
+      }
+      ws.hitsterRoomId = roomId;
+      ws.hitsterIsSpectator = result.isSpectator || false;
+      addHitsterClientToRoom(ws, roomId);
+      ws.send(JSON.stringify({
+        type: 'hitster:room:joined',
+        room: room.getPublicState(),
+        isSpectator: result.isSpectator || false,
+        timeline: room.getPlayerTimeline(user.id)
+      }));
+      // Broadcast room update to all in room
+      broadcastToHitsterRoom(roomId, 'hitster:room:updated', { room: room.getPublicState() });
+      break;
+    }
+
+    case 'hitster:room:create': {
+      const { name, settings } = data;
+      const roomId = `hitster_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const room = createHitsterRoom(roomId, name || `${user.username}'s Room`, user.id, user.username, settings);
+      room.addPlayer(user.id, user.username);
+      ws.hitsterRoomId = roomId;
+      addHitsterClientToRoom(ws, roomId);
+      ws.send(JSON.stringify({
+        type: 'hitster:room:joined',
+        room: room.getPublicState(),
+        isSpectator: false,
+        timeline: []
+      }));
+      broadcastHitsterRoomList();
+      break;
+    }
+
+    case 'hitster:room:join': {
+      const { roomId } = data;
+      const room = getHitsterRoom(roomId);
+      if (!room) {
+        ws.send(JSON.stringify({
+          type: 'hitster:room:error',
+          message: 'Room not found'
+        }));
+        return;
+      }
+      const result = room.addPlayer(user.id, user.username);
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'hitster:room:error',
+          message: result.error
+        }));
+        return;
+      }
+      ws.hitsterRoomId = roomId;
+      ws.hitsterIsSpectator = result.isSpectator || false;
+      addHitsterClientToRoom(ws, roomId);
+      ws.send(JSON.stringify({
+        type: 'hitster:room:joined',
+        room: room.getPublicState(),
+        isSpectator: result.isSpectator || false,
+        timeline: room.getPlayerTimeline(user.id)
+      }));
+      // Broadcast room update to all in room
+      broadcastToHitsterRoom(roomId, 'hitster:room:updated', { room: room.getPublicState() });
+      broadcastHitsterRoomList();
+      break;
+    }
+
+    case 'hitster:room:leave': {
+      const roomId = ws.hitsterRoomId;
+      if (roomId) {
+        const room = getHitsterRoom(roomId);
+        if (room) {
+          const isEmpty = room.removePlayer(user.id);
+          if (isEmpty) {
+            deleteHitsterRoom(roomId);
+          } else {
+            broadcastToHitsterRoom(roomId, 'hitster:room:updated', { room: room.getPublicState() });
+          }
+        }
+        removeHitsterClientFromRoom(ws, roomId);
+        ws.hitsterRoomId = null;
+        ws.hitsterIsSpectator = false;
+        ws.send(JSON.stringify({ type: 'hitster:room:left' }));
+        broadcastHitsterRoomList();
+      }
+      break;
+    }
+
+    case 'hitster:game:start': {
+      const roomId = ws.hitsterRoomId;
+      const room = getHitsterRoom(roomId);
+      if (!room) return;
+      if (room.hostId !== user.id) {
+        ws.send(JSON.stringify({
+          type: 'hitster:room:error',
+          message: 'Only host can start the game'
+        }));
+        return;
+      }
+      const result = room.startGame();
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'hitster:room:error',
+          message: result.error
+        }));
+        return;
+      }
+      broadcastToHitsterRoom(roomId, 'hitster:game:started', { room: room.getPublicState() });
+      broadcastHitsterRoomList();
+      // Start first turn
+      startHitsterTurn(roomId);
+      break;
+    }
+
+    case 'hitster:game:place': {
+      const roomId = ws.hitsterRoomId;
+      const room = getHitsterRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      if (room.getCurrentPlayer()?.id !== user.id) return;
+      if (room.turnPhase !== 'placing') return;
+
+      const { position } = data;
+      const result = room.placeCard(user.id, position);
+
+      if (!result.valid) {
+        ws.send(JSON.stringify({
+          type: 'hitster:room:error',
+          message: result.error
+        }));
+        return;
+      }
+
+      // Broadcast placement result
+      broadcastToHitsterRoom(roomId, 'hitster:game:result', {
+        playerId: user.id,
+        playerName: user.username,
+        correct: result.correct,
+        song: result.song,
+        timeline: result.newTimeline
+      });
+
+      if (result.gameWon) {
+        // Game over
+        room.endGame(user.id);
+        const finalScores = Array.from(room.players.values())
+          .map(p => ({ id: p.id, name: p.name, score: p.score }))
+          .sort((a, b) => b.score - a.score);
+        broadcastToHitsterRoom(roomId, 'hitster:game:end', {
+          winner: result.winner,
+          finalScores
+        });
+        broadcastHitsterRoomList();
+      } else if (result.correct) {
+        // Move to next turn
+        setTimeout(() => {
+          room.nextTurn();
+          startHitsterTurn(roomId);
+        }, 3000);
+      } else if (result.canSteal) {
+        // Start steal phase
+        const stealerId = room.stealQueue[0];
+        const stealer = room.players.get(stealerId);
+        broadcastToHitsterRoom(roomId, 'hitster:game:steal', {
+          stealerId,
+          stealerName: stealer?.name
+        });
+      } else {
+        // No one can steal, move to next turn
+        setTimeout(() => {
+          room.nextTurn();
+          startHitsterTurn(roomId);
+        }, 3000);
+      }
+      break;
+    }
+
+    case 'hitster:game:steal': {
+      const roomId = ws.hitsterRoomId;
+      const room = getHitsterRoom(roomId);
+      if (!room || room.turnPhase !== 'stealing') return;
+
+      const { position } = data;
+      const result = room.stealCard(user.id, position);
+
+      if (!result.valid) {
+        ws.send(JSON.stringify({
+          type: 'hitster:room:error',
+          message: result.error
+        }));
+        return;
+      }
+
+      broadcastToHitsterRoom(roomId, 'hitster:game:stealResult', {
+        playerId: user.id,
+        playerName: user.username,
+        correct: result.correct,
+        song: result.song,
+        timeline: result.newTimeline,
+        passed: false
+      });
+
+      if (result.gameWon) {
+        room.endGame(user.id);
+        const finalScores = Array.from(room.players.values())
+          .map(p => ({ id: p.id, name: p.name, score: p.score }))
+          .sort((a, b) => b.score - a.score);
+        broadcastToHitsterRoom(roomId, 'hitster:game:end', {
+          winner: result.winner,
+          finalScores
+        });
+        broadcastHitsterRoomList();
+      } else if (result.correct || result.noMoreStealers) {
+        // Move to next turn
+        setTimeout(() => {
+          room.nextTurn();
+          startHitsterTurn(roomId);
+        }, 3000);
+      } else if (result.nextStealer) {
+        // Next stealer's turn
+        const stealer = room.players.get(result.nextStealer);
+        broadcastToHitsterRoom(roomId, 'hitster:game:steal', {
+          stealerId: result.nextStealer,
+          stealerName: stealer?.name
+        });
+      }
+      break;
+    }
+
+    case 'hitster:game:passSteal': {
+      const roomId = ws.hitsterRoomId;
+      const room = getHitsterRoom(roomId);
+      if (!room || room.turnPhase !== 'stealing') return;
+
+      const result = room.passSteal(user.id);
+
+      if (!result.valid) return;
+
+      broadcastToHitsterRoom(roomId, 'hitster:game:stealResult', {
+        playerId: user.id,
+        playerName: user.username,
+        passed: true
+      });
+
+      if (result.noMoreStealers) {
+        setTimeout(() => {
+          room.nextTurn();
+          startHitsterTurn(roomId);
+        }, 2000);
+      } else if (result.nextStealer) {
+        const stealer = room.players.get(result.nextStealer);
+        broadcastToHitsterRoom(roomId, 'hitster:game:steal', {
+          stealerId: result.nextStealer,
+          stealerName: stealer?.name
+        });
+      }
+      break;
+    }
+
+    case 'hitster:chat': {
+      const roomId = ws.hitsterRoomId;
+      if (!roomId) return;
+      const { message } = data;
+      broadcastToHitsterRoom(roomId, 'hitster:chat', {
+        author: user.username,
+        message: message.slice(0, 200)
+      });
+      break;
+    }
+  }
+}
+
+// Start a new turn in Hitster
+function startHitsterTurn(roomId) {
+  const room = getHitsterRoom(roomId);
+  if (!room || room.state !== 'playing') return;
+
+  const currentPlayer = room.getCurrentPlayer();
+  if (!currentPlayer) return;
+
+  // Draw a song
+  const songData = room.drawSong();
+
+  // Broadcast turn start
+  broadcastToHitsterRoom(roomId, 'hitster:game:turn', {
+    currentPlayerId: currentPlayer.id,
+    currentPlayerName: currentPlayer.name
+  });
+
+  // Send song to all players
+  broadcastToHitsterRoom(roomId, 'hitster:game:song', {
+    youtubeId: songData.youtubeId
+  });
+
+  // After listen time, move to placing phase
+  setTimeout(() => {
+    const currentRoom = getHitsterRoom(roomId);
+    if (currentRoom && currentRoom.turnPhase === 'listening') {
+      currentRoom.startPlacingPhase();
+      broadcastToHitsterRoom(roomId, 'hitster:game:placePhase', {});
+    }
+  }, room.settings.listenTime * 1000);
+}
+
+// Hitster room client management
+function addHitsterClientToRoom(ws, roomId) {
+  if (!hitsterClients.has(roomId)) {
+    hitsterClients.set(roomId, new Set());
+  }
+  hitsterClients.get(roomId).add(ws);
+}
+
+function removeHitsterClientFromRoom(ws, roomId) {
+  const roomClients = hitsterClients.get(roomId);
+  if (roomClients) {
+    roomClients.delete(ws);
+    if (roomClients.size === 0) {
+      hitsterClients.delete(roomId);
+    }
+  }
+}
+
+function broadcastToHitsterRoom(roomId, type, data) {
+  const roomClients = hitsterClients.get(roomId);
+  if (!roomClients) return;
+
+  const message = JSON.stringify({ type, ...data });
+
+  roomClients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastHitsterRoomList() {
+  const message = JSON.stringify({
+    type: 'hitster:room:list',
+    rooms: getHitsterRoomList()
+  });
+  clients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+}
+
+function cleanupHitsterClient(ws) {
+  const roomId = ws.hitsterRoomId;
+  if (roomId) {
+    const room = getHitsterRoom(roomId);
+    if (room) {
+      const isEmpty = room.removePlayer(ws.user?.id);
+      if (isEmpty) {
+        deleteHitsterRoom(roomId);
+      }
+    }
+    removeHitsterClientFromRoom(ws, roomId);
+    broadcastHitsterRoomList();
+  }
+}
+
+// Pesten WebSocket handlers
+function handlePestenMessage(ws, data) {
+  const { type } = data;
+  const user = ws.user;
+
+  switch (type) {
+    case 'pesten:getRooms': {
+      ws.send(JSON.stringify({
+        type: 'pesten:roomList',
+        rooms: getPestenRoomList()
+      }));
+      break;
+    }
+
+    case 'pesten:getLeaderboard': {
+      ws.send(JSON.stringify({
+        type: 'pesten:leaderboard',
+        leaderboard: getPestenLeaderboard()
+      }));
+      break;
+    }
+
+    case 'pesten:rejoinRoom': {
+      const { roomId } = data;
+      const room = getPestenRoom(roomId);
+      if (!room || !room.hasPlayer(user.id)) {
+        ws.send(JSON.stringify({ type: 'pesten:rejoinFailed' }));
+        return;
+      }
+      // Reconnect the player
+      const result = room.addPlayer(
+        user.id,
+        user.username,
+        user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
+      );
+      if (!result.success) {
+        ws.send(JSON.stringify({ type: 'pesten:rejoinFailed' }));
+        return;
+      }
+      ws.pestenRoomId = roomId;
+      addPestenClientToRoom(ws, roomId);
+      ws.send(JSON.stringify({
+        type: 'pesten:rejoined',
+        room: room.getState(user.id)
+      }));
+      // Broadcast room update to all in room
+      broadcastToPestenRoom(roomId, 'pesten:roomUpdated', { room: room.getState() });
+      break;
+    }
+
+    case 'pesten:createRoom': {
+      const { name, maxPlayers } = data;
+      const room = createPestenRoom(
+        name || `${user.username}'s Room`,
+        user.id,
+        user.username,
+        user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
+        maxPlayers || 4
+      );
+      ws.pestenRoomId = room.id;
+      addPestenClientToRoom(ws, room.id);
+      ws.send(JSON.stringify({
+        type: 'pesten:roomCreated',
+        room: room.getState(user.id)
+      }));
+      broadcastPestenRoomList();
+      break;
+    }
+
+    case 'pesten:joinRoom': {
+      const { roomId } = data;
+      const room = getPestenRoom(roomId);
+      if (!room) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: 'Room not found'
+        }));
+        return;
+      }
+      const result = room.addPlayer(
+        user.id,
+        user.username,
+        user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
+      );
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: result.error
+        }));
+        return;
+      }
+      ws.pestenRoomId = roomId;
+      addPestenClientToRoom(ws, roomId);
+      ws.send(JSON.stringify({
+        type: 'pesten:roomJoined',
+        room: room.getState(user.id)
+      }));
+      // Broadcast room update to all in room
+      broadcastToPestenRoom(roomId, 'pesten:roomUpdated', { room: room.getState() });
+      broadcastPestenRoomList();
+      break;
+    }
+
+    case 'pesten:leaveRoom': {
+      const { roomId } = data;
+      if (roomId) {
+        const room = getPestenRoom(roomId);
+        if (room) {
+          const result = room.removePlayer(user.id);
+          if (room.players.length === 0) {
+            deletePestenRoom(roomId);
+          } else {
+            broadcastToPestenRoom(roomId, 'pesten:roomUpdated', { room: room.getState() });
+          }
+        }
+        removePestenClientFromRoom(ws, roomId);
+        ws.pestenRoomId = null;
+        ws.send(JSON.stringify({ type: 'pesten:roomLeft' }));
+        broadcastPestenRoomList();
+      }
+      break;
+    }
+
+    case 'pesten:addBot': {
+      const { roomId } = data;
+      const room = getPestenRoom(roomId);
+      if (!room) return;
+      if (room.hostId !== user.id) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: 'Only host can add bots'
+        }));
+        return;
+      }
+      const result = room.addBot();
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: result.error
+        }));
+        return;
+      }
+      broadcastToPestenRoom(roomId, 'pesten:roomUpdated', { room: room.getState() });
+      broadcastPestenRoomList();
+      break;
+    }
+
+    case 'pesten:removeBot': {
+      const { roomId, botId } = data;
+      const room = getPestenRoom(roomId);
+      if (!room) return;
+      if (room.hostId !== user.id) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: 'Only host can remove bots'
+        }));
+        return;
+      }
+      const result = room.removeBot(botId);
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: result.error
+        }));
+        return;
+      }
+      broadcastToPestenRoom(roomId, 'pesten:roomUpdated', { room: room.getState() });
+      broadcastPestenRoomList();
+      break;
+    }
+
+    case 'pesten:startGame': {
+      const { roomId } = data;
+      const room = getPestenRoom(roomId);
+      if (!room) return;
+      if (room.hostId !== user.id) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: 'Only host can start the game'
+        }));
+        return;
+      }
+      const result = room.startGame();
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: result.error
+        }));
+        return;
+      }
+      // Send game state to each player (with their own hand)
+      broadcastPestenGameState(roomId);
+      broadcastPestenRoomList();
+
+      // Check if first player is a bot
+      setTimeout(() => processBotTurn(roomId), 1000);
+      break;
+    }
+
+    case 'pesten:playCard': {
+      const { roomId, cardId, chosenSuit } = data;
+      const room = getPestenRoom(roomId);
+      if (!room) return;
+
+      const result = room.playCard(user.id, cardId, chosenSuit);
+      if (!result.success) {
+        if (result.needsSuit) {
+          ws.send(JSON.stringify({
+            type: 'pesten:needsSuit'
+          }));
+        } else {
+          ws.send(JSON.stringify({
+            type: 'pesten:error',
+            message: result.error
+          }));
+        }
+        return;
+      }
+
+      broadcastPestenGameState(roomId);
+
+      if (result.gameOver) {
+        broadcastPestenRoomList();
+      } else {
+        // Check if next player is a bot
+        setTimeout(() => processBotTurn(roomId), 1000);
+      }
+      break;
+    }
+
+    case 'pesten:drawCard': {
+      const { roomId } = data;
+      const room = getPestenRoom(roomId);
+      if (!room) return;
+
+      const result = room.drawCard(user.id);
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pesten:error',
+          message: result.error
+        }));
+        return;
+      }
+
+      broadcastPestenGameState(roomId);
+
+      // Check if next player is a bot
+      setTimeout(() => processBotTurn(roomId), 1000);
+      break;
+    }
+  }
+}
+
+// Process bot turns
+function processBotTurn(roomId) {
+  const room = getPestenRoom(roomId);
+  if (!room || room.gameState !== 'playing') return;
+
+  const currentPlayer = room.getCurrentPlayer();
+  if (!currentPlayer || !currentPlayer.isBot) return;
+
+  const botMove = room.getBotMove(currentPlayer.id);
+  if (!botMove) return;
+
+  if (botMove.action === 'draw') {
+    room.drawCard(currentPlayer.id);
+  } else if (botMove.action === 'play') {
+    room.playCard(currentPlayer.id, botMove.cardId, botMove.chosenSuit);
+  }
+
+  broadcastPestenGameState(roomId);
+
+  // Check if game is over
+  if (room.gameState === 'finished') {
+    broadcastPestenRoomList();
+    return;
+  }
+
+  // Check if next player is also a bot
+  setTimeout(() => processBotTurn(roomId), 1500);
+}
+
+// Pesten room client management
+function addPestenClientToRoom(ws, roomId) {
+  if (!pestenClients.has(roomId)) {
+    pestenClients.set(roomId, new Set());
+  }
+  pestenClients.get(roomId).add(ws);
+}
+
+function removePestenClientFromRoom(ws, roomId) {
+  const roomClients = pestenClients.get(roomId);
+  if (roomClients) {
+    roomClients.delete(ws);
+    if (roomClients.size === 0) {
+      pestenClients.delete(roomId);
+    }
+  }
+}
+
+function broadcastToPestenRoom(roomId, type, data) {
+  const roomClients = pestenClients.get(roomId);
+  if (!roomClients) return;
+
+  const message = JSON.stringify({ type, ...data });
+
+  roomClients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+}
+
+// Broadcast game state to each player with their own hand visible
+function broadcastPestenGameState(roomId) {
+  const room = getPestenRoom(roomId);
+  if (!room) return;
+
+  const roomClients = pestenClients.get(roomId);
+  if (!roomClients) return;
+
+  roomClients.forEach(client => {
+    if (client.readyState === 1 && client.user) {
+      const state = room.getState(client.user.id);
+      client.send(JSON.stringify({
+        type: 'pesten:gameState',
+        state
+      }));
+    }
+  });
+}
+
+function broadcastPestenRoomList() {
+  const message = JSON.stringify({
+    type: 'pesten:roomList',
+    rooms: getPestenRoomList()
+  });
+  clients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+}
+
+function cleanupPestenClient(ws) {
+  const roomId = ws.pestenRoomId;
+  if (roomId) {
+    const room = getPestenRoom(roomId);
+    if (room) {
+      room.removePlayer(ws.user?.id);
+      if (room.players.length === 0) {
+        deletePestenRoom(roomId);
+      } else {
+        broadcastToPestenRoom(roomId, 'pesten:roomUpdated', { room: room.getState() });
+      }
+    }
+    removePestenClientFromRoom(ws, roomId);
+    broadcastPestenRoomList();
   }
 }
 

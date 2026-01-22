@@ -2,47 +2,47 @@
   "en": {
     "easy": [
       "cat", "dog", "house", "tree", "sun", "car", "fish", "bird", "ball", "book",
-      "apple", "banana", "chair", "table", "door", "window", "flower", "star", "moon", "cloud",
-      "hat", "shoe", "shirt", "pants", "cup", "plate", "spoon", "fork", "bed", "lamp",
-      "key", "clock", "phone", "pizza", "cake", "ice cream", "cookie", "candy", "egg", "milk",
-      "rain", "snow", "fire", "water", "grass", "leaf", "rock", "sand", "bridge", "boat"
+      "apple", "banana", "chair", "table", "door", "flower", "star", "moon", "cloud", "hat",
+      "shoe", "cup", "pizza", "cake", "egg", "fire", "boat", "kite", "snake", "frog",
+      "spider", "mouse", "pig", "cow", "horse", "duck", "bee", "ant", "snail", "crab",
+      "heart", "eye", "hand", "nose", "ear", "mouth", "tooth", "ghost", "robot", "crown"
     ],
     "medium": [
-      "elephant", "bicycle", "rainbow", "guitar", "butterfly", "umbrella", "airplane", "helicopter", "dinosaur", "penguin",
-      "lighthouse", "volcano", "waterfall", "castle", "treasure", "pirate", "robot", "astronaut", "mermaid", "dragon",
-      "telescope", "microscope", "keyboard", "headphones", "backpack", "skateboard", "surfboard", "snowman", "scarecrow", "fireworks",
-      "compass", "anchor", "parachute", "rollercoaster", "ferris wheel", "trampoline", "hammock", "igloo", "pyramid", "spaceship",
-      "tornado", "earthquake", "avalanche", "sunrise", "sunset", "campfire", "picnic", "bowling", "karate", "ballet"
+      "elephant", "bicycle", "rainbow", "guitar", "butterfly", "umbrella", "airplane", "dinosaur", "penguin", "castle",
+      "pirate", "astronaut", "mermaid", "dragon", "snowman", "scarecrow", "fireworks", "spaceship", "campfire", "lighthouse",
+      "volcano", "waterfall", "octopus", "jellyfish", "shark", "whale", "giraffe", "kangaroo", "monkey", "parrot",
+      "palm tree", "cactus", "mushroom", "pumpkin", "witch", "wizard", "ninja", "knight", "princess", "clown",
+      "surfing", "skiing", "fishing", "camping", "bowling", "wrestling", "boxing", "dancing", "cooking", "painting"
     ],
     "hard": [
-      "democracy", "photosynthesis", "cryptocurrency", "philosophy", "archaeology", "constellation", "metamorphosis", "hallucination", "procrastination", "claustrophobia",
-      "paradox", "nostalgia", "serendipity", "epiphany", "hypothesis", "algorithm", "encryption", "hologram", "telepathy", "déjà vu",
-      "abstract", "invisible", "confused", "suspicious", "frustrated", "embarrassed", "overwhelmed", "enlightened", "ambitious", "pessimistic",
-      "gravity", "evolution", "radiation", "magnetism", "electricity", "ecosystem", "biodiversity", "climate change", "recycling", "sustainability",
-      "capitalism", "socialism", "globalization", "immigration", "revolution", "diplomacy", "propaganda", "censorship", "corruption", "justice"
+      "rollercoaster", "treehouse", "windmill", "hot air balloon", "submarine", "anchor", "compass", "treasure chest", "skull", "skeleton",
+      "werewolf", "vampire", "zombie", "frankenstein", "medusa", "cyclops", "centaur", "unicorn", "phoenix", "pegasus",
+      "dentist", "firefighter", "chef", "farmer", "mailman", "teacher", "judge", "nurse", "pilot", "magician",
+      "wedding", "birthday party", "concert", "circus", "zoo", "aquarium", "museum", "hospital", "prison", "factory",
+      "spaghetti", "hamburger", "french fries", "tacos", "sushi", "popcorn", "pancakes", "sandwich", "donut", "lollipop"
     ]
   },
   "nl": {
     "easy": [
       "kat", "hond", "huis", "boom", "zon", "auto", "vis", "vogel", "bal", "boek",
-      "appel", "banaan", "stoel", "tafel", "deur", "raam", "bloem", "ster", "maan", "wolk",
-      "hoed", "schoen", "shirt", "broek", "kopje", "bord", "lepel", "vork", "bed", "lamp",
-      "sleutel", "klok", "telefoon", "pizza", "taart", "ijsje", "koekje", "snoep", "ei", "melk",
-      "regen", "sneeuw", "vuur", "water", "gras", "blad", "steen", "zand", "brug", "boot"
+      "appel", "banaan", "stoel", "tafel", "deur", "bloem", "ster", "maan", "wolk", "hoed",
+      "schoen", "kopje", "pizza", "taart", "ei", "vuur", "boot", "vlieger", "slang", "kikker",
+      "spin", "muis", "varken", "koe", "paard", "eend", "bij", "mier", "slak", "krab",
+      "hart", "oog", "hand", "neus", "oor", "mond", "tand", "spook", "robot", "kroon"
     ],
     "medium": [
-      "olifant", "fiets", "regenboog", "gitaar", "vlinder", "paraplu", "vliegtuig", "helikopter", "dinosaurus", "pinguïn",
-      "vuurtoren", "vulkaan", "waterval", "kasteel", "schat", "piraat", "robot", "astronaut", "zeemeermin", "draak",
-      "telescoop", "microscoop", "toetsenbord", "koptelefoon", "rugzak", "skateboard", "surfplank", "sneeuwpop", "vogelverschrikker", "vuurwerk",
-      "kompas", "anker", "parachute", "achtbaan", "reuzenrad", "trampoline", "hangmat", "iglo", "piramide", "ruimteschip",
-      "tornado", "aardbeving", "lawine", "zonsopgang", "zonsondergang", "kampvuur", "picknick", "bowlen", "karate", "ballet"
+      "olifant", "fiets", "regenboog", "gitaar", "vlinder", "paraplu", "vliegtuig", "dinosaurus", "pinguïn", "kasteel",
+      "piraat", "astronaut", "zeemeermin", "draak", "sneeuwpop", "vogelverschrikker", "vuurwerk", "ruimteschip", "kampvuur", "vuurtoren",
+      "vulkaan", "waterval", "octopus", "kwal", "haai", "walvis", "giraf", "kangoeroe", "aap", "papegaai",
+      "palmboom", "cactus", "paddenstoel", "pompoen", "heks", "tovenaar", "ninja", "ridder", "prinses", "clown",
+      "surfen", "skiën", "vissen", "kamperen", "bowlen", "worstelen", "boksen", "dansen", "koken", "schilderen"
     ],
     "hard": [
-      "democratie", "fotosynthese", "cryptocurrency", "filosofie", "archeologie", "sterrenbeeld", "metamorfose", "hallucinatie", "uitstelgedrag", "claustrofobie",
-      "paradox", "nostalgie", "toeval", "openbaring", "hypothese", "algoritme", "encryptie", "hologram", "telepathie", "déjà vu",
-      "abstract", "onzichtbaar", "verward", "verdacht", "gefrustreerd", "beschaamd", "overweldigd", "verlicht", "ambitieus", "pessimistisch",
-      "zwaartekracht", "evolutie", "straling", "magnetisme", "elektriciteit", "ecosysteem", "biodiversiteit", "klimaatverandering", "recycling", "duurzaamheid",
-      "kapitalisme", "socialisme", "globalisering", "immigratie", "revolutie", "diplomatie", "propaganda", "censuur", "corruptie", "gerechtigheid"
+      "achtbaan", "boomhut", "windmolen", "luchtballon", "onderzeeër", "anker", "kompas", "schatkist", "schedel", "skelet",
+      "weerwolf", "vampier", "zombie", "frankenstein", "medusa", "cycloop", "centaur", "eenhoorn", "feniks", "pegasus",
+      "tandarts", "brandweerman", "kok", "boer", "postbode", "leraar", "rechter", "verpleegster", "piloot", "goochelaar",
+      "bruiloft", "verjaardagsfeest", "concert", "circus", "dierentuin", "aquarium", "museum", "ziekenhuis", "gevangenis", "fabriek",
+      "spaghetti", "hamburger", "frietjes", "taco's", "sushi", "popcorn", "pannenkoeken", "boterham", "donut", "lolly"
     ]
   }
 }

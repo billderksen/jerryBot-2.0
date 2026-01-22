@@ -52,6 +52,8 @@
       margin-bottom: 24px;
       padding-bottom: 24px;
       border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 100;
     }
 
     .header-left {
@@ -501,6 +503,50 @@
       }
     }
 
+    /* Brush cursor preview */
+    .brush-cursor {
+      position: fixed;
+      pointer-events: none;
+      border: 2px solid rgba(0, 0, 0, 0.5);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      display: none;
+    }
+
+    .brush-cursor.eraser {
+      border-color: rgba(255, 0, 0, 0.5);
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Color history */
+    .color-history {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .color-history-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+
+    .color-history-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+
+    .color-history-swatch:hover {
+      transform: scale(1.15);
+      border-color: var(--text-primary);
+    }
+
     /* Create Room Modal */
     .modal-overlay {
       position: fixed;
@@ -922,6 +968,35 @@
       padding: 8px 16px;
       background: var(--bg-tertiary);
       border-radius: 20px;
+    }
+
+    .waiting-chat {
+      margin-top: 24px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .waiting-chat-messages {
+      max-height: 150px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .waiting-chat-messages:empty::before {
+      content: "Chat with other players...";
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 13px;
+    }
+
+    .waiting-chat-messages .chat-message {
+      background: var(--bg-secondary);
     }
 
     /* Results Overlay */
@@ -1361,9 +1436,172 @@
     html, body {
       overscroll-behavior: none;
     }
+
+    /* User Profile Dropdown */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px 6px 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .user-profile:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .user-profile .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .user-profile .user-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .user-profile .user-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .user-profile .user-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .user-profile .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .user-profile .user-name::after {
+      content: '▼';
+      font-size: 8px;
+      color: var(--text-muted);
+      transition: transform 0.2s;
+    }
+
+    .user-profile.open .user-name::after {
+      transform: rotate(180deg);
+    }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-width: 180px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.2s;
+      z-index: 2000;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .user-profile.open::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1999;
+      background: transparent;
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .user-dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .user-dropdown-item.logout {
+      color: var(--danger);
+    }
+
+    .user-dropdown-item.logout:hover {
+      background: rgba(231, 76, 60, 0.1);
+      color: var(--danger);
+    }
+
+    .user-dropdown-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    @media (max-width: 600px) {
+      .user-profile .user-info {
+        display: none;
+      }
+      .user-profile {
+        padding: 4px;
+      }
+    }
   </style>
 </head>
 <body>
+  <!-- SVG Icons -->
+  <svg style="display:none;">
+    <symbol id="icon-stats" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/>
+    </symbol>
+    <symbol id="icon-pictionary" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z"/>
+    </symbol>
+    <symbol id="icon-hitster" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+    </symbol>
+    <symbol id="icon-pesten" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+    </symbol>
+    <symbol id="icon-music" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+    </symbol>
+  </svg>
+
   <div class="container">
     <div class="header">
       <div class="header-left">
@@ -1375,8 +1613,42 @@
         </a>
         <h1>Pictionary</h1>
       </div>
-      <div id="roomControls" style="display: none;">
-        <button class="btn btn-danger" onclick="leaveRoom()">Leave Room</button>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <div id="roomControls" style="display: none;">
+          <button class="btn btn-danger" onclick="leaveRoom()">Leave Room</button>
+        </div>
+        <div class="user-profile" id="userProfile" onclick="toggleUserDropdown(event)">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <div class="user-info">
+            <span class="user-label">Logged in as</span>
+            <span class="user-name" id="userDisplayName">Loading...</span>
+          </div>
+          <div class="user-dropdown">
+            <a href="/" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-music"/></svg>
+              Music Player
+            </a>
+            <a href="/stats" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-stats"/></svg>
+              Listening Stats
+            </a>
+            <a href="/pictionary" class="user-dropdown-item active">
+              <svg style="width:16px;height:16px;"><use href="#icon-pictionary"/></svg>
+              Pictionary Game
+            </a>
+            <a href="/hitster" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-hitster"/></svg>
+              Hitster Music Game
+            </a>
+            <a href="/pesten" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-pesten"/></svg>
+              Pesten Card Game
+            </a>
+            <a href="/logout" class="user-dropdown-item logout">
+              🚪 Logout
+            </a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1432,6 +1704,10 @@
           <button class="btn btn-primary" id="startGameBtn" onclick="startGame()" style="display: none;">
             Start Game
           </button>
+          <div class="waiting-chat">
+            <div class="waiting-chat-messages" id="waitingChatMessages"></div>
+            <input type="text" class="chat-input" id="waitingChatInput" placeholder="Chat while waiting..." maxlength="100">
+          </div>
         </div>
 
         <div class="canvas-container" id="canvasContainer" style="display: none;">
@@ -1486,6 +1762,12 @@
 
           <div class="tool-group color-palette" id="colorPalette"></div>
           <input type="color" class="color-picker" id="customColor" value="#000000" title="Custom color">
+
+          <div class="divider"></div>
+
+          <div class="color-history" id="colorHistory">
+            <span class="color-history-label">Recent</span>
+          </div>
 
           <div class="divider"></div>
 
@@ -1557,6 +1839,9 @@
     </div>
   </div>
 
+  <!-- Brush Cursor Preview -->
+  <div class="brush-cursor" id="brushCursor"></div>
+
   <!-- Results Overlay -->
   <div class="results-overlay" id="resultsOverlay">
     <div class="results-content">
@@ -1622,6 +1907,13 @@
       ws.onopen = () => {
         console.log('Connected to server');
         ws.send(JSON.stringify({ type: 'pictionary:rooms:list' }));
+
+        // Try to rejoin room if we were in one
+        const savedRoomId = sessionStorage.getItem('pictionaryRoomId');
+        if (savedRoomId) {
+          console.log('Attempting to rejoin room:', savedRoomId);
+          ws.send(JSON.stringify({ type: 'pictionary:room:rejoin', roomId: savedRoomId }));
+        }
       };
 
       ws.onclose = () => {
@@ -1645,6 +1937,9 @@
           break;
         case 'pictionary:room:error':
           showToast(data.error, 'error');
+          break;
+        case 'pictionary:room:rejoinFailed':
+          sessionStorage.removeItem('pictionaryRoomId');
           break;
         case 'pictionary:room:playerJoined':
           addPlayerToList(data.player);
@@ -1743,6 +2038,10 @@
           break;
         case 'pictionary:chat:message':
           addChatMessage(data.displayName, data.message);
+          // Also show in waiting room chat if in waiting state
+          if (currentRoom && (currentRoom.state === 'waiting' || currentRoom.state === 'choosing')) {
+            addWaitingChatMessage(data.displayName, data.message);
+          }
           break;
         case 'pictionary:leaderboard':
           renderLeaderboard(data.leaderboard);
@@ -1794,6 +2093,8 @@
       currentRoom = null;
       isHost = false;
       isSpectator = false;
+      // Clear saved room ID
+      sessionStorage.removeItem('pictionaryRoomId');
       const badge = document.getElementById('spectatorBadge');
       if (badge) badge.remove();
       showLobby();
@@ -1815,6 +2116,10 @@
       currentRoom = data.room;
       isHost = data.isHost;
       isSpectator = data.isSpectator || false;
+
+      // Save room ID for reconnection
+      sessionStorage.setItem('pictionaryRoomId', currentRoom.id);
+
       showGame();
       renderPlayerList(currentRoom.players);
       renderSpectatorList(currentRoom.spectators || []);
@@ -2282,6 +2587,8 @@
       clearCanvasLocal();
       renderPlayerList(data.players);
       document.getElementById('roundInfo').textContent = `Round ${data.round}/${data.totalRounds}`;
+      // Clear waiting chat
+      document.getElementById('waitingChatMessages').innerHTML = '';
     }
 
     function roundStarted(data) {
@@ -2479,9 +2786,17 @@
       previewCtx = previewCanvas.getContext('2d');
 
       canvas.addEventListener('mousedown', startDrawing);
-      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mousemove', (e) => {
+        draw(e);
+        moveBrushCursor(e);
+      });
       canvas.addEventListener('mouseup', stopDrawing);
-      canvas.addEventListener('mouseout', stopDrawing);
+      canvas.addEventListener('mouseout', (e) => {
+        stopDrawing(e);
+        showBrushCursor(false);
+      });
+      canvas.addEventListener('mouseenter', () => showBrushCursor(true));
+      canvas.addEventListener('mouseleave', () => showBrushCursor(false));
 
       // Touch support
       canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -2983,8 +3298,21 @@
         btn.classList.toggle('active', btn.dataset.tool === tool);
       });
 
-      canvas.style.cursor = tool === 'fill' ? 'cell' : 'crosshair';
+      // Update cursor style based on tool
+      const showBrush = (tool === 'pencil' || tool === 'eraser') && canDraw;
+      if (brushCursorVisible !== showBrush) {
+        showBrushCursor(showBrush);
+      } else {
+        updateBrushCursor();
+      }
+      if (!showBrush) {
+        canvas.style.cursor = tool === 'fill' ? 'cell' : 'crosshair';
+      }
     }
+
+    // Color history
+    const colorHistory = [];
+    const MAX_COLOR_HISTORY = 5;
 
     function selectColor(color) {
       currentColor = color;
@@ -2993,10 +3321,43 @@
       });
       document.getElementById('customColor').value = color;
 
+      // Add to color history (if not already the most recent)
+      if (colorHistory[0] !== color) {
+        // Remove if already in history
+        const existingIndex = colorHistory.indexOf(color);
+        if (existingIndex > -1) {
+          colorHistory.splice(existingIndex, 1);
+        }
+        // Add to front
+        colorHistory.unshift(color);
+        // Limit size
+        if (colorHistory.length > MAX_COLOR_HISTORY) {
+          colorHistory.pop();
+        }
+        updateColorHistory();
+      }
+
       // Switch away from eraser when selecting color
       if (currentTool === 'eraser') {
         selectTool('pencil');
       }
+    }
+
+    function updateColorHistory() {
+      const container = document.getElementById('colorHistory');
+      // Keep the label, remove old swatches
+      const label = container.querySelector('.color-history-label');
+      container.innerHTML = '';
+      container.appendChild(label);
+
+      colorHistory.forEach(color => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-history-swatch';
+        swatch.style.background = color;
+        swatch.title = color;
+        swatch.onclick = () => selectColor(color);
+        container.appendChild(swatch);
+      });
     }
 
     function selectSize(size) {
@@ -3004,12 +3365,50 @@
       document.querySelectorAll('.brush-size').forEach(btn => {
         btn.classList.toggle('active', parseInt(btn.dataset.size) === size);
       });
+      updateBrushCursor();
+    }
+
+    // Brush cursor preview
+    const brushCursor = document.getElementById('brushCursor');
+    let brushCursorVisible = false;
+
+    function updateBrushCursor() {
+      if (!brushCursorVisible) return;
+      const size = currentSize;
+      brushCursor.style.width = size + 'px';
+      brushCursor.style.height = size + 'px';
+      brushCursor.classList.toggle('eraser', currentTool === 'eraser');
+    }
+
+    function showBrushCursor(show) {
+      brushCursorVisible = show && canDraw && (currentTool === 'pencil' || currentTool === 'eraser');
+      brushCursor.style.display = brushCursorVisible ? 'block' : 'none';
+      if (brushCursorVisible) {
+        updateBrushCursor();
+      }
+      // Hide default cursor when showing brush cursor
+      const canvasEl = document.getElementById('gameCanvas');
+      if (canvasEl) {
+        canvasEl.style.cursor = brushCursorVisible ? 'none' : (currentTool === 'fill' ? 'cell' : 'crosshair');
+      }
+    }
+
+    function moveBrushCursor(e) {
+      if (!brushCursorVisible) return;
+      brushCursor.style.left = e.clientX + 'px';
+      brushCursor.style.top = e.clientY + 'px';
     }
 
     // Chat
     document.getElementById('chatInput').addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         sendMessage();
+      }
+    });
+
+    document.getElementById('waitingChatInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendWaitingMessage();
       }
     });
 
@@ -3029,6 +3428,28 @@
       }));
 
       input.value = '';
+    }
+
+    function sendWaitingMessage() {
+      const input = document.getElementById('waitingChatInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      ws.send(JSON.stringify({
+        type: 'pictionary:chat:message',
+        message
+      }));
+
+      input.value = '';
+    }
+
+    function addWaitingChatMessage(sender, message) {
+      const container = document.getElementById('waitingChatMessages');
+      const div = document.createElement('div');
+      div.className = 'chat-message';
+      div.innerHTML = `<span class="sender">${escapeHtml(sender)}:</span> ${escapeHtml(message)}`;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
     }
 
     function addChatMessage(sender, message, type = '') {
@@ -3102,8 +3523,38 @@
     }
 
     // Get current user ID from API
+    // User dropdown toggle
+    function toggleUserDropdown(event) {
+      event.stopPropagation();
+      const userProfile = document.getElementById('userProfile');
+      userProfile.classList.toggle('open');
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const userProfile = document.getElementById('userProfile');
+      if (userProfile && !userProfile.contains(e.target)) {
+        userProfile.classList.remove('open');
+      }
+    });
+
+    // Load user info
     fetch('/api/me').then(r => r.json()).then(user => {
       window.currentUserId = user.id;
+
+      // Update user profile display
+      const avatarEl = document.getElementById('userAvatar');
+      const nameEl = document.getElementById('userDisplayName');
+
+      if (user.avatar) {
+        avatarEl.innerHTML = `<img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">`;
+      } else {
+        avatarEl.innerHTML = user.username ? user.username[0].toUpperCase() : '?';
+      }
+
+      if (nameEl) {
+        nameEl.textContent = user.username || 'User';
+      }
     }).catch(() => {});
   </script>
 </body>
