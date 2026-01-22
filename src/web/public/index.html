@@ -1088,18 +1088,9 @@
       color: var(--accent);
     }
 
-    /* Toggle buttons - add pulse animation when active */
+    /* Toggle buttons */
     .control-btn.radio-btn {
       position: relative;
-    }
-
-    .control-btn.radio-btn.active {
-      animation: mode-pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes mode-pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
     }
 
     /* Loop button styles */
@@ -1119,10 +1110,6 @@
     /* 24/7 mode button styles */
     .control-btn.mode-247-btn {
       position: relative;
-    }
-
-    .control-btn.mode-247-btn.active {
-      animation: mode-pulse 2s ease-in-out infinite;
     }
 
     /* Sleep timer styles */
@@ -2061,6 +2048,9 @@
     <symbol id="icon-stats" viewBox="0 0 24 24">
       <path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/>
     </symbol>
+    <symbol id="icon-pictionary" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z"/>
+    </symbol>
   </svg>
 
   <div class="container">
@@ -2095,6 +2085,10 @@
             <a href="/stats" class="user-dropdown-item">
               <svg style="width:16px;height:16px;"><use href="#icon-stats"/></svg>
               Listening Stats
+            </a>
+            <a href="/pictionary" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;"><use href="#icon-pictionary"/></svg>
+              Pictionary Game
             </a>
             <a href="/logout" class="user-dropdown-item logout">
               🚪 Logout
@@ -2942,11 +2936,22 @@
             resetProgress();
 
             // Reset lyrics state when song changes
+            // Abort any in-progress lyrics fetch
+            if (lyricsFetchController) {
+              lyricsFetchController.abort();
+              lyricsFetchController = null;
+            }
+            lyricsPrefetching = false;
             lyricsData = null;
+            lyricsAvailable = false;
+            lastLyricsSongUrl = null;
             stopLyricsAutoScroll();
             if (lyricsVisible) {
               closeLyrics();
             }
+
+            // Pre-fetch lyrics for new song
+            prefetchLyrics();
             
             // Initialize progress from server's songStartTime
             if (state.songStartTime && isNowPlaying) {
@@ -3022,37 +3027,24 @@
       }
     }
 
-    // Sleep timer state
-    let sleepTimer = null;
-    let sleepEndTime = null;
+    // Sleep timer state (synced from server)
     let sleepTimerInterval = null;
 
-    // Restore sleep timer from localStorage on page load
-    (function restoreSleepTimer() {
-      const savedSleepEndTime = localStorage.getItem('sleepEndTime');
-      if (savedSleepEndTime) {
-        const endTime = parseInt(savedSleepEndTime);
-        const remaining = endTime - Date.now();
-        if (remaining > 0) {
-          sleepEndTime = endTime;
-          sleepTimer = setTimeout(() => {
-            sendCommand('stop');
-            showToast('💤 Sleep timer - Playback stopped', 'info');
-            sleepTimer = null;
-            sleepEndTime = null;
-            localStorage.removeItem('sleepEndTime');
-            clearInterval(sleepTimerInterval);
-            sleepTimerInterval = null;
-            updateSleepTimerDisplay();
-          }, remaining);
-          sleepTimerInterval = setInterval(() => {
-            updateSleepTimerDisplay();
-          }, 1000);
-        } else {
-          localStorage.removeItem('sleepEndTime');
-        }
+    // Start interval to update sleep timer display
+    function startSleepTimerDisplay() {
+      if (sleepTimerInterval) return;
+      sleepTimerInterval = setInterval(() => {
+        updateSleepTimerDisplay();
+      }, 1000);
+    }
+
+    // Stop the display interval
+    function stopSleepTimerDisplay() {
+      if (sleepTimerInterval) {
+        clearInterval(sleepTimerInterval);
+        sleepTimerInterval = null;
       }
-    })();
+    }
 
     // Track last rendered song to avoid unnecessary re-renders
     let lastRenderedSongUrl = null;
@@ -3139,16 +3131,23 @@
       const sleepBtn = document.querySelector('.sleep-btn');
       const sleepTime = document.querySelector('.sleep-btn .sleep-time');
       if (sleepBtn) {
-        sleepBtn.classList.toggle('active', !!sleepEndTime);
+        sleepBtn.classList.toggle('active', !!state.sleepEndTime);
       }
       if (sleepTime) {
-        sleepTime.textContent = sleepEndTime ? getSleepTimerRemaining() : '';
+        sleepTime.textContent = state.sleepEndTime ? getSleepTimerRemaining() : '';
+      }
+
+      // Start/stop sleep timer display interval based on state
+      if (state.sleepEndTime && !sleepTimerInterval) {
+        startSleepTimerDisplay();
+      } else if (!state.sleepEndTime && sleepTimerInterval) {
+        stopSleepTimerDisplay();
       }
 
       // Update sleep timer menu content
       const sleepTimerContent = document.querySelector('.sleep-timer-content');
       if (sleepTimerContent) {
-        if (sleepEndTime) {
+        if (state.sleepEndTime) {
           sleepTimerContent.innerHTML = `
             <div class="sleep-timer-active">
               <span>Stopping in: ${getSleepTimerRemaining()}</span>
@@ -3244,69 +3243,24 @@
       sendCommand('volume:' + Math.round(newVolume * 100));
     }
 
-    // Sleep timer functions
+    // Sleep timer functions (server-side timer, client just displays)
     function setSleepTimer(minutes) {
-      // Clear any existing timer
-      if (sleepTimer) {
-        clearTimeout(sleepTimer);
-      }
-      if (sleepTimerInterval) {
-        clearInterval(sleepTimerInterval);
-      }
-
-      sleepEndTime = Date.now() + (minutes * 60 * 1000);
-
-      sleepTimer = setTimeout(() => {
-        sendCommand('stop');
-        showToast('💤 Sleep timer - Playback stopped', 'info');
-        sleepTimer = null;
-        sleepEndTime = null;
-        localStorage.removeItem('sleepEndTime');
-        clearInterval(sleepTimerInterval);
-        sleepTimerInterval = null;
-        updateSleepTimerDisplay();
-      }, minutes * 60 * 1000);
-
-      // Update only the timer display every second (not the entire UI)
-      sleepTimerInterval = setInterval(() => {
-        updateSleepTimerDisplay();
-      }, 1000);
-
-      // Save to localStorage for persistence across page refresh
-      localStorage.setItem('sleepEndTime', sleepEndTime.toString());
-
-      // Log the action to Discord
+      // Send command to server - server manages the actual timer
       sendCommand('sleep-set:' + minutes);
-
       showToast(`💤 Sleep timer set for ${minutes} minutes`, 'success');
       closeSleepTimerMenu();
-      updateUI();
     }
 
     function cancelSleepTimer() {
-      if (sleepTimer) {
-        clearTimeout(sleepTimer);
-        sleepTimer = null;
-      }
-      if (sleepTimerInterval) {
-        clearInterval(sleepTimerInterval);
-        sleepTimerInterval = null;
-      }
-      sleepEndTime = null;
-      localStorage.removeItem('sleepEndTime');
-
-      // Log the action to Discord
+      // Send command to server
       sendCommand('sleep-cancel');
-
       showToast('💤 Sleep timer cancelled', 'info');
       closeSleepTimerMenu();
-      // Update UI to refresh the menu content (shows timer options instead of cancel)
-      updateUI();
     }
 
     function getSleepTimerRemaining() {
-      if (!sleepEndTime) return null;
-      const remaining = Math.max(0, sleepEndTime - Date.now());
+      if (!state.sleepEndTime) return null;
+      const remaining = Math.max(0, state.sleepEndTime - Date.now());
       const minutes = Math.floor(remaining / 60000);
       const seconds = Math.floor((remaining % 60000) / 1000);
       return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -3331,11 +3285,18 @@
       // Update button active state
       const sleepBtn = document.querySelector('.sleep-btn');
       if (sleepBtn) {
-        if (sleepEndTime) {
+        if (state.sleepEndTime) {
           sleepBtn.classList.add('active');
         } else {
           sleepBtn.classList.remove('active');
         }
+      }
+
+      // Start or stop the display interval based on timer state
+      if (state.sleepEndTime && !sleepTimerInterval) {
+        startSleepTimerDisplay();
+      } else if (!state.sleepEndTime && sleepTimerInterval) {
+        stopSleepTimerDisplay();
       }
     }
 
@@ -3358,6 +3319,9 @@
     let lyricsData = null; // { synced: boolean, lines: array }
     let lyricsScrollInterval = null;
     let lastLyricsSongUrl = null;
+    let lyricsAvailable = false; // Whether lyrics exist for current song
+    let lyricsPrefetching = false; // Whether we're currently prefetching
+    let lyricsFetchController = null; // AbortController for lyrics fetch
 
     function toggleLyrics(event) {
       // Don't toggle if clicking the close button
@@ -3386,6 +3350,11 @@
       const container = document.getElementById('lyricsContainer');
       if (!container || !state.currentSong) return;
 
+      // Don't open if we know lyrics aren't available (and not currently fetching)
+      if (!lyricsAvailable && !lyricsPrefetching && lastLyricsSongUrl === state.currentSong.url) {
+        return;
+      }
+
       container.classList.add('visible');
       lyricsVisible = true;
 
@@ -3393,12 +3362,20 @@
       const indicator = document.querySelector('.lyrics-indicator');
       if (indicator) indicator.classList.add('hidden');
 
-      // Always fetch lyrics when opening if not already loaded for this song
-      if (lastLyricsSongUrl !== state.currentSong.url || !lyricsData) {
+      // Render lyrics or show loading state
+      if (lyricsData) {
+        if (lyricsData.synced) {
+          renderSyncedLyrics();
+          startLyricsAutoScroll();
+        } else {
+          const content = document.getElementById('lyricsContent');
+          if (content) content.innerHTML = `<div class="lyrics-plain">${escapeHtml(lyricsData.text)}</div>`;
+        }
+      } else if (lyricsPrefetching) {
+        const content = document.getElementById('lyricsContent');
+        if (content) content.innerHTML = '<div class="lyrics-loading">Loading lyrics...</div>';
+      } else {
         fetchLyrics();
-      } else if (lyricsData && lyricsData.synced) {
-        // Resume auto-scroll for synced lyrics
-        startLyricsAutoScroll();
       }
     }
 
@@ -3410,15 +3387,136 @@
       lyricsVisible = false;
       stopLyricsAutoScroll();
 
-      // Show the lyrics indicator again
+      // Show the lyrics indicator again (only if lyrics are available)
       const indicator = document.querySelector('.lyrics-indicator');
-      if (indicator) indicator.classList.remove('hidden');
+      if (indicator && lyricsAvailable) indicator.classList.remove('hidden');
+    }
+
+    // Pre-fetch lyrics when song starts (background, no UI update)
+    async function prefetchLyrics() {
+      if (!state.currentSong) return;
+
+      const songUrl = state.currentSong.url;
+      const songTitle = state.currentSong.title;
+
+      // Already have lyrics for this song
+      if (lastLyricsSongUrl === songUrl && lyricsData !== null) return;
+
+      // Abort any previous fetch
+      if (lyricsFetchController) {
+        lyricsFetchController.abort();
+      }
+
+      lyricsPrefetching = true;
+      lastLyricsSongUrl = songUrl;
+      lyricsAvailable = false;
+      lyricsData = null;
+      lyricsFetchController = new AbortController();
+
+      // Hide indicator while checking
+      let indicator = document.querySelector('.lyrics-indicator');
+      if (indicator) indicator.classList.add('hidden');
+
+      try {
+        const response = await fetch(`/api/lyrics?title=${encodeURIComponent(songTitle)}`, {
+          signal: lyricsFetchController.signal
+        });
+
+        // Verify we're still on the same song after fetch
+        if (!state.currentSong || state.currentSong.url !== songUrl) {
+          console.log('Song changed during lyrics fetch, ignoring result');
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error('Lyrics not found');
+        }
+
+        const data = await response.json();
+
+        // Double-check song hasn't changed
+        if (!state.currentSong || state.currentSong.url !== songUrl) {
+          console.log('Song changed during lyrics fetch, ignoring result');
+          return;
+        }
+
+        if (data.synced) {
+          lyricsData = {
+            synced: true,
+            lines: parseLrcLyrics(data.lyrics)
+          };
+        } else {
+          lyricsData = {
+            synced: false,
+            text: data.lyrics
+          };
+        }
+
+        lyricsAvailable = true;
+        // Re-query indicator in case DOM was re-rendered during fetch
+        indicator = document.querySelector('.lyrics-indicator');
+        // Show indicator now that we know lyrics exist
+        if (indicator && !lyricsVisible) indicator.classList.remove('hidden');
+
+        // If lyrics overlay is already open, render them
+        if (lyricsVisible) {
+          if (lyricsData.synced) {
+            renderSyncedLyrics();
+            startLyricsAutoScroll();
+          } else {
+            const content = document.getElementById('lyricsContent');
+            if (content) content.innerHTML = `<div class="lyrics-plain">${escapeHtml(lyricsData.text)}</div>`;
+          }
+        }
+      } catch (error) {
+        // Don't log abort errors
+        if (error.name !== 'AbortError') {
+          console.log('Lyrics not available for:', songTitle);
+        }
+        // Only update state if we're still on the same song
+        if (state.currentSong && state.currentSong.url === songUrl) {
+          lyricsData = null;
+          lyricsAvailable = false;
+        }
+      }
+
+      lyricsFetchController = null;
+      lyricsPrefetching = false;
     }
 
     async function fetchLyrics() {
       const content = document.getElementById('lyricsContent');
       if (!content || !state.currentSong) return;
 
+      // If we already have prefetched lyrics for this song, just render them
+      if (lyricsData && lastLyricsSongUrl === state.currentSong.url) {
+        if (lyricsData.synced) {
+          renderSyncedLyrics();
+          startLyricsAutoScroll();
+        } else {
+          content.innerHTML = `<div class="lyrics-plain">${escapeHtml(lyricsData.text)}</div>`;
+        }
+        return;
+      }
+
+      // If prefetch is in progress, show loading and wait
+      if (lyricsPrefetching) {
+        content.innerHTML = '<div class="lyrics-loading">Loading lyrics...</div>';
+        return;
+      }
+
+      // If no lyrics available (prefetch already tried), show error
+      if (lastLyricsSongUrl === state.currentSong.url && !lyricsAvailable) {
+        content.innerHTML = '<div class="lyrics-error">Lyrics not found</div>';
+        setTimeout(() => {
+          if (lyricsVisible && !lyricsData) {
+            closeLyrics();
+          }
+        }, 2500);
+        return;
+      }
+
+      // Fallback: fetch lyrics now (shouldn't normally happen)
       content.innerHTML = '<div class="lyrics-loading">Loading lyrics...</div>';
       lastLyricsSongUrl = state.currentSong.url;
 
@@ -3432,27 +3530,27 @@
         const data = await response.json();
 
         if (data.synced) {
-          // Parse synced lyrics (LRC format)
           lyricsData = {
             synced: true,
             lines: parseLrcLyrics(data.lyrics)
           };
+          lyricsAvailable = true;
           renderSyncedLyrics();
           startLyricsAutoScroll();
         } else {
-          // Plain text lyrics
           lyricsData = {
             synced: false,
             text: data.lyrics
           };
+          lyricsAvailable = true;
           content.innerHTML = `<div class="lyrics-plain">${escapeHtml(data.lyrics)}</div>`;
         }
       } catch (error) {
         console.error('Error fetching lyrics:', error);
         lyricsData = null;
+        lyricsAvailable = false;
         content.innerHTML = '<div class="lyrics-error">Lyrics not found</div>';
 
-        // Auto-flip back after 2.5 seconds
         setTimeout(() => {
           if (lyricsVisible && !lyricsData) {
             closeLyrics();
@@ -3546,6 +3644,8 @@
     let radioSongs = []; // Pre-fetched radio songs
     let fetchingRadio = false;
     let addingRadioSong = false; // Prevent concurrent addRadioSong calls
+    let radioAddController = null; // AbortController for in-flight radio add requests
+    let radioFetchController = null; // AbortController for in-flight radio fetch requests
 
     function toggleRadio() {
       state.radioEnabled = !state.radioEnabled;
@@ -3560,7 +3660,17 @@
         }
       } else {
         showToast('📻 Radio mode disabled', 'info');
+        // Abort any in-flight radio requests
+        if (radioAddController) {
+          radioAddController.abort();
+          radioAddController = null;
+        }
+        if (radioFetchController) {
+          radioFetchController.abort();
+          radioFetchController = null;
+        }
         addingRadioSong = false; // Reset flag when disabled
+        fetchingRadio = false;
         radioSongs = [];
       }
     }
@@ -3609,8 +3719,12 @@
       if (fetchingRadio || !videoUrl) return;
 
       fetchingRadio = true;
+      radioFetchController = new AbortController();
+
       try {
-        const response = await fetch(`/api/youtube/radio?url=${encodeURIComponent(videoUrl)}`);
+        const response = await fetch(`/api/youtube/radio?url=${encodeURIComponent(videoUrl)}`, {
+          signal: radioFetchController.signal
+        });
         const data = await response.json();
 
         // Only set radioSongs if radio is still enabled (user may have toggled off during fetch)
@@ -3619,8 +3733,12 @@
           console.log('Fetched', radioSongs.length, 'radio songs');
         }
       } catch (error) {
-        console.error('Error fetching radio songs:', error);
+        // Don't log abort errors - they're expected when radio is disabled
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching radio songs:', error);
+        }
       }
+      radioFetchController = null;
       fetchingRadio = false;
     }
 
@@ -3633,10 +3751,14 @@
       // Pick the first song from radio queue
       const song = radioSongs.shift();
 
+      // Create an AbortController for this request
+      radioAddController = new AbortController();
+
       try {
         // Re-check radio is still enabled before making API call
         if (!state.radioEnabled) {
           addingRadioSong = false;
+          radioAddController = null;
           return;
         }
 
@@ -3650,17 +3772,30 @@
             thumbnail: song.thumbnail,
             guildId: state.guildId,
             requestedBy: '📻 Radio'
-          })
+          }),
+          signal: radioAddController.signal
         });
+
+        // Check if radio was disabled while request was in-flight
+        if (!state.radioEnabled) {
+          console.log('Radio disabled during request, ignoring result');
+          addingRadioSong = false;
+          radioAddController = null;
+          return;
+        }
 
         const result = await response.json();
         if (result.success) {
           showToast(`📻 Radio: Added ${song.title}`, 'success');
         }
       } catch (error) {
-        console.error('Error adding radio song:', error);
+        // Don't log abort errors - they're expected when radio is disabled
+        if (error.name !== 'AbortError') {
+          console.error('Error adding radio song:', error);
+        }
       }
 
+      radioAddController = null;
       addingRadioSong = false;
 
       // If running low on radio songs, fetch more (only if radio still enabled)
@@ -3901,14 +4036,14 @@
                 ? `<img id="albumArtImg" src="${song.thumbnail}" alt="Album Art" onload="this.classList.add('loaded'); this.parentElement.classList.remove('loading');" onerror="handleThumbnailError(this)">`
                 : '<div class="placeholder">🎵</div>'}
             </div>
-            <div class="lyrics-indicator">🎤 Lyrics</div>
+            <div class="lyrics-indicator${lyricsAvailable ? '' : ' hidden'}">🎤 Lyrics</div>
             <div class="lyrics-container" id="lyricsContainer">
               <div class="lyrics-header">
                 <span class="lyrics-header-title">Lyrics</span>
                 <button class="lyrics-close" onclick="event.stopPropagation(); closeLyrics();">✕</button>
               </div>
               <div class="lyrics-content" id="lyricsContent">
-                <div class="lyrics-loading">Click to load lyrics...</div>
+                <div class="lyrics-loading">Loading lyrics...</div>
               </div>
             </div>
           </div>
@@ -3993,11 +4128,16 @@
         lastRenderedSongUrl = currentSongUrl;
         cachedAnimationShown = false;
 
-        // Reset lyrics content
+        // Update progress bar duration for accurate seeking
+        currentSongDuration = song.duration || 0;
+
+        // Reset lyrics content and state
         const lyricsContent = document.getElementById('lyricsContent');
         if (lyricsContent) {
-          lyricsContent.innerHTML = '<div class="lyrics-loading">Click to load lyrics...</div>';
+          lyricsContent.innerHTML = '<div class="lyrics-loading">Loading lyrics...</div>';
         }
+        lyricsAvailable = false;
+        lyricsData = null;
 
         // Update thumbnail with loading state
         const albumArt = playerContent.querySelector('.album-art');

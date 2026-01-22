@@ -1,0 +1,2351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pictionary - Godcord Music Bot</title>
+  <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+  <style>
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #111111;
+      --bg-tertiary: #1a1a1a;
+      --bg-hover: #222222;
+      --surface: #161616;
+      --border: #2a2a2a;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --text-muted: #666666;
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+      --accent-dim: rgba(29, 185, 84, 0.1);
+      --gold: #ffd700;
+      --silver: #c0c0c0;
+      --bronze: #cd7f32;
+      --danger: #e74c3c;
+      --warning: #f1c40f;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .back-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .back-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Lobby View */
+    .lobby-view {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 24px;
+    }
+
+    @media (max-width: 1000px) {
+      .lobby-view {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .main-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .section-content {
+      padding: 16px 20px;
+    }
+
+    /* Room List */
+    .room-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .room-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .room-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .room-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .room-name {
+      font-weight: 500;
+    }
+
+    .room-details {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .room-players {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: #c0392b;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Leaderboard */
+    .leaderboard {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .leaderboard-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+    }
+
+    .rank {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .rank.gold { background: linear-gradient(135deg, #ffd700, #ffed4a); color: #000; }
+    .rank.silver { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); color: #000; }
+    .rank.bronze { background: linear-gradient(135deg, #cd7f32, #daa06d); color: #000; }
+
+    .player-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .player-name {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-stats {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .player-score {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Create Room Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .modal h3 {
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .modal-actions .btn {
+      flex: 1;
+    }
+
+    /* Game View */
+    .game-view {
+      display: none;
+      grid-template-columns: 200px 1fr 280px;
+      gap: 20px;
+      height: calc(100vh - 140px);
+    }
+
+    .game-view.active {
+      display: grid;
+    }
+
+    @media (max-width: 1200px) {
+      .game-view {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+    }
+
+    /* Players Panel */
+    .players-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .players-panel h3 {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .player-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .player-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+    }
+
+    .player-item.drawing {
+      border: 2px solid var(--accent);
+    }
+
+    .player-item.guessed {
+      opacity: 0.6;
+    }
+
+    .player-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    /* Canvas Area */
+    .canvas-area {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .game-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .word-hint {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      font-family: monospace;
+    }
+
+    .timer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .timer.warning {
+      color: var(--warning);
+    }
+
+    .timer.danger {
+      color: var(--danger);
+    }
+
+    .round-info {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .canvas-container {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #gameCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #ffffff;
+      cursor: crosshair;
+    }
+
+    .drawing-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      flex-wrap: wrap;
+    }
+
+    .tool-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text-primary);
+    }
+
+    .tool-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .tool-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .tool-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .brush-sizes {
+      display: flex;
+      gap: 4px;
+    }
+
+    .brush-size {
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .brush-size:hover, .brush-size.active {
+      border-color: var(--accent);
+    }
+
+    .brush-size .dot {
+      border-radius: 50%;
+      background: var(--text-primary);
+    }
+
+    .color-palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .color-swatch:hover, .color-swatch.active {
+      border-color: var(--text-primary);
+      transform: scale(1.1);
+    }
+
+    .color-picker {
+      width: 24px;
+      height: 24px;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+    }
+
+    /* Chat Panel */
+    .chat-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .chat-message {
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .chat-message .sender {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .chat-message.system {
+      background: var(--accent-dim);
+      color: var(--accent);
+      text-align: center;
+      font-style: italic;
+    }
+
+    .chat-message.correct {
+      background: rgba(29, 185, 84, 0.2);
+      border: 1px solid var(--accent);
+    }
+
+    .chat-message.close {
+      background: rgba(241, 196, 15, 0.2);
+      color: var(--warning);
+    }
+
+    .chat-input-container {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .chat-input {
+      width: 100%;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .chat-input:disabled {
+      opacity: 0.5;
+    }
+
+    /* Waiting Room */
+    .waiting-room {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .waiting-room h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .waiting-room p {
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    .waiting-players {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .waiting-player {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      border-radius: 20px;
+    }
+
+    /* Results Overlay */
+    .results-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .results-overlay.show {
+      display: flex;
+    }
+
+    .results-content {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    .results-content h2 {
+      font-size: 28px;
+      margin-bottom: 24px;
+    }
+
+    .final-scores {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .final-score-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+    }
+
+    .final-score-item.winner {
+      border: 2px solid var(--gold);
+      background: rgba(255, 215, 0, 0.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 1001;
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .toast-success { background: var(--accent); color: #000; }
+    .toast-error { background: var(--danger); color: #fff; }
+    .toast-info { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+    ::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+
+    /* Word display for drawer */
+    .your-word {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    /* Hide lobby when in game */
+    .lobby-view.hidden { display: none; }
+
+    /* Mobile Styles */
+    @media (max-width: 768px) {
+      .container {
+        padding: 12px;
+      }
+
+      .header {
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+      }
+
+      .header-left {
+        gap: 10px;
+      }
+
+      .back-btn {
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+
+      .back-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      h1 {
+        font-size: 20px;
+      }
+
+      .btn {
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+
+      /* Lobby mobile */
+      .lobby-view {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .section-header {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .section-header h2 {
+        font-size: 16px;
+      }
+
+      .section-content {
+        padding: 12px 16px;
+      }
+
+      .room-list {
+        max-height: 300px;
+      }
+
+      .room-item {
+        padding: 12px;
+      }
+
+      /* Game View mobile */
+      .game-view {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        height: auto;
+        min-height: calc(100vh - 100px);
+      }
+
+      .game-view.active {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Reorder elements for mobile: info, canvas, tools, then players/chat */
+      .canvas-area {
+        order: 1;
+        gap: 10px;
+      }
+
+      .players-panel {
+        order: 2;
+        padding: 12px;
+        max-height: 150px;
+      }
+
+      .players-panel h3 {
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+
+      .player-list {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .player-item {
+        padding: 6px 10px;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+
+      .player-avatar {
+        width: 24px;
+        height: 24px;
+        font-size: 11px;
+      }
+
+      .player-info {
+        display: none;
+      }
+
+      .player-score {
+        font-size: 12px;
+      }
+
+      .chat-panel {
+        order: 3;
+        max-height: 200px;
+        min-height: 150px;
+      }
+
+      .chat-header {
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+
+      .chat-messages {
+        padding: 8px;
+        gap: 6px;
+        min-height: 80px;
+      }
+
+      .chat-message {
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+
+      .chat-input-container {
+        padding: 8px;
+      }
+
+      .chat-input {
+        padding: 10px;
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+
+      /* Game info bar */
+      .game-info {
+        padding: 10px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .round-info {
+        font-size: 12px;
+        order: 1;
+      }
+
+      .word-hint {
+        font-size: 18px;
+        letter-spacing: 3px;
+        order: 2;
+        width: 100%;
+        text-align: center;
+      }
+
+      .timer {
+        font-size: 16px;
+        order: 1;
+      }
+
+      /* Canvas */
+      .canvas-container {
+        min-height: 300px;
+        max-height: 50vh;
+        touch-action: none;
+      }
+
+      #gameCanvas {
+        touch-action: none;
+      }
+
+      /* Drawing tools - make touch-friendly */
+      .drawing-tools {
+        padding: 10px;
+        gap: 8px;
+        justify-content: center;
+      }
+
+      .tool-group {
+        gap: 4px;
+      }
+
+      .tool-btn {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+      }
+
+      .tool-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .brush-size {
+        width: 36px;
+        height: 36px;
+      }
+
+      .color-palette {
+        gap: 3px;
+        max-width: 200px;
+      }
+
+      .color-swatch {
+        width: 28px;
+        height: 28px;
+      }
+
+      .color-picker {
+        width: 28px;
+        height: 28px;
+      }
+
+      .divider {
+        display: none;
+      }
+
+      /* Waiting room mobile */
+      .waiting-room {
+        padding: 20px;
+      }
+
+      .waiting-room h2 {
+        font-size: 20px;
+      }
+
+      .waiting-players {
+        gap: 8px;
+      }
+
+      .waiting-player {
+        padding: 6px 12px;
+        font-size: 13px;
+      }
+
+      /* Modal mobile */
+      .modal {
+        margin: 16px;
+        padding: 20px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      .modal h3 {
+        font-size: 18px;
+      }
+
+      .form-group input, .form-group select {
+        padding: 14px;
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+
+      /* Results overlay mobile */
+      .results-content {
+        margin: 16px;
+        padding: 20px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      .results-content h2 {
+        font-size: 22px;
+      }
+
+      .final-scores {
+        gap: 8px;
+      }
+
+      .final-score-item {
+        padding: 10px 12px;
+      }
+    }
+
+    /* Extra small screens */
+    @media (max-width: 400px) {
+      h1 {
+        font-size: 18px;
+      }
+
+      .back-btn-text {
+        display: none;
+      }
+
+      .word-hint {
+        font-size: 16px;
+        letter-spacing: 2px;
+      }
+
+      .tool-btn {
+        width: 36px;
+        height: 36px;
+      }
+
+      .brush-size {
+        width: 32px;
+        height: 32px;
+      }
+
+      .color-swatch {
+        width: 24px;
+        height: 24px;
+      }
+
+      .canvas-container {
+        min-height: 250px;
+      }
+    }
+
+    /* Prevent pull-to-refresh and overscroll on mobile */
+    html, body {
+      overscroll-behavior: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-left">
+        <a href="/" class="back-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+          <span class="back-btn-text">Back</span>
+        </a>
+        <h1>Pictionary</h1>
+      </div>
+      <div id="roomControls" style="display: none;">
+        <button class="btn btn-danger" onclick="leaveRoom()">Leave Room</button>
+      </div>
+    </div>
+
+    <!-- Lobby View -->
+    <div class="lobby-view" id="lobbyView">
+      <div class="main-panel">
+        <div class="section">
+          <div class="section-header">
+            <h2>Game Rooms</h2>
+            <button class="btn btn-primary" onclick="showCreateRoomModal()">Create Room</button>
+          </div>
+          <div class="section-content">
+            <div class="room-list" id="roomList">
+              <div class="empty-state">No rooms available. Create one to start playing!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <h2>Leaderboard</h2>
+        </div>
+        <div class="section-content">
+          <div class="leaderboard" id="leaderboard">
+            <div class="empty-state">No games played yet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game View -->
+    <div class="game-view" id="gameView">
+      <!-- Players Panel -->
+      <div class="players-panel">
+        <h3>Players</h3>
+        <div class="player-list" id="playerList"></div>
+      </div>
+
+      <!-- Canvas Area -->
+      <div class="canvas-area">
+        <div class="game-info">
+          <div class="round-info" id="roundInfo">Round 1/3</div>
+          <div class="word-hint" id="wordHint">_ _ _ _ _</div>
+          <div class="timer" id="timer">80</div>
+        </div>
+
+        <!-- Waiting Room (before game starts) -->
+        <div class="waiting-room" id="waitingRoom" style="display: none;">
+          <h2 id="roomTitle">Waiting for players...</h2>
+          <p id="waitingMessage">Waiting for players to join...</p>
+          <div class="waiting-players" id="waitingPlayers"></div>
+          <button class="btn btn-primary" id="startGameBtn" onclick="startGame()" style="display: none;">
+            Start Game
+          </button>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer" style="display: none;">
+          <canvas id="gameCanvas"></canvas>
+        </div>
+
+        <div class="drawing-tools" id="drawingTools" style="display: none;">
+          <div class="tool-group">
+            <button class="tool-btn active" data-tool="pencil" title="Pencil">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            </button>
+            <button class="tool-btn" data-tool="line" title="Line">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z"/></svg>
+            </button>
+            <button class="tool-btn" data-tool="rect" title="Rectangle">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v18H3V3zm2 2v14h14V5H5z"/></svg>
+            </button>
+            <button class="tool-btn" data-tool="ellipse" title="Ellipse">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
+            </button>
+            <button class="tool-btn" data-tool="fill" title="Fill">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.59-.59 1.54 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z"/></svg>
+            </button>
+            <button class="tool-btn" data-tool="eraser" title="Eraser">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.14 3c-.51 0-1.02.2-1.41.59L2.59 14.73c-.78.78-.78 2.05 0 2.83l3.85 3.85h7.31l8.66-8.66c.78-.78.78-2.05 0-2.83L16.55 3.6c-.39-.4-.9-.6-1.41-.6zm-.09 16H8.17l-3.5-3.5 2.67-2.67 3.39 3.39 6.97-6.97 3.39 3.39-5.04 6.36z"/></svg>
+            </button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="tool-group brush-sizes">
+            <div class="brush-size" data-size="2" title="2px"><div class="dot" style="width:4px;height:4px;"></div></div>
+            <div class="brush-size active" data-size="5" title="5px"><div class="dot" style="width:8px;height:8px;"></div></div>
+            <div class="brush-size" data-size="10" title="10px"><div class="dot" style="width:12px;height:12px;"></div></div>
+            <div class="brush-size" data-size="20" title="20px"><div class="dot" style="width:16px;height:16px;"></div></div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="tool-group color-palette" id="colorPalette"></div>
+          <input type="color" class="color-picker" id="customColor" value="#000000" title="Custom color">
+
+          <div class="divider"></div>
+
+          <div class="tool-group">
+            <button class="tool-btn" onclick="undoDraw()" title="Undo (Ctrl+Z)">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+            </button>
+            <button class="tool-btn" onclick="redoDraw()" title="Redo (Ctrl+Y)">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
+            </button>
+            <button class="tool-btn" onclick="clearCanvas()" title="Clear">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Panel -->
+      <div class="chat-panel">
+        <div class="chat-header">Chat & Guesses</div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-container">
+          <input type="text" class="chat-input" id="chatInput" placeholder="Type your guess..." maxlength="100">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Room Modal -->
+  <div class="modal-overlay" id="createRoomModal">
+    <div class="modal">
+      <h3>Create Room</h3>
+      <div class="form-group">
+        <label>Room Name</label>
+        <input type="text" id="roomNameInput" placeholder="My Game Room" maxlength="30">
+      </div>
+      <div class="form-group">
+        <label>Language</label>
+        <select id="languageSelect">
+          <option value="en">English</option>
+          <option value="nl">Nederlands (Dutch)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Difficulty</label>
+        <select id="difficultySelect">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Rounds</label>
+        <select id="roundsSelect">
+          <option value="2">2 Rounds</option>
+          <option value="3" selected>3 Rounds</option>
+          <option value="5">5 Rounds</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="hideCreateRoomModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="createRoom()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Overlay -->
+  <div class="results-overlay" id="resultsOverlay">
+    <div class="results-content">
+      <h2 id="resultsTitle">Game Over!</h2>
+      <div class="final-scores" id="finalScores"></div>
+      <button class="btn btn-primary" onclick="hideResults()">Back to Lobby</button>
+    </div>
+  </div>
+
+  <script>
+    // Color palette
+    const COLORS = [
+      '#000000', '#FFFFFF', '#808080', '#C0C0C0',
+      '#800000', '#FF0000', '#FF6B6B', '#FFA07A',
+      '#808000', '#FFFF00', '#FFD700', '#FFA500',
+      '#008000', '#00FF00', '#90EE90', '#32CD32',
+      '#008080', '#00FFFF', '#87CEEB', '#4169E1',
+      '#000080', '#0000FF', '#8A2BE2', '#9932CC',
+      '#800080', '#FF00FF', '#FF69B4', '#CD853F'
+    ];
+
+    // Game state
+    let ws = null;
+    let currentRoom = null;
+    let isHost = false;
+    let isDrawing = false;
+    let currentTool = 'pencil';
+    let currentColor = '#000000';
+    let currentSize = 5;
+    let canDraw = false;
+    let currentWord = null;
+    let timerInterval = null;
+
+    // Canvas state
+    let canvas, ctx;
+    let drawing = false;
+    let lastX = 0, lastY = 0;
+    let currentStroke = null;
+    let previewCanvas, previewCtx;
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+      initColorPalette();
+      initToolListeners();
+      initCanvas();
+      connectWebSocket();
+      loadLeaderboard();
+      loadRooms();
+    });
+
+    // WebSocket connection
+    function connectWebSocket() {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${wsProtocol}//${window.location.host}`);
+
+      ws.onopen = () => {
+        console.log('Connected to server');
+        ws.send(JSON.stringify({ type: 'pictionary:rooms:list' }));
+      };
+
+      ws.onclose = () => {
+        console.log('Disconnected, reconnecting...');
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      ws.onmessage = (event) => {
+        const { type, data } = JSON.parse(event.data);
+        handleMessage(type, data);
+      };
+    }
+
+    function handleMessage(type, data) {
+      switch (type) {
+        case 'pictionary:rooms:list':
+          renderRoomList(data.rooms);
+          break;
+        case 'pictionary:room:joined':
+          joinedRoom(data);
+          break;
+        case 'pictionary:room:error':
+          showToast(data.error, 'error');
+          break;
+        case 'pictionary:room:playerJoined':
+          addPlayerToList(data.player);
+          updateWaitingPlayers();
+          break;
+        case 'pictionary:room:playerLeft':
+          removePlayerFromList(data.playerId);
+          updateWaitingPlayers();
+          break;
+        case 'pictionary:room:newHost':
+          if (currentRoom) {
+            currentRoom.hostId = data.hostId;
+            isHost = data.hostId === getCurrentUserId();
+            updateStartButton();
+          }
+          break;
+        case 'pictionary:room:reset':
+          resetToWaiting(data.players);
+          break;
+        case 'pictionary:game:started':
+          gameStarted(data);
+          break;
+        case 'pictionary:game:roundStart':
+          roundStarted(data);
+          break;
+        case 'pictionary:game:yourTurn':
+          yourTurn(data.word);
+          break;
+        case 'pictionary:game:hint':
+          updateHint(data.hint);
+          break;
+        case 'pictionary:game:correctGuess':
+          correctGuess(data);
+          break;
+        case 'pictionary:game:closeGuess':
+          closeGuess(data.guess);
+          break;
+        case 'pictionary:game:roundEnd':
+          roundEnded(data);
+          break;
+        case 'pictionary:game:end':
+          gameEnded(data);
+          break;
+        case 'pictionary:draw:stroke':
+          drawRemoteStroke(data.stroke);
+          break;
+        case 'pictionary:draw:clear':
+          clearCanvasLocal();
+          break;
+        case 'pictionary:draw:undo':
+          // Redraw canvas from server state
+          break;
+        case 'pictionary:draw:redo':
+          drawRemoteStroke(data.stroke);
+          break;
+        case 'pictionary:draw:state':
+          restoreDrawState(data.history);
+          break;
+        case 'pictionary:chat:message':
+          addChatMessage(data.displayName, data.message);
+          break;
+        case 'pictionary:leaderboard':
+          renderLeaderboard(data.leaderboard);
+          break;
+      }
+    }
+
+    // Room management
+    function showCreateRoomModal() {
+      document.getElementById('createRoomModal').classList.add('show');
+      document.getElementById('roomNameInput').focus();
+    }
+
+    function hideCreateRoomModal() {
+      document.getElementById('createRoomModal').classList.remove('show');
+    }
+
+    function createRoom() {
+      const name = document.getElementById('roomNameInput').value.trim() || 'Game Room';
+      const language = document.getElementById('languageSelect').value;
+      const difficulty = document.getElementById('difficultySelect').value;
+      const rounds = parseInt(document.getElementById('roundsSelect').value);
+
+      ws.send(JSON.stringify({
+        type: 'pictionary:room:create',
+        name,
+        settings: { language, difficulty, rounds }
+      }));
+
+      hideCreateRoomModal();
+    }
+
+    function joinRoom(roomId) {
+      ws.send(JSON.stringify({
+        type: 'pictionary:room:join',
+        roomId
+      }));
+    }
+
+    function leaveRoom() {
+      ws.send(JSON.stringify({ type: 'pictionary:room:leave' }));
+      currentRoom = null;
+      isHost = false;
+      showLobby();
+    }
+
+    function startGame() {
+      ws.send(JSON.stringify({ type: 'pictionary:room:start' }));
+    }
+
+    function joinedRoom(data) {
+      currentRoom = data.room;
+      isHost = data.isHost;
+      showGame();
+      renderPlayerList(currentRoom.players);
+      updateWaitingPlayers();
+      updateStartButton();
+
+      if (currentRoom.state === 'waiting') {
+        showWaitingRoom();
+      }
+    }
+
+    // Language display helper
+    const languageLabels = {
+      en: { flag: '🇬🇧', name: 'English' },
+      nl: { flag: '🇳🇱', name: 'Nederlands' }
+    };
+
+    function getLanguageDisplay(code) {
+      return languageLabels[code] || languageLabels.en;
+    }
+
+    // Rendering
+    function renderRoomList(rooms) {
+      const container = document.getElementById('roomList');
+      if (!rooms || rooms.length === 0) {
+        container.innerHTML = '<div class="empty-state">No rooms available. Create one to start playing!</div>';
+        return;
+      }
+
+      container.innerHTML = rooms.map(room => {
+        const lang = getLanguageDisplay(room.language);
+        return `
+        <div class="room-item" onclick="joinRoom('${room.id}')">
+          <div class="room-info">
+            <div class="room-name">${lang.flag} ${escapeHtml(room.name)}</div>
+            <div class="room-details">${room.difficulty} difficulty &bull; ${lang.name}</div>
+          </div>
+          <div class="room-players">${room.playerCount}/${room.maxPlayers} players</div>
+        </div>
+      `}).join('');
+    }
+
+    function renderLeaderboard(players) {
+      const container = document.getElementById('leaderboard');
+      if (!players || players.length === 0) {
+        container.innerHTML = '<div class="empty-state">No games played yet</div>';
+        return;
+      }
+
+      container.innerHTML = players.map((player, index) => `
+        <div class="leaderboard-item">
+          <div class="rank ${getRankClass(index)}">${index + 1}</div>
+          <div class="player-info">
+            <div class="player-name">${escapeHtml(player.displayName)}</div>
+            <div class="player-stats">${player.gamesWon} wins / ${player.gamesPlayed} games</div>
+          </div>
+          <div class="player-score">${player.totalPoints}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderPlayerList(players) {
+      const container = document.getElementById('playerList');
+      container.innerHTML = players.map(player => `
+        <div class="player-item" id="player-${player.id}" data-id="${player.id}">
+          <div class="player-avatar">${player.displayName[0].toUpperCase()}</div>
+          <div class="player-info">
+            <div class="player-name">${escapeHtml(player.displayName)}</div>
+          </div>
+          <div class="player-score">${player.score}</div>
+        </div>
+      `).join('');
+    }
+
+    function addPlayerToList(player) {
+      if (!currentRoom) return;
+      currentRoom.players.push(player);
+      renderPlayerList(currentRoom.players);
+      addSystemMessage(`${player.displayName} joined the room`);
+    }
+
+    function removePlayerFromList(playerId) {
+      if (!currentRoom) return;
+      const player = currentRoom.players.find(p => p.id === playerId);
+      currentRoom.players = currentRoom.players.filter(p => p.id !== playerId);
+      renderPlayerList(currentRoom.players);
+      if (player) {
+        addSystemMessage(`${player.displayName} left the room`);
+      }
+    }
+
+    function updateWaitingPlayers() {
+      if (!currentRoom) return;
+      const container = document.getElementById('waitingPlayers');
+      container.innerHTML = currentRoom.players.map(player => `
+        <div class="waiting-player">
+          <div class="player-avatar">${player.displayName[0].toUpperCase()}</div>
+          <span>${escapeHtml(player.displayName)}</span>
+        </div>
+      `).join('');
+    }
+
+    function updateStartButton() {
+      const btn = document.getElementById('startGameBtn');
+      if (isHost && currentRoom && currentRoom.players.length >= 1) {
+        btn.style.display = 'block';
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+
+    // View management
+    function showLobby() {
+      document.getElementById('lobbyView').classList.remove('hidden');
+      document.getElementById('gameView').classList.remove('active');
+      document.getElementById('roomControls').style.display = 'none';
+      loadRooms();
+    }
+
+    function showGame() {
+      document.getElementById('lobbyView').classList.add('hidden');
+      document.getElementById('gameView').classList.add('active');
+      document.getElementById('roomControls').style.display = 'block';
+      document.getElementById('roomTitle').textContent = currentRoom?.name || 'Game Room';
+    }
+
+    function showWaitingRoom() {
+      document.getElementById('waitingRoom').style.display = 'flex';
+      document.getElementById('canvasContainer').style.display = 'none';
+      document.getElementById('drawingTools').style.display = 'none';
+    }
+
+    function showCanvas() {
+      document.getElementById('waitingRoom').style.display = 'none';
+      document.getElementById('canvasContainer').style.display = 'block';
+      resizeCanvas();
+    }
+
+    // Game events
+    function gameStarted(data) {
+      currentRoom.state = 'playing';
+      showCanvas();
+      clearCanvasLocal();
+      renderPlayerList(data.players);
+      document.getElementById('roundInfo').textContent = `Round ${data.round}/${data.totalRounds}`;
+    }
+
+    function roundStarted(data) {
+      canDraw = false;
+      currentWord = null;
+      clearCanvasLocal();
+
+      document.getElementById('roundInfo').textContent = `Round ${data.round} - ${data.drawerName}'s turn`;
+      document.getElementById('wordHint').textContent = data.hint;
+      document.getElementById('wordHint').classList.remove('your-word');
+
+      // Update player list to show who's drawing
+      currentRoom.players.forEach(p => {
+        const el = document.getElementById(`player-${p.id}`);
+        if (el) {
+          el.classList.remove('drawing', 'guessed');
+          if (p.id === data.drawerId) {
+            el.classList.add('drawing');
+          }
+        }
+      });
+
+      // Enable/disable chat input
+      const chatInput = document.getElementById('chatInput');
+      const isDrawer = data.drawerId === getCurrentUserId();
+      chatInput.disabled = isDrawer;
+      chatInput.placeholder = isDrawer ? "You're drawing!" : "Type your guess...";
+
+      // Show/hide drawing tools
+      document.getElementById('drawingTools').style.display = isDrawer ? 'flex' : 'none';
+
+      // Start timer
+      startTimer(data.timeLimit);
+
+      addSystemMessage(`${data.drawerName} is now drawing!`);
+    }
+
+    function yourTurn(word) {
+      canDraw = true;
+      currentWord = word;
+      document.getElementById('wordHint').textContent = word;
+      document.getElementById('wordHint').classList.add('your-word');
+      addSystemMessage(`Your word is: ${word}`);
+    }
+
+    function updateHint(hint) {
+      if (!currentWord) { // Only update for guessers
+        document.getElementById('wordHint').textContent = hint;
+      }
+    }
+
+    function correctGuess(data) {
+      const player = currentRoom.players.find(p => p.id === data.playerId);
+      if (player) {
+        player.score = data.players.find(p => p.id === data.playerId)?.score || player.score;
+      }
+      renderPlayerList(data.players);
+
+      // Mark player as guessed
+      const el = document.getElementById(`player-${data.playerId}`);
+      if (el) el.classList.add('guessed');
+
+      addChatMessage(data.displayName, 'guessed correctly!', 'correct');
+
+      if (data.isFirst) {
+        addSystemMessage(`${data.displayName} guessed first! +${data.score} points`);
+      }
+    }
+
+    function closeGuess(guess) {
+      addChatMessage('You', `"${guess}" is close!`, 'close');
+    }
+
+    function roundEnded(data) {
+      canDraw = false;
+      stopTimer();
+
+      addSystemMessage(`The word was: ${data.word}`);
+
+      if (data.drawerLeft) {
+        addSystemMessage('Drawer left the game');
+      }
+    }
+
+    function gameEnded(data) {
+      stopTimer();
+      currentRoom.state = 'ended';
+
+      document.getElementById('resultsTitle').textContent = data.winner
+        ? `${data.winner.displayName} wins!`
+        : 'Game Over!';
+
+      document.getElementById('finalScores').innerHTML = data.finalScores.map((player, index) => `
+        <div class="final-score-item ${index === 0 ? 'winner' : ''}">
+          <div class="rank ${getRankClass(index)}">${index + 1}</div>
+          <div class="player-info">
+            <div class="player-name">${escapeHtml(player.displayName)}</div>
+          </div>
+          <div class="player-score">${player.score}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('resultsOverlay').classList.add('show');
+    }
+
+    function hideResults() {
+      document.getElementById('resultsOverlay').classList.remove('show');
+    }
+
+    function resetToWaiting(players) {
+      currentRoom.state = 'waiting';
+      currentRoom.players = players;
+      renderPlayerList(players);
+      showWaitingRoom();
+      updateWaitingPlayers();
+      updateStartButton();
+      document.getElementById('chatMessages').innerHTML = '';
+      addSystemMessage('Ready for another game!');
+    }
+
+    // Timer
+    function startTimer(seconds) {
+      stopTimer();
+      let remaining = seconds;
+      const timerEl = document.getElementById('timer');
+      timerEl.textContent = remaining;
+      timerEl.className = 'timer';
+
+      timerInterval = setInterval(() => {
+        remaining--;
+        timerEl.textContent = remaining;
+
+        if (remaining <= 10) {
+          timerEl.className = 'timer danger';
+        } else if (remaining <= 20) {
+          timerEl.className = 'timer warning';
+        }
+
+        if (remaining <= 0) {
+          stopTimer();
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    // Canvas setup
+    function initCanvas() {
+      canvas = document.getElementById('gameCanvas');
+      ctx = canvas.getContext('2d');
+
+      // Create preview canvas for shapes
+      previewCanvas = document.createElement('canvas');
+      previewCtx = previewCanvas.getContext('2d');
+
+      canvas.addEventListener('mousedown', startDrawing);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', stopDrawing);
+      canvas.addEventListener('mouseout', stopDrawing);
+
+      // Touch support
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+      canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+      window.addEventListener('resize', resizeCanvas);
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'z') {
+          e.preventDefault();
+          undoDraw();
+        }
+        if (e.ctrlKey && e.key === 'y') {
+          e.preventDefault();
+          redoDraw();
+        }
+      });
+    }
+
+    function resizeCanvas() {
+      const container = document.getElementById('canvasContainer');
+      const rect = container.getBoundingClientRect();
+
+      // Store current drawing
+      const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
+
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      previewCanvas.width = rect.width;
+      previewCanvas.height = rect.height;
+
+      // Restore drawing
+      if (imageData && ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.putImageData(imageData, 0, 0);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    // Normalize coordinates to 0-1 range for cross-device compatibility
+    function normalizeCoord(x, y) {
+      return {
+        x: x / canvas.width,
+        y: y / canvas.height
+      };
+    }
+
+    // Convert normalized coordinates back to pixels
+    function denormalizeCoord(nx, ny) {
+      return {
+        x: nx * canvas.width,
+        y: ny * canvas.height
+      };
+    }
+
+    // Normalize brush size relative to canvas (based on a 800px reference width)
+    function normalizeSize(size) {
+      return size / 800;
+    }
+
+    function denormalizeSize(nsize) {
+      return nsize * canvas.width;
+    }
+
+    function handleTouchStart(e) {
+      e.preventDefault();
+      if (e.touches.length !== 1) return; // Only handle single touch
+      const touch = e.touches[0];
+      const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY };
+      startDrawing(fakeEvent);
+    }
+
+    function handleTouchMove(e) {
+      e.preventDefault();
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY };
+      draw(fakeEvent);
+    }
+
+    function handleTouchEnd(e) {
+      e.preventDefault();
+      // Use changedTouches for the last known position
+      const touch = e.changedTouches[0];
+      const fakeEvent = {
+        clientX: touch?.clientX || lastX,
+        clientY: touch?.clientY || lastY,
+        type: 'touchend'
+      };
+      stopDrawing(fakeEvent);
+    }
+
+    function startDrawing(e) {
+      if (!canDraw) return;
+      drawing = true;
+      const { x, y } = getCanvasCoords(e);
+      lastX = x;
+      lastY = y;
+
+      if (currentTool === 'fill') {
+        fillArea(x, y);
+        return;
+      }
+
+      // Store normalized coordinates for network transmission
+      const norm = normalizeCoord(x, y);
+      currentStroke = {
+        type: currentTool,
+        color: currentTool === 'eraser' ? '#ffffff' : currentColor,
+        size: normalizeSize(currentSize),
+        points: [{ x: norm.x, y: norm.y }]
+      };
+
+      if (currentTool === 'pencil' || currentTool === 'eraser') {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      }
+    }
+
+    function draw(e) {
+      if (!drawing || !canDraw) return;
+      const { x, y } = getCanvasCoords(e);
+
+      if (currentTool === 'pencil' || currentTool === 'eraser') {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = currentSize;
+        ctx.strokeStyle = currentTool === 'eraser' ? '#ffffff' : currentColor;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        // Store normalized coordinates
+        const norm = normalizeCoord(x, y);
+        currentStroke.points.push({ x: norm.x, y: norm.y });
+      } else {
+        // For shapes, draw preview
+        drawShapePreview(x, y);
+      }
+
+      lastX = x;
+      lastY = y;
+    }
+
+    function stopDrawing(e) {
+      if (!drawing) return;
+      drawing = false;
+
+      if (currentStroke && canDraw) {
+        if (currentTool !== 'pencil' && currentTool !== 'eraser' && currentTool !== 'fill') {
+          // For shapes, get the end coordinates
+          let x = lastX, y = lastY;
+          if (e && e.clientX !== undefined && e.type !== 'mouseout' && e.type !== 'touchend') {
+            const coords = getCanvasCoords(e);
+            x = coords.x;
+            y = coords.y;
+          }
+          // Normalize end coordinates
+          const norm = normalizeCoord(x, y);
+          currentStroke.endX = norm.x;
+          currentStroke.endY = norm.y;
+          drawShape(currentStroke, true); // stroke has normalized coords
+        }
+
+        // Send normalized stroke to server
+        ws.send(JSON.stringify({
+          type: 'pictionary:draw:stroke',
+          stroke: currentStroke
+        }));
+      }
+
+      currentStroke = null;
+      ctx.beginPath();
+    }
+
+    function drawShapePreview(x, y) {
+      // Restore canvas from preview
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw shape
+      ctx.strokeStyle = currentColor;
+      ctx.lineWidth = currentSize;
+
+      // Denormalize the start point from the stroke (stored as normalized)
+      const start = denormalizeCoord(currentStroke.points[0].x, currentStroke.points[0].y);
+      const startX = start.x;
+      const startY = start.y;
+
+      ctx.beginPath();
+      if (currentTool === 'line') {
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(x, y);
+      } else if (currentTool === 'rect') {
+        ctx.rect(startX, startY, x - startX, y - startY);
+      } else if (currentTool === 'ellipse') {
+        const rx = Math.abs(x - startX) / 2;
+        const ry = Math.abs(y - startY) / 2;
+        const cx = startX + (x - startX) / 2;
+        const cy = startY + (y - startY) / 2;
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+    }
+
+    function drawShape(stroke, isNormalized = true) {
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = isNormalized ? denormalizeSize(stroke.size) : stroke.size;
+      ctx.lineCap = 'round';
+
+      let startX, startY, endX, endY;
+
+      if (isNormalized) {
+        const start = denormalizeCoord(stroke.points[0].x, stroke.points[0].y);
+        const end = denormalizeCoord(stroke.endX, stroke.endY);
+        startX = start.x;
+        startY = start.y;
+        endX = end.x;
+        endY = end.y;
+      } else {
+        // For local preview, use lastX/lastY which are in pixels
+        startX = stroke.points[0].x * canvas.width; // Convert back from normalized
+        startY = stroke.points[0].y * canvas.height;
+        endX = stroke.endX * canvas.width;
+        endY = stroke.endY * canvas.height;
+      }
+
+      ctx.beginPath();
+      if (stroke.type === 'line') {
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+      } else if (stroke.type === 'rect') {
+        ctx.rect(startX, startY, endX - startX, endY - startY);
+      } else if (stroke.type === 'ellipse') {
+        const rx = Math.abs(endX - startX) / 2;
+        const ry = Math.abs(endY - startY) / 2;
+        const cx = startX + (endX - startX) / 2;
+        const cy = startY + (endY - startY) / 2;
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+    }
+
+    function drawRemoteStroke(stroke) {
+      if (stroke.type === 'fill') {
+        // Fill coordinates are normalized
+        const pos = denormalizeCoord(stroke.x, stroke.y);
+        fillAreaLocal(pos.x, pos.y, stroke.color);
+        return;
+      }
+
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = denormalizeSize(stroke.size);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (stroke.type === 'pencil' || stroke.type === 'eraser') {
+        ctx.beginPath();
+        // Denormalize all points
+        const firstPoint = denormalizeCoord(stroke.points[0].x, stroke.points[0].y);
+        ctx.moveTo(firstPoint.x, firstPoint.y);
+        for (let i = 1; i < stroke.points.length; i++) {
+          const point = denormalizeCoord(stroke.points[i].x, stroke.points[i].y);
+          ctx.lineTo(point.x, point.y);
+        }
+        ctx.stroke();
+      } else {
+        drawShape(stroke, true); // true = coordinates are normalized
+      }
+    }
+
+    function restoreDrawState(history) {
+      clearCanvasLocal();
+      history.forEach(stroke => drawRemoteStroke(stroke));
+    }
+
+    function fillArea(x, y) {
+      const color = hexToRgb(currentColor);
+      fillAreaLocal(x, y, currentColor);
+
+      // Send normalized coordinates
+      const norm = normalizeCoord(x, y);
+      ws.send(JSON.stringify({
+        type: 'pictionary:draw:fill',
+        x: norm.x,
+        y: norm.y,
+        color: currentColor
+      }));
+    }
+
+    function fillAreaLocal(x, y, colorHex) {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const color = hexToRgb(colorHex);
+      const targetColor = getPixelColor(data, Math.round(x), Math.round(y), canvas.width);
+
+      if (colorsMatch(targetColor, color)) return;
+
+      const stack = [[Math.round(x), Math.round(y)]];
+      const visited = new Set();
+
+      while (stack.length > 0) {
+        const [px, py] = stack.pop();
+        const key = `${px},${py}`;
+
+        if (visited.has(key)) continue;
+        if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+
+        const pixelColor = getPixelColor(data, px, py, canvas.width);
+        if (!colorsMatch(pixelColor, targetColor)) continue;
+
+        visited.add(key);
+        setPixelColor(data, px, py, canvas.width, color);
+
+        stack.push([px + 1, py], [px - 1, py], [px, py + 1], [px, py - 1]);
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function getPixelColor(data, x, y, width) {
+      const i = (y * width + x) * 4;
+      return { r: data[i], g: data[i + 1], b: data[i + 2] };
+    }
+
+    function setPixelColor(data, x, y, width, color) {
+      const i = (y * width + x) * 4;
+      data[i] = color.r;
+      data[i + 1] = color.g;
+      data[i + 2] = color.b;
+      data[i + 3] = 255;
+    }
+
+    function colorsMatch(c1, c2, tolerance = 32) {
+      return Math.abs(c1.r - c2.r) < tolerance &&
+             Math.abs(c1.g - c2.g) < tolerance &&
+             Math.abs(c1.b - c2.b) < tolerance;
+    }
+
+    function hexToRgb(hex) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 0, g: 0, b: 0 };
+    }
+
+    function clearCanvas() {
+      if (!canDraw) return;
+      clearCanvasLocal();
+      ws.send(JSON.stringify({ type: 'pictionary:draw:clear' }));
+    }
+
+    function clearCanvasLocal() {
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function undoDraw() {
+      if (!canDraw) return;
+      ws.send(JSON.stringify({ type: 'pictionary:draw:undo' }));
+    }
+
+    function redoDraw() {
+      if (!canDraw) return;
+      ws.send(JSON.stringify({ type: 'pictionary:draw:redo' }));
+    }
+
+    // Tool management
+    function initColorPalette() {
+      const container = document.getElementById('colorPalette');
+      container.innerHTML = COLORS.map(color => `
+        <div class="color-swatch ${color === '#000000' ? 'active' : ''}"
+             style="background: ${color}"
+             data-color="${color}"
+             onclick="selectColor('${color}')"></div>
+      `).join('');
+
+      document.getElementById('customColor').addEventListener('change', (e) => {
+        selectColor(e.target.value);
+      });
+    }
+
+    function initToolListeners() {
+      document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+        btn.addEventListener('click', () => selectTool(btn.dataset.tool));
+      });
+
+      document.querySelectorAll('.brush-size').forEach(btn => {
+        btn.addEventListener('click', () => selectSize(parseInt(btn.dataset.size)));
+      });
+    }
+
+    function selectTool(tool) {
+      currentTool = tool;
+      document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tool === tool);
+      });
+
+      canvas.style.cursor = tool === 'fill' ? 'cell' : 'crosshair';
+    }
+
+    function selectColor(color) {
+      currentColor = color;
+      document.querySelectorAll('.color-swatch').forEach(swatch => {
+        swatch.classList.toggle('active', swatch.dataset.color === color);
+      });
+      document.getElementById('customColor').value = color;
+
+      // Switch away from eraser when selecting color
+      if (currentTool === 'eraser') {
+        selectTool('pencil');
+      }
+    }
+
+    function selectSize(size) {
+      currentSize = size;
+      document.querySelectorAll('.brush-size').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.size) === size);
+      });
+    }
+
+    // Chat
+    document.getElementById('chatInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      ws.send(JSON.stringify({
+        type: 'pictionary:game:guess',
+        guess: message
+      }));
+
+      ws.send(JSON.stringify({
+        type: 'pictionary:chat:message',
+        message
+      }));
+
+      input.value = '';
+    }
+
+    function addChatMessage(sender, message, type = '') {
+      const container = document.getElementById('chatMessages');
+      const div = document.createElement('div');
+      div.className = `chat-message ${type}`;
+      div.innerHTML = `<span class="sender">${escapeHtml(sender)}:</span> ${escapeHtml(message)}`;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function addSystemMessage(message) {
+      const container = document.getElementById('chatMessages');
+      const div = document.createElement('div');
+      div.className = 'chat-message system';
+      div.textContent = message;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // API calls
+    async function loadLeaderboard() {
+      try {
+        const response = await fetch('/api/pictionary/leaderboard');
+        const data = await response.json();
+        renderLeaderboard(data);
+      } catch (error) {
+        console.error('Failed to load leaderboard:', error);
+      }
+    }
+
+    async function loadRooms() {
+      try {
+        const response = await fetch('/api/pictionary/rooms');
+        const data = await response.json();
+        renderRoomList(data);
+      } catch (error) {
+        console.error('Failed to load rooms:', error);
+      }
+    }
+
+    // Helpers
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function getRankClass(index) {
+      if (index === 0) return 'gold';
+      if (index === 1) return 'silver';
+      if (index === 2) return 'bronze';
+      return '';
+    }
+
+    function getCurrentUserId() {
+      // This would come from the session, for now extract from cookie or fallback
+      return window.currentUserId || null;
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Get current user ID from API
+    fetch('/api/me').then(r => r.json()).then(user => {
+      window.currentUserId = user.id;
+    }).catch(() => {});
+  </script>
+</body>
+</html>

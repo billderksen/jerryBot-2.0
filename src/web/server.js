@@ -6,7 +6,8 @@ import { dirname, join } from 'path';
 import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
-import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName } from '../utils/musicQueue.js';
+import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer } from '../utils/musicQueue.js';
+import { createRoom, getRoom, deleteRoom, getRoomList, getLeaderboard, Player, setActivityLogger as setPictionaryActivityLogger } from '../utils/pictionaryGame.js';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
@@ -128,6 +129,9 @@ app.use(sessionMiddleware);
 
 // Store connected clients
 const clients = new Set();
+
+// Store pictionary room clients (roomId -> Set of ws)
+const pictionaryClients = new Map();
 
 // Store current state
 let currentState = {
@@ -255,6 +259,8 @@ let activityLogger = null;
 
 export function setActivityLogger(logger) {
   activityLogger = logger;
+  // Also set for pictionary game
+  setPictionaryActivityLogger(logger);
 }
 
 app.get('/access-denied', (req, res) => {
@@ -328,6 +334,20 @@ app.get('/api/stats', (req, res) => {
 // Serve stats page
 app.get('/stats', requireAuth, (req, res) => {
   res.sendFile(join(__dirname, 'public', 'stats.html'));
+});
+
+// Serve Pictionary game page
+app.get('/pictionary', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'pictionary.html'));
+});
+
+// Pictionary API endpoints
+app.get('/api/pictionary/leaderboard', (req, res) => {
+  res.json(getLeaderboard());
+});
+
+app.get('/api/pictionary/rooms', (req, res) => {
+  res.json(getRoomList());
 });
 
 // API endpoint to search for songs
@@ -761,6 +781,8 @@ wss.on('connection', (ws, req) => {
     ws.on('close', () => {
       console.log(`Web client disconnected: ${ws.user?.username || 'unknown'}`);
       clients.delete(ws);
+      // Clean up pictionary room membership
+      cleanupPictionaryClient(ws);
       // Broadcast updated listeners list after disconnect
       broadcastListeners();
     });
@@ -769,10 +791,15 @@ wss.on('connection', (ws, req) => {
       try {
         const data = JSON.parse(message);
         console.log(`Received from ${ws.user.username}:`, data);
-        
+
         // Handle commands from web interface
         if (data.type === 'command') {
           handleWebCommand(data.command, data.guildId, ws.user.username);
+        }
+
+        // Handle Pictionary messages
+        if (data.type && data.type.startsWith('pictionary:')) {
+          handlePictionaryMessage(ws, data);
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -890,11 +917,270 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard') {
     } else if (command === '24/7') {
       logWebAction(username, '24/7');
     } else if (command.startsWith('sleep-set:')) {
-      const minutes = command.split(':')[1];
-      logWebAction(username, 'sleep-set', minutes);
+      const minutes = parseInt(command.split(':')[1]);
+      setSleepTimer(minutes);
+      logWebAction(username, 'sleep-set', `${minutes} minutes`);
     } else if (command === 'sleep-cancel') {
+      cancelSleepTimer();
       logWebAction(username, 'sleep-cancel');
     }
+  }
+}
+
+// Pictionary WebSocket handlers
+function handlePictionaryMessage(ws, data) {
+  const { type } = data;
+  const user = ws.user;
+
+  switch (type) {
+    case 'pictionary:room:create': {
+      const { name, settings } = data;
+      const room = createRoom(
+        name || `${user.username}'s Room`,
+        user.id,
+        user.username,
+        user.avatar,
+        settings
+      );
+      room.setBroadcastCallback(broadcastToRoom);
+      ws.pictionaryRoomId = room.id;
+      addClientToRoom(ws, room.id);
+      ws.send(JSON.stringify({
+        type: 'pictionary:room:joined',
+        data: { room: room.toJSON(), isHost: true }
+      }));
+      // Broadcast updated room list to all clients
+      broadcastRoomList();
+      break;
+    }
+
+    case 'pictionary:room:join': {
+      const { roomId } = data;
+      const room = getRoom(roomId);
+      if (!room) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:room:error',
+          data: { error: 'Room not found' }
+        }));
+        return;
+      }
+      const player = new Player(user.id, user.username, user.avatar);
+      const result = room.addPlayer(player);
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:room:error',
+          data: { error: result.error }
+        }));
+        return;
+      }
+      ws.pictionaryRoomId = room.id;
+      addClientToRoom(ws, room.id);
+      ws.send(JSON.stringify({
+        type: 'pictionary:room:joined',
+        data: { room: room.toJSON(), isHost: room.hostId === user.id }
+      }));
+      // Send current draw state if game is in progress
+      if (room.state === 'playing') {
+        ws.send(JSON.stringify({
+          type: 'pictionary:draw:state',
+          data: room.getDrawState()
+        }));
+      }
+      broadcastRoomList();
+      break;
+    }
+
+    case 'pictionary:room:leave': {
+      const roomId = ws.pictionaryRoomId;
+      if (roomId) {
+        const room = getRoom(roomId);
+        if (room) {
+          room.removePlayer(user.id);
+          if (room.players.size === 0) {
+            deleteRoom(roomId);
+          }
+        }
+        removeClientFromRoom(ws, roomId);
+        ws.pictionaryRoomId = null;
+        broadcastRoomList();
+      }
+      break;
+    }
+
+    case 'pictionary:room:start': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room) return;
+      if (room.hostId !== user.id) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:room:error',
+          data: { error: 'Only host can start the game' }
+        }));
+        return;
+      }
+      const result = room.startGame();
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:room:error',
+          data: { error: result.error }
+        }));
+      }
+      broadcastRoomList();
+      break;
+    }
+
+    case 'pictionary:game:guess': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      const { guess } = data;
+      const result = room.handleGuess(user.id, guess);
+      if (result.close) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:game:closeGuess',
+          data: { guess }
+        }));
+      }
+      break;
+    }
+
+    case 'pictionary:chat:message': {
+      const roomId = ws.pictionaryRoomId;
+      if (!roomId) return;
+      const { message } = data;
+      broadcastToRoom(roomId, 'chat:message', {
+        playerId: user.id,
+        displayName: user.username,
+        message: message.slice(0, 200) // Limit message length
+      });
+      break;
+    }
+
+    case 'pictionary:draw:stroke': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      if (room.getCurrentDrawer()?.id !== user.id) return;
+      const { stroke } = data;
+      room.addStroke(stroke);
+      break;
+    }
+
+    case 'pictionary:draw:clear': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      if (room.getCurrentDrawer()?.id !== user.id) return;
+      room.clearCanvas();
+      break;
+    }
+
+    case 'pictionary:draw:undo': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      if (room.getCurrentDrawer()?.id !== user.id) return;
+      room.undo();
+      break;
+    }
+
+    case 'pictionary:draw:redo': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      if (room.getCurrentDrawer()?.id !== user.id) return;
+      room.redo();
+      break;
+    }
+
+    case 'pictionary:draw:fill': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      if (room.getCurrentDrawer()?.id !== user.id) return;
+      const { x, y, color } = data;
+      // Fill is handled as a special stroke type
+      room.addStroke({ type: 'fill', x, y, color });
+      break;
+    }
+
+    case 'pictionary:rooms:list': {
+      ws.send(JSON.stringify({
+        type: 'pictionary:rooms:list',
+        data: { rooms: getRoomList() }
+      }));
+      break;
+    }
+
+    case 'pictionary:leaderboard': {
+      ws.send(JSON.stringify({
+        type: 'pictionary:leaderboard',
+        data: { leaderboard: getLeaderboard() }
+      }));
+      break;
+    }
+  }
+}
+
+// Pictionary room client management
+function addClientToRoom(ws, roomId) {
+  if (!pictionaryClients.has(roomId)) {
+    pictionaryClients.set(roomId, new Set());
+  }
+  pictionaryClients.get(roomId).add(ws);
+}
+
+function removeClientFromRoom(ws, roomId) {
+  const roomClients = pictionaryClients.get(roomId);
+  if (roomClients) {
+    roomClients.delete(ws);
+    if (roomClients.size === 0) {
+      pictionaryClients.delete(roomId);
+    }
+  }
+}
+
+// Broadcast to all clients in a pictionary room
+function broadcastToRoom(roomId, type, data, excludeId = null, onlyToId = null) {
+  const roomClients = pictionaryClients.get(roomId);
+  if (!roomClients) return;
+
+  const message = JSON.stringify({ type: `pictionary:${type}`, data });
+
+  roomClients.forEach(client => {
+    if (client.readyState !== 1) return; // Not open
+    if (excludeId && client.user?.id === excludeId) return;
+    if (onlyToId && client.user?.id !== onlyToId) return;
+    client.send(message);
+  });
+}
+
+// Broadcast room list to all connected clients
+function broadcastRoomList() {
+  const message = JSON.stringify({
+    type: 'pictionary:rooms:list',
+    data: { rooms: getRoomList() }
+  });
+  clients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+}
+
+// Clean up pictionary room when client disconnects
+function cleanupPictionaryClient(ws) {
+  const roomId = ws.pictionaryRoomId;
+  if (roomId) {
+    const room = getRoom(roomId);
+    if (room) {
+      room.removePlayer(ws.user?.id);
+      if (room.players.size === 0) {
+        deleteRoom(roomId);
+      }
+    }
+    removeClientFromRoom(ws, roomId);
+    broadcastRoomList();
   }
 }
 

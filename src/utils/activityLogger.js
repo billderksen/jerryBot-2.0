@@ -155,3 +155,19 @@ function formatDuration(seconds) {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+// Pictionary game logging
+export async function logPictionaryGameStart(roomName, playerCount) {
+  const message = `🎨 **Pictionary game started!** Room: **${roomName}** with ${playerCount} players`;
+  await sendLogMessage(message);
+}
+
+export async function logPictionaryGameEnd(winner, roomName) {
+  const message = `🏆 **Pictionary game ended!** Winner: **${winner}** in room **${roomName}**`;
+  await sendLogMessage(message);
+}
+
+export async function logPictionaryRoundWin(player, word, timeSeconds) {
+  const message = `✅ **${player}** guessed the word "**${word}**" in ${timeSeconds}s`;
+  await sendLogMessage(message);
+}
