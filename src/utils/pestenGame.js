@@ -93,6 +93,9 @@ function canPlayCard(card, topCard, chosenSuit, pendingDraws) {
   // Jack (wild) can always be played
   if (card.rank === 'J') return true;
 
+  // If top card is a Joker (and no pending draws), any card can be played
+  if (topCard.suit === 'joker' && topCard.rank === 'joker') return true;
+
   // If a suit was chosen (after Jack), must match that suit
   if (chosenSuit) {
     return card.suit === chosenSuit || card.rank === 'J';
@@ -103,7 +106,7 @@ function canPlayCard(card, topCard, chosenSuit, pendingDraws) {
 }
 
 class PestenRoom {
-  constructor(id, name, hostId, hostName, hostAvatar, maxPlayers = 4) {
+  constructor(id, name, hostId, hostName, hostAvatar, maxPlayers = 4, turnTimeLimit = 30) {
     this.id = id;
     this.name = name;
     this.hostId = hostId;
@@ -126,6 +129,62 @@ class PestenRoom {
     this.winner = null;
     this.gameLog = [];
     this.botIdCounter = 0;
+
+    // Turn timer settings
+    this.turnTimeLimit = turnTimeLimit; // seconds per turn
+    this.turnStartTime = null;
+    this.turnTimer = null;
+    this.onTurnTimeout = null; // Callback for when turn times out
+  }
+
+  setTurnTimeoutCallback(callback) {
+    this.onTurnTimeout = callback;
+  }
+
+  startTurnTimer() {
+    this.clearTurnTimer();
+    this.turnStartTime = Date.now();
+
+    this.turnTimer = setTimeout(() => {
+      this.handleTurnTimeout();
+    }, this.turnTimeLimit * 1000);
+  }
+
+  clearTurnTimer() {
+    if (this.turnTimer) {
+      clearTimeout(this.turnTimer);
+      this.turnTimer = null;
+    }
+    this.turnStartTime = null;
+  }
+
+  getTurnTimeRemaining() {
+    if (!this.turnStartTime) return this.turnTimeLimit;
+    const elapsed = (Date.now() - this.turnStartTime) / 1000;
+    return Math.max(0, this.turnTimeLimit - elapsed);
+  }
+
+  handleTurnTimeout() {
+    if (this.gameState !== 'playing') return;
+
+    const currentPlayer = this.players[this.currentPlayerIndex];
+    if (!currentPlayer) return;
+
+    // Calculate how many cards will be drawn
+    const drawCount = this.pendingDraws > 0 ? this.pendingDraws : 1;
+
+    // Auto-draw cards (handles pending draws from 2s and Jokers)
+    const result = this.drawCard(currentPlayer.id);
+
+    if (result.success) {
+      // Log the timeout (the drawCard already logs the draw, we add timeout info)
+      // Note: drawCard already moved to next turn
+
+      // Notify via callback
+      if (this.onTurnTimeout) {
+        this.onTurnTimeout(this.id, currentPlayer.id, result, drawCount);
+      }
+    }
   }
 
   addPlayer(playerId, playerName, playerAvatar, isBot = false) {
@@ -135,6 +194,12 @@ class PestenRoom {
       existingPlayer.connected = true;
       existingPlayer.name = playerName; // Update name in case it changed
       existingPlayer.avatar = playerAvatar;
+
+      // If game was finished (e.g., all humans disconnected), reset to waiting state
+      if (this.gameState === 'finished') {
+        this.resetToWaiting();
+      }
+
       return { success: true, message: 'Reconnected', reconnected: true };
     }
 
@@ -248,6 +313,31 @@ class PestenRoom {
     return { success: true };
   }
 
+  resetToWaiting() {
+    // Reset game state to waiting (used when reconnecting after game ended)
+    this.gameState = 'waiting';
+    this.deck = [];
+    this.discardPile = [];
+    this.currentPlayerIndex = 0;
+    this.direction = 1;
+    this.chosenSuit = null;
+    this.pendingDraws = 0;
+    this.winner = null;
+    this.gameLog = [];
+
+    // Clear player hands and reset connected state
+    for (const player of this.players) {
+      player.hand = [];
+      player.connected = !player.isBot; // Bots are always "connected"
+      player.gameStats = {
+        cardsPlayed: 0,
+        specialCardsPlayed: 0,
+        drawsForced: 0,
+        cardsDrawn: 0
+      };
+    }
+  }
+
   startGame() {
     if (this.players.length < 2) {
       return { success: false, error: 'Need at least 2 players' };
@@ -303,6 +393,12 @@ class PestenRoom {
     this.gameState = 'playing';
     this.addLog(`Game started! ${this.players[this.currentPlayerIndex].name}'s turn.`);
 
+    // Start turn timer for the first player (if human)
+    const firstPlayer = this.players[this.currentPlayerIndex];
+    if (firstPlayer && !firstPlayer.isBot) {
+      this.startTurnTimer();
+    }
+
     return { success: true };
   }
 
@@ -323,6 +419,9 @@ class PestenRoom {
     if (player.id !== playerId) {
       return { success: false, error: 'Not your turn' };
     }
+
+    // Clear turn timer - player made a move
+    this.clearTurnTimer();
 
     const cardIndex = player.hand.findIndex(c => c.id === cardId);
     if (cardIndex === -1) {
@@ -427,6 +526,9 @@ class PestenRoom {
       return { success: false, error: 'Not your turn' };
     }
 
+    // Clear turn timer - player made a move
+    this.clearTurnTimer();
+
     // If there are pending draws, must draw that many
     const drawCount = this.pendingDraws > 0 ? this.pendingDraws : 1;
     const drawnCards = [];
@@ -471,6 +573,14 @@ class PestenRoom {
     while (!this.players[this.currentPlayerIndex].connected && attempts < this.players.length) {
       this.currentPlayerIndex = (this.currentPlayerIndex + this.direction + this.players.length) % this.players.length;
       attempts++;
+    }
+
+    // Start turn timer for the new player (only for human players)
+    const currentPlayer = this.players[this.currentPlayerIndex];
+    if (currentPlayer && !currentPlayer.isBot) {
+      this.startTurnTimer();
+    } else {
+      this.clearTurnTimer();
     }
   }
 
@@ -601,6 +711,8 @@ class PestenRoom {
       deckCount: this.deck.length,
       gameLog: this.gameLog.slice(-10),
       winner: this.winner ? { id: this.winner.id, name: this.winner.name } : null,
+      turnTimeLimit: this.turnTimeLimit,
+      turnTimeRemaining: this.getTurnTimeRemaining(),
       players: this.players.map((p, index) => ({
         id: p.id,
         name: p.name,
@@ -619,9 +731,9 @@ class PestenRoom {
 }
 
 // Room management functions
-export function createRoom(name, hostId, hostName, hostAvatar, maxPlayers) {
+export function createRoom(name, hostId, hostName, hostAvatar, maxPlayers, turnTimeLimit = 30) {
   const id = `pesten_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const room = new PestenRoom(id, name, hostId, hostName, hostAvatar, maxPlayers);
+  const room = new PestenRoom(id, name, hostId, hostName, hostAvatar, maxPlayers, turnTimeLimit);
   rooms.set(id, room);
   return room;
 }

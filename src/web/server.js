@@ -1778,14 +1778,37 @@ function handlePestenMessage(ws, data) {
     }
 
     case 'pesten:createRoom': {
-      const { name, maxPlayers } = data;
+      const { name, maxPlayers, turnTimeLimit } = data;
       const room = createPestenRoom(
         name || `${user.username}'s Room`,
         user.id,
         user.username,
         user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
-        maxPlayers || 4
+        maxPlayers || 4,
+        turnTimeLimit || 30
       );
+
+      // Set up turn timeout callback
+      room.setTurnTimeoutCallback((roomId, timedOutPlayerId, result, drawCount) => {
+        const updatedRoom = getPestenRoom(roomId);
+        if (updatedRoom) {
+          // Send personalized state to each player (so they see their own hand)
+          const roomClients = pestenClients.get(roomId);
+          if (roomClients) {
+            roomClients.forEach(client => {
+              if (client.readyState === 1 && client.user) {
+                client.send(JSON.stringify({
+                  type: 'pesten:turnTimeout',
+                  playerId: timedOutPlayerId,
+                  drawCount,
+                  room: updatedRoom.getState(client.user.id)
+                }));
+              }
+            });
+          }
+        }
+      });
+
       ws.pestenRoomId = room.id;
       addPestenClientToRoom(ws, room.id);
       ws.send(JSON.stringify({
