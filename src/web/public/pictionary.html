@@ -3549,11 +3549,12 @@
       if (user.avatar) {
         avatarEl.innerHTML = `<img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">`;
       } else {
-        avatarEl.innerHTML = user.username ? user.username[0].toUpperCase() : '?';
+        const displayName = user.displayName || user.username || '?';
+        avatarEl.innerHTML = displayName[0].toUpperCase();
       }
 
       if (nameEl) {
-        nameEl.textContent = user.username || 'User';
+        nameEl.textContent = user.displayName || user.username || 'User';
       }
     }).catch(() => {});
   </script>

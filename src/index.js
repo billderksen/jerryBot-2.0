@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync } from 'fs';
-import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, broadcastListeners } from './web/server.js';
+import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, setMemberFetcher, broadcastListeners } from './web/server.js';
 import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 
@@ -92,6 +92,8 @@ setCommandHandler((command, guildId) => {
     queue.cycleLoopMode();
   } else if (command === '24/7') {
     queue.toggle24_7();
+  } else if (command === 'radio') {
+    queue.toggleRadio();
   }
 });
 
@@ -309,7 +311,25 @@ client.once(Events.ClientReady, readyClient => {
   
   // Pass logger to web server for web dashboard actions
   setActivityLogger({ logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong });
-  
+
+  // Set member fetcher for getting fresh nicknames
+  const targetGuildId = process.env.GUILD_ID || '918554414220972032';
+  setMemberFetcher(async (userId) => {
+    try {
+      const guild = readyClient.guilds.cache.get(targetGuildId);
+      if (!guild) return null;
+      const member = await guild.members.fetch(userId);
+      if (!member) return null;
+      return {
+        nickname: member.nickname,
+        globalName: member.user.globalName,
+        username: member.user.username
+      };
+    } catch (error) {
+      return null;
+    }
+  });
+
   startWebServer();
   
   // Periodically refresh listeners to catch any nickname changes (every 30 seconds)

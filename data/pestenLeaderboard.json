@@ -2,8 +2,15 @@
   "players": {
     "81784467353513984": {
       "displayName": "bill0000",
-      "gamesPlayed": 1,
-      "gamesWon": 0
+      "gamesPlayed": 3,
+      "gamesWon": 2,
+      "lastPlayed": 1769100565628,
+      "cardsPlayed": 11,
+      "specialCardsPlayed": 6,
+      "drawsForced": 5,
+      "cardsDrawn": 4,
+      "winStreak": 1,
+      "bestWinStreak": 1
     }
   }
 }

@@ -1723,6 +1723,127 @@
       transform: scale(1.2);
     }
 
+    /* History controls (search & unique toggle) */
+    .history-controls {
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .history-search {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      padding: 6px 10px;
+      gap: 8px;
+    }
+
+    .history-search svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .history-search input {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      min-width: 0;
+    }
+
+    .history-search input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .history-unique-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+      transition: color 0.2s;
+    }
+
+    .history-unique-toggle:hover {
+      color: var(--text-secondary);
+    }
+
+    .history-unique-toggle:has(input:checked) {
+      color: var(--accent);
+    }
+
+    .history-unique-toggle input {
+      display: none;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 32px;
+      height: 18px;
+      background: var(--bg-primary);
+      border-radius: 9px;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .history-unique-toggle input:checked + .toggle-switch {
+      background: var(--accent);
+    }
+
+    .history-unique-toggle input:checked + .toggle-switch::after {
+      transform: translateX(14px);
+      background: white;
+    }
+
+    .history-unique-toggle:hover .toggle-switch::after {
+      background: var(--text-secondary);
+    }
+
+    .history-unique-toggle input:checked + .toggle-switch::after {
+      background: white;
+    }
+
+    .history-no-results {
+      padding: 30px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .play-count {
+      background: var(--accent);
+      color: var(--bg-primary);
+      padding: 1px 5px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+
     .queue-empty {
       text-align: center;
       padding: 60px 20px;
@@ -2144,6 +2265,17 @@
           <!-- Queue items will be inserted here -->
         </div>
         <button class="clear-queue-btn" id="clearQueueBtn"><svg><use href="#icon-trash"/></svg> Clear Queue</button>
+        <div class="history-controls" id="historyControls" style="display: none;">
+          <div class="history-search">
+            <svg><use href="#icon-search"/></svg>
+            <input type="text" id="historySearch" placeholder="Search history..." oninput="filterHistory()">
+          </div>
+          <label class="history-unique-toggle">
+            <input type="checkbox" id="historyUniqueToggle" onchange="filterHistory()">
+            <span class="toggle-switch"></span>
+            <span>Unique</span>
+          </label>
+        </div>
         <div class="queue-list" id="historyList" style="display: none;">
           <!-- Recently played items will be inserted here -->
         </div>
@@ -2871,13 +3003,14 @@
           const user = await response.json();
           loggedInUser = user; // Store for use in commands
           
-          document.getElementById('userName').textContent = user.username;
-          
+          const displayName = user.displayName || user.username;
+          document.getElementById('userName').textContent = displayName;
+
           if (user.avatar) {
-            document.getElementById('userAvatar').innerHTML = 
+            document.getElementById('userAvatar').innerHTML =
               `<img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png" alt="Avatar">`;
           } else {
-            document.getElementById('userAvatar').textContent = user.username.charAt(0).toUpperCase();
+            document.getElementById('userAvatar').textContent = displayName.charAt(0).toUpperCase();
           }
         }
       } catch (error) {
@@ -4315,8 +4448,11 @@
       const historyList = document.getElementById('historyList');
       const historyCount = document.getElementById('historyCount');
       const recentlyPlayed = state.recentlyPlayed || [];
-      
+
       historyCount.textContent = recentlyPlayed.length;
+
+      // Apply filters
+      const filteredHistory = getFilteredHistory();
 
       if (recentlyPlayed.length === 0) {
         historyList.innerHTML = `
@@ -4325,28 +4461,87 @@
             <div>No recently played songs</div>
           </div>
         `;
+      } else if (filteredHistory.length === 0) {
+        historyList.innerHTML = `
+          <div class="history-no-results">
+            <div>No songs match your search</div>
+          </div>
+        `;
       } else {
-        historyList.innerHTML = recentlyPlayed.map((song, index) => `
-          <div class="queue-item history-item" onclick="replaySong(${index})" title="${escapeHtml(song.title)}">
+        historyList.innerHTML = filteredHistory.map((item) => `
+          <div class="queue-item history-item" onclick="replaySong(${item.originalIndex})" title="${escapeHtml(item.song.title)}">
             <div class="queue-item-number">
-              <span>${index + 1}</span>
+              <span>${item.displayIndex}</span>
             </div>
             <div class="queue-item-art">
-              ${song.thumbnail 
-                ? `<img src="${song.thumbnail}" alt="" onerror="this.parentElement.innerHTML='<div class=\\'mini-placeholder\\'>🎵</div>'">`
+              ${item.song.thumbnail
+                ? `<img src="${item.song.thumbnail}" alt="" onerror="this.parentElement.innerHTML='<div class=\\'mini-placeholder\\'>🎵</div>'">`
                 : '<div class="mini-placeholder">🎵</div>'
               }
             </div>
             <div class="queue-item-info">
-              <div class="queue-item-title">${escapeHtml(song.title)}</div>
-              <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
-              <div class="history-time">${formatTimeAgo(song.playedAt)}</div>
+              <div class="queue-item-title">${escapeHtml(item.song.title)}</div>
+              <div class="queue-item-meta">${escapeHtml(item.song.requestedBy || 'Unknown')}${item.playCount > 1 ? ` <span class="play-count">×${item.playCount}</span>` : ''}</div>
+              <div class="history-time">${formatTimeAgo(item.song.playedAt)}</div>
             </div>
-            <div class="queue-item-duration">${formatDuration(song.duration)}</div>
-            <div class="history-replay" onclick="replaySong(${index})" title="Play again"><svg><use href="#icon-replay"/></svg></div>
+            <div class="queue-item-duration">${formatDuration(item.song.duration)}</div>
+            <div class="history-replay" onclick="replaySong(${item.originalIndex})" title="Play again"><svg><use href="#icon-replay"/></svg></div>
           </div>
         `).join('');
       }
+    }
+
+    function getFilteredHistory() {
+      const recentlyPlayed = state.recentlyPlayed || [];
+      const searchInput = document.getElementById('historySearch');
+      const uniqueToggle = document.getElementById('historyUniqueToggle');
+
+      const searchTerm = (searchInput?.value || '').toLowerCase().trim();
+      const uniqueOnly = uniqueToggle?.checked || false;
+
+      let results = recentlyPlayed.map((song, index) => ({
+        song,
+        originalIndex: index,
+        displayIndex: index + 1,
+        playCount: 1
+      }));
+
+      // Apply search filter
+      if (searchTerm) {
+        results = results.filter(item =>
+          item.song.title.toLowerCase().includes(searchTerm) ||
+          (item.song.requestedBy || '').toLowerCase().includes(searchTerm)
+        );
+      }
+
+      // Apply unique filter - keep only first occurrence of each URL
+      if (uniqueOnly) {
+        const seenUrls = new Map();
+        const uniqueResults = [];
+
+        for (const item of results) {
+          const url = item.song.url;
+          if (!seenUrls.has(url)) {
+            seenUrls.set(url, item);
+            uniqueResults.push(item);
+          } else {
+            // Increment play count on the first occurrence
+            seenUrls.get(url).playCount++;
+          }
+        }
+        results = uniqueResults;
+      }
+
+      // Update display indices after filtering
+      results.forEach((item, idx) => {
+        item.displayIndex = idx + 1;
+      });
+
+      return results;
+    }
+
+    function filterHistory() {
+      updateHistoryList();
     }
 
     function formatTimeAgo(timestamp) {
@@ -4364,16 +4559,18 @@
       activeTab = tab;
       const queueList = document.getElementById('queueList');
       const historyList = document.getElementById('historyList');
+      const historyControls = document.getElementById('historyControls');
       const clearQueueBtn = document.getElementById('clearQueueBtn');
       const tabs = document.querySelectorAll('.queue-tab');
-      
+
       tabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
       });
-      
+
       if (tab === 'queue') {
         queueList.style.display = 'block';
         historyList.style.display = 'none';
+        historyControls.style.display = 'none';
         // Show clear button if queue has items
         if (state.queue.length > 0) {
           clearQueueBtn.classList.add('visible');
@@ -4381,6 +4578,7 @@
       } else {
         queueList.style.display = 'none';
         historyList.style.display = 'block';
+        historyControls.style.display = 'flex';
         // Hide clear button on history tab
         clearQueueBtn.classList.remove('visible');
       }

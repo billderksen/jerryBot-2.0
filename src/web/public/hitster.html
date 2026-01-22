@@ -1529,7 +1529,7 @@
                 const response = await fetch('/api/me');
                 if (response.ok) {
                     user = await response.json();
-                    document.getElementById('username').textContent = user.username;
+                    document.getElementById('username').textContent = user.displayName || user.username;
                     document.getElementById('user-avatar').src = user.avatar
                         ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
                         : 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -1703,7 +1703,7 @@
         }
 
         function createRoom() {
-            const name = document.getElementById('room-name-input').value.trim() || `${user.username}'s Room`;
+            const name = document.getElementById('room-name-input').value.trim() || `${user.displayName || user.username}'s Room`;
             const cardsToWin = parseInt(document.getElementById('cards-to-win').value);
             const maxPlayers = parseInt(document.getElementById('max-players').value);
 
@@ -1790,7 +1790,7 @@
             const container = document.getElementById('waiting-players');
             container.innerHTML = currentRoom.players.map(p => `
                 <div class="waiting-player">
-                    <img src="https://cdn.discordapp.com/embed/avatars/${parseInt(p.id) % 5}.png" alt="">
+                    <img src="${p.avatar || `https://cdn.discordapp.com/embed/avatars/${parseInt(p.id) % 5}.png`}" alt="">
                     <span>${escapeHtml(p.name)}</span>
                     ${p.id === currentRoom.hostId ? '<span class="host-badge">Host</span>' : ''}
                 </div>
@@ -2034,10 +2034,11 @@
             container.innerHTML = currentRoom.players.map(p => {
                 const isCurrent = p.id === currentRoom.currentPlayerId;
                 const isStealer = currentRoom.turnPhase === 'stealing' && p.id === currentRoom.currentStealerId;
+                const avatarSrc = p.avatar || `https://cdn.discordapp.com/embed/avatars/${parseInt(p.id) % 5}.png`;
 
                 return `
                     <div class="player-item ${isCurrent ? 'current-turn' : ''} ${isStealer ? 'stealer' : ''}">
-                        <img class="player-avatar" src="https://cdn.discordapp.com/embed/avatars/${parseInt(p.id) % 5}.png" alt="">
+                        <img class="player-avatar" src="${avatarSrc}" alt="">
                         <div class="player-details">
                             <div class="player-name">${escapeHtml(p.name)}</div>
                             <div class="player-cards">${p.timelineCount} cards</div>

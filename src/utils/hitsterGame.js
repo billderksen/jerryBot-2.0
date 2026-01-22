@@ -80,12 +80,13 @@ class HitsterRoom {
         this.playerOrder = [];
     }
 
-    addPlayer(userId, userName) {
+    addPlayer(userId, userName, userAvatar = null) {
         // Check if player already exists (reconnection)
         if (this.players.has(userId)) {
             const player = this.players.get(userId);
             player.connected = true;
             player.name = userName; // Update name in case it changed
+            if (userAvatar) player.avatar = userAvatar;
             return { success: true, isSpectator: false, reconnected: true };
         }
 
@@ -94,11 +95,12 @@ class HitsterRoom {
             const spectator = this.spectators.get(userId);
             spectator.connected = true;
             spectator.name = userName;
+            if (userAvatar) spectator.avatar = userAvatar;
             return { success: true, isSpectator: true, reconnected: true };
         }
 
         if (this.state === 'playing') {
-            return this.addSpectator(userId, userName);
+            return this.addSpectator(userId, userName, userAvatar);
         }
 
         if (this.players.size >= this.settings.maxPlayers) {
@@ -108,6 +110,7 @@ class HitsterRoom {
         this.players.set(userId, {
             id: userId,
             name: userName,
+            avatar: userAvatar,
             timeline: [],
             score: 0,
             connected: true
@@ -121,7 +124,7 @@ class HitsterRoom {
         return this.players.has(userId) || this.spectators.has(userId);
     }
 
-    addSpectator(userId, userName) {
+    addSpectator(userId, userName, userAvatar = null) {
         if (this.players.has(userId)) {
             return { success: false, error: 'Already a player' };
         }
@@ -129,6 +132,7 @@ class HitsterRoom {
         this.spectators.set(userId, {
             id: userId,
             name: userName,
+            avatar: userAvatar,
             connected: true
         });
 
@@ -451,6 +455,7 @@ class HitsterRoom {
             players.push({
                 id: player.id,
                 name: player.name,
+                avatar: player.avatar,
                 score: player.score,
                 timelineCount: player.timeline.length,
                 connected: player.connected
@@ -459,7 +464,7 @@ class HitsterRoom {
 
         const spectators = [];
         for (const [id, spec] of this.spectators) {
-            spectators.push({ id: spec.id, name: spec.name });
+            spectators.push({ id: spec.id, name: spec.name, avatar: spec.avatar });
         }
 
         return {

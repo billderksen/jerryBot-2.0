@@ -288,6 +288,11 @@ export function is24_7Enabled() {
   return globalSettings.is24_7;
 }
 
+// Export getter for radio mode status
+export function isRadioEnabled() {
+  return globalSettings.radioEnabled;
+}
+
 // Player settings persistence
 function loadSettings() {
   try {
@@ -300,13 +305,14 @@ function loadSettings() {
       return {
         loopMode: data.loopMode || 'off',
         is24_7: data.is24_7 || false,
-        sleepEndTime: data.sleepEndTime || null
+        sleepEndTime: data.sleepEndTime || null,
+        radioEnabled: data.radioEnabled || false
       };
     }
   } catch (error) {
     console.error('Error loading settings:', error);
   }
-  return { loopMode: 'off', is24_7: false, sleepEndTime: null };
+  return { loopMode: 'off', is24_7: false, sleepEndTime: null, radioEnabled: false };
 }
 
 function saveSettings() {
@@ -324,7 +330,7 @@ function saveSettings() {
 // Global settings (shared across all clients)
 let globalSettings = loadSettings();
 let sleepTimer = null;
-console.log(`Loaded player settings: loopMode=${globalSettings.loopMode}, is24_7=${globalSettings.is24_7}, sleepEndTime=${globalSettings.sleepEndTime}`);
+console.log(`Loaded player settings: loopMode=${globalSettings.loopMode}, is24_7=${globalSettings.is24_7}, sleepEndTime=${globalSettings.sleepEndTime}, radioEnabled=${globalSettings.radioEnabled}`);
 
 // Setup sleep timer if one was persisted
 function setupSleepTimer() {
@@ -529,7 +535,8 @@ function broadcastState(seekPosition = null) {
       songStartTime: firstQueue.songStartTime,
       loopMode: globalSettings.loopMode,
       is24_7: globalSettings.is24_7,
-      sleepEndTime: globalSettings.sleepEndTime
+      sleepEndTime: globalSettings.sleepEndTime,
+      radioEnabled: globalSettings.radioEnabled
     });
   } else {
     webUpdateCallback({
@@ -542,7 +549,8 @@ function broadcastState(seekPosition = null) {
       guildId: null,
       loopMode: globalSettings.loopMode,
       is24_7: globalSettings.is24_7,
-      sleepEndTime: globalSettings.sleepEndTime
+      sleepEndTime: globalSettings.sleepEndTime,
+      radioEnabled: globalSettings.radioEnabled
     });
   }
 }
@@ -726,12 +734,12 @@ export class MusicQueue {
       // Reset history index when playing new songs normally
       this.historyIndex = -1;
       
-      // Add to global recently played (at the beginning, max 50)
+      // Add to global recently played (at the beginning, max 150)
       globalRecentlyPlayed.unshift({
         ...this.currentSong,
         playedAt: Date.now()
       });
-      if (globalRecentlyPlayed.length > 50) {
+      if (globalRecentlyPlayed.length > 150) {
         globalRecentlyPlayed.pop();
       }
       // Save to file for persistence
@@ -1069,6 +1077,15 @@ export class MusicQueue {
     console.log('24/7 mode:', globalSettings.is24_7 ? 'enabled' : 'disabled');
     broadcastState();
     return globalSettings.is24_7;
+  }
+
+  // Toggle radio mode (auto-play similar songs)
+  toggleRadio() {
+    globalSettings.radioEnabled = !globalSettings.radioEnabled;
+    saveSettings();
+    console.log('Radio mode:', globalSettings.radioEnabled ? 'enabled' : 'disabled');
+    broadcastState();
+    return globalSettings.radioEnabled;
   }
 
   // Seek to a specific position in the current song (in seconds)

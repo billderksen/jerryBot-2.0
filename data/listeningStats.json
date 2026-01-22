@@ -2,10 +2,10 @@
   "users": {
     "81784467353513984": {
       "displayName": "Shmerman MonkMonk",
-      "songsPlayed": 87,
-      "totalListeningTime": 8771,
+      "songsPlayed": 92,
+      "totalListeningTime": 9668,
       "firstSeen": 1768992649301,
-      "lastSeen": 1769078590289
+      "lastSeen": 1769102727780
     },
     "210093094241042433": {
       "displayName": "aukgdauwkbhe",
@@ -80,13 +80,13 @@
       "title": "Ticket to the tropics (lyrics) - Gerard Joling",
       "url": "https://www.youtube.com/watch?v=OfEtQLHOpiw",
       "thumbnail": "https://img.youtube.com/vi/OfEtQLHOpiw/hqdefault.jpg",
-      "playCount": 21,
-      "totalListeningTime": 3230,
+      "playCount": 22,
+      "totalListeningTime": 3288,
       "duration": 222,
       "requestedBy": {
         "81784467353513984": {
-          "displayName": "bill0000",
-          "count": 21
+          "displayName": "Shmerman MonkMonk",
+          "count": 22
         }
       }
     },
@@ -136,13 +136,13 @@
       "title": "André Hazes - Zeg Maar Niets Meer",
       "url": "https://www.youtube.com/watch?v=R22urvGcWy4",
       "thumbnail": "https://img.youtube.com/vi/R22urvGcWy4/hqdefault.jpg",
-      "playCount": 9,
-      "totalListeningTime": 1472,
+      "playCount": 11,
+      "totalListeningTime": 1721,
       "duration": 169,
       "requestedBy": {
         "81784467353513984": {
           "displayName": "Shmerman MonkMonk",
-          "count": 9
+          "count": 11
         }
       }
     },
@@ -151,7 +151,7 @@
       "url": "https://www.youtube.com/watch?v=VAc9opfAEYQ",
       "thumbnail": "https://img.youtube.com/vi/VAc9opfAEYQ/hqdefault.jpg",
       "playCount": 1,
-      "totalListeningTime": 1042,
+      "totalListeningTime": 1296,
       "duration": 255,
       "requestedBy": {
         "81784467353513984": {
@@ -233,8 +233,36 @@
           "count": 2
         }
       }
+    },
+    "https://www.youtube.com/watch?v=0sAAA2IYv9E": {
+      "title": "Gerard Joling - Ticket To The Tropics",
+      "url": "https://www.youtube.com/watch?v=0sAAA2IYv9E",
+      "thumbnail": "https://img.youtube.com/vi/0sAAA2IYv9E/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 336,
+      "duration": 337,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
+    },
+    "https://www.youtube.com/watch?v=C7kYuT8ds2w": {
+      "title": "André Hazes - Kleine Jongen",
+      "url": "https://www.youtube.com/watch?v=C7kYuT8ds2w",
+      "thumbnail": "https://img.youtube.com/vi/C7kYuT8ds2w/hqdefault.jpg",
+      "playCount": 1,
+      "totalListeningTime": 0,
+      "duration": 239,
+      "requestedBy": {
+        "81784467353513984": {
+          "displayName": "Shmerman MonkMonk",
+          "count": 1
+        }
+      }
     }
   },
-  "totalSongsPlayed": 96,
-  "totalListeningTime": 19819
+  "totalSongsPlayed": 101,
+  "totalListeningTime": 20716
 }

@@ -218,17 +218,24 @@ app.get('/auth/discord/callback', async (req, res) => {
     });
 
     let hasAccess = false;
-    
+    let serverNickname = null;
+
     if (memberResponse.ok) {
       const memberData = await memberResponse.json();
       // Check if user has the required role
       hasAccess = memberData.roles && memberData.roles.includes(getRequiredRoleId());
+      // Get server nickname if set
+      serverNickname = memberData.nick;
     }
+
+    // Display name priority: server nickname > global display name > username
+    const displayName = serverNickname || userData.global_name || userData.username;
 
     // Store user in session
     req.session.user = {
       id: userData.id,
       username: userData.username,
+      displayName: displayName,
       discriminator: userData.discriminator,
       avatar: userData.avatar,
       hasAccess: hasAccess
@@ -267,8 +274,13 @@ let activityLogger = null;
 
 export function setActivityLogger(logger) {
   activityLogger = logger;
-  // Also set for pictionary game
-  setPictionaryActivityLogger(logger);
+}
+
+// Member fetcher (will be set by index.js) - used to get fresh nicknames
+let memberFetcher = null;
+
+export function setMemberFetcher(fetcher) {
+  memberFetcher = fetcher;
 }
 
 app.get('/access-denied', (req, res) => {
@@ -281,9 +293,27 @@ app.get('/logout', (req, res) => {
 });
 
 // API to get current user (no auth required - used on access-denied page)
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (req.session && req.session.user) {
-    res.json(req.session.user);
+    const user = { ...req.session.user };
+
+    // Try to get fresh nickname from Discord bot
+    if (memberFetcher && user.id) {
+      try {
+        const memberData = await memberFetcher(user.id);
+        if (memberData) {
+          // Update displayName with fresh data: server nickname > global display name > username
+          user.displayName = memberData.nickname || memberData.globalName || user.username;
+          // Also update session for consistency
+          req.session.user.displayName = user.displayName;
+        }
+      } catch (error) {
+        // If fetching fails, use cached displayName
+        console.error('Error fetching member data:', error);
+      }
+    }
+
+    res.json(user);
   } else {
     res.status(401).json({ error: 'Not logged in' });
   }
@@ -988,9 +1018,9 @@ function handlePictionaryMessage(ws, data) {
     case 'pictionary:room:create': {
       const { name, settings } = data;
       const room = createRoom(
-        name || `${user.username}'s Room`,
+        name || `${user.displayName}'s Room`,
         user.id,
-        user.username,
+        user.displayName,
         user.avatar,
         settings
       );
@@ -1016,7 +1046,7 @@ function handlePictionaryMessage(ws, data) {
         }));
         return;
       }
-      const player = new Player(user.id, user.username, user.avatar);
+      const player = new Player(user.id, user.displayName, user.avatar);
       const result = room.addPlayer(player);
       if (!result.success) {
         ws.send(JSON.stringify({
@@ -1073,7 +1103,7 @@ function handlePictionaryMessage(ws, data) {
         return;
       }
       // Reconnect the player
-      const player = new Player(user.id, user.username, user.avatar);
+      const player = new Player(user.id, user.displayName, user.avatar);
       const result = room.addPlayer(player);
       if (!result.success) {
         ws.send(JSON.stringify({
@@ -1188,7 +1218,7 @@ function handlePictionaryMessage(ws, data) {
       const { message } = data;
       broadcastToRoom(roomId, 'chat:message', {
         playerId: user.id,
-        displayName: user.username,
+        displayName: user.displayName,
         message: message.slice(0, 200) // Limit message length
       });
       break;
@@ -1364,7 +1394,8 @@ function handleHitsterMessage(ws, data) {
         return;
       }
       // Reconnect the player
-      const result = room.addPlayer(user.id, user.username);
+      const avatarUrl = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null;
+      const result = room.addPlayer(user.id, user.displayName, avatarUrl);
       if (!result.success) {
         ws.send(JSON.stringify({ type: 'hitster:room:rejoinFailed' }));
         return;
@@ -1386,8 +1417,9 @@ function handleHitsterMessage(ws, data) {
     case 'hitster:room:create': {
       const { name, settings } = data;
       const roomId = `hitster_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const room = createHitsterRoom(roomId, name || `${user.username}'s Room`, user.id, user.username, settings);
-      room.addPlayer(user.id, user.username);
+      const avatarUrl = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null;
+      const room = createHitsterRoom(roomId, name || `${user.displayName}'s Room`, user.id, user.displayName, settings);
+      room.addPlayer(user.id, user.displayName, avatarUrl);
       ws.hitsterRoomId = roomId;
       addHitsterClientToRoom(ws, roomId);
       ws.send(JSON.stringify({
@@ -1410,7 +1442,8 @@ function handleHitsterMessage(ws, data) {
         }));
         return;
       }
-      const result = room.addPlayer(user.id, user.username);
+      const avatarUrl = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null;
+      const result = room.addPlayer(user.id, user.displayName, avatarUrl);
       if (!result.success) {
         ws.send(JSON.stringify({
           type: 'hitster:room:error',
@@ -1501,7 +1534,7 @@ function handleHitsterMessage(ws, data) {
       // Broadcast placement result
       broadcastToHitsterRoom(roomId, 'hitster:game:result', {
         playerId: user.id,
-        playerName: user.username,
+        playerName: user.displayName,
         correct: result.correct,
         song: result.song,
         timeline: result.newTimeline
@@ -1560,7 +1593,7 @@ function handleHitsterMessage(ws, data) {
 
       broadcastToHitsterRoom(roomId, 'hitster:game:stealResult', {
         playerId: user.id,
-        playerName: user.username,
+        playerName: user.displayName,
         correct: result.correct,
         song: result.song,
         timeline: result.newTimeline,
@@ -1605,7 +1638,7 @@ function handleHitsterMessage(ws, data) {
 
       broadcastToHitsterRoom(roomId, 'hitster:game:stealResult', {
         playerId: user.id,
-        playerName: user.username,
+        playerName: user.displayName,
         passed: true
       });
 
@@ -1629,7 +1662,7 @@ function handleHitsterMessage(ws, data) {
       if (!roomId) return;
       const { message } = data;
       broadcastToHitsterRoom(roomId, 'hitster:chat', {
-        author: user.username,
+        author: user.displayName,
         message: message.slice(0, 200)
       });
       break;
@@ -1759,7 +1792,7 @@ function handlePestenMessage(ws, data) {
       // Reconnect the player
       const result = room.addPlayer(
         user.id,
-        user.username,
+        user.displayName,
         user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
       );
       if (!result.success) {
@@ -1780,9 +1813,9 @@ function handlePestenMessage(ws, data) {
     case 'pesten:createRoom': {
       const { name, maxPlayers, turnTimeLimit } = data;
       const room = createPestenRoom(
-        name || `${user.username}'s Room`,
+        name || `${user.displayName}'s Room`,
         user.id,
-        user.username,
+        user.displayName,
         user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
         maxPlayers || 4,
         turnTimeLimit || 30
@@ -1831,7 +1864,7 @@ function handlePestenMessage(ws, data) {
       }
       const result = room.addPlayer(
         user.id,
-        user.username,
+        user.displayName,
         user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
       );
       if (!result.success) {
