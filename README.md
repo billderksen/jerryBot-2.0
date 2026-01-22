@@ -1,44 +1,48 @@
-# Discord.js Bot with OpenRouter API
+# JerryBot 2.0
 
-A Discord bot that uses the OpenRouter API to provide AI-powered chat responses. Users can interact with the bot using the `/chat` command to ask questions and receive intelligent answers.
+A feature-rich Discord bot with a web dashboard, music player, multiplayer games, and AI chat capabilities.
 
 ## Features
 
-- 🤖 Slash command integration (`/chat`)
-- 🧠 OpenRouter API integration (supports GPT-5 and other models)
-- 🎵 Music player with web dashboard
-- 🌐 Web interface with Discord OAuth2
-- ⚡ Fast and responsive
-- 🔒 Environment-based configuration
-- 🐧 Linux/Windows compatible
+### Music Player
+- **Web Dashboard** - Beautiful web interface to control music playback
+- **YouTube Integration** - Play songs from YouTube URLs or search queries
+- **Queue Management** - Add, remove, reorder, and shuffle songs
+- **Playback Controls** - Play, pause, skip, previous, seek, volume control
+- **Loop Modes** - Off, single track, or entire queue
+- **24/7 Mode** - Keep the bot in voice channel
+- **Radio Mode** - Auto-play similar songs when queue is empty
+- **Sleep Timer** - Automatically stop playback after set time
+- **Recently Played** - Browse up to 150 recent songs with search and filtering
+- **Listening Stats** - Track play counts and listening time per song
+
+### Multiplayer Games
+- **Pesten** - Dutch card game with turn timers, animations, and bot players
+- **Hitster** - Music guessing game where you build a timeline of songs by release year
+- **Pictionary** - Drawing and guessing game with multiple brush tools and colors
+
+### Other Features
+- **AI Chat** - `/chat` command powered by OpenRouter API
+- **Discord OAuth2** - Secure login with Discord, shows server nicknames
+- **Real-time Updates** - WebSocket-based live updates across all connected clients
+- **Activity Logging** - Track who played what and when
+- **Persistent Storage** - Settings, stats, and history survive restarts
 
 ## Prerequisites
 
 - Node.js 18.x or higher
-- A Discord bot token ([Discord Developer Portal](https://discord.com/developers/applications))
-- An OpenRouter API key ([OpenRouter](https://openrouter.ai/))
-- FFmpeg (auto-installed on Linux, bundled on Windows)
-- yt-dlp (auto-installed on Linux)
+- FFmpeg (for audio processing)
+- yt-dlp (for YouTube downloads)
+- A Discord bot token
+- An OpenRouter API key (optional, for AI chat)
 
 ## Setup Instructions
-
-### Windows Setup
-
-```bash
-# Navigate to project directory
-cd "c:\Scripts\jerryBot 2.0"
-
-# Install dependencies
-npm install
-```
 
 ### Linux Setup (Debian/Ubuntu)
 
 ```bash
-# Make the setup script executable
+# Make the setup script executable and run it
 chmod +x setup-linux.sh
-
-# Run the setup script (installs Node.js, FFmpeg, yt-dlp, dependencies)
 ./setup-linux.sh
 ```
 
@@ -62,101 +66,118 @@ sudo apt install -y build-essential python3
 npm install
 ```
 
-### 2. Configure Environment Variables
-
-Copy `.env.example` to `.env` and fill in your credentials:
+### Windows Setup
 
 ```bash
-Copy-Item .env.example .env
+cd "c:\path\to\jerryBot 2.0"
+npm install
 ```
 
-Edit `.env` with your actual values:
+Note: FFmpeg and yt-dlp binaries are bundled for Windows.
+
+### Configure Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
 ```env
-DISCORD_TOKEN=your_discord_bot_token_here
-CLIENT_ID=your_discord_client_id_here
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+# Discord Bot
+DISCORD_TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_client_id
+GUILD_ID=your_server_id
+
+# Discord OAuth2 (for web dashboard)
+CLIENT_SECRET=your_discord_client_secret
+OAUTH_REDIRECT_URI=http://localhost:3001/auth/discord/callback
+
+# Access Control
+REQUIRED_ROLE_ID=role_id_required_to_access_dashboard
+
+# OpenRouter API (optional, for /chat command)
+OPENROUTER_API_KEY=your_openrouter_api_key
 OPENROUTER_MODEL=openai/gpt-4o
+
+# Web Server
+WEB_PORT=3001
 ```
 
-**To enable GPT-5:** Update `OPENROUTER_MODEL` to the GPT-5 model identifier (e.g., `openai/gpt-5` or similar, check [OpenRouter docs](https://openrouter.ai/docs) for the exact model name).
-
-### 3. Get Your Discord Bot Token and Client ID
-
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application or select an existing one
-3. Go to the "Bot" section and copy the token → This is your `DISCORD_TOKEN`
-4. Go to "OAuth2" → "General" and copy the "Client ID" → This is your `CLIENT_ID`
-5. In "OAuth2" → "URL Generator":
-   - Select scopes: `bot`, `applications.commands`
-   - Select bot permissions: `Send Messages`, `Use Slash Commands`
-   - Copy the generated URL and open it in your browser to invite the bot to your server
-
-### 4. Get Your OpenRouter API Key
-
-1. Go to [OpenRouter](https://openrouter.ai/)
-2. Sign up or log in
-3. Navigate to your API keys section
-4. Generate a new API key → This is your `OPENROUTER_API_KEY`
-
-### 5. Deploy Slash Commands
-
-Before running the bot, deploy the slash commands to Discord:
+### Deploy Slash Commands
 
 ```bash
 npm run deploy
 ```
 
-You should see: `✅ Successfully reloaded 1 application (/) commands.`
-
-### 6. Run the Bot
+### Run the Bot
 
 ```bash
+# Production
 npm start
-```
 
-For development with auto-reload:
-```bash
+# Development (with auto-reload)
 npm run dev
 ```
-
-When the bot is ready, you'll see: `✅ Ready! Logged in as YourBotName#1234`
-
-## Usage
-
-In any Discord channel where the bot has access:
-
-```
-/chat question: What is the meaning of life?
-```
-
-The bot will respond with an AI-generated answer using the configured model.
 
 ## Project Structure
 
 ```
 jerryBot 2.0/
 ├── src/
-│   ├── commands/
-│   │   └── chat.js          # /chat command implementation
+│   ├── commands/           # Discord slash commands
+│   │   ├── chat.js         # AI chat command
+│   │   ├── play.js         # Music play command
+│   │   └── ...
 │   ├── utils/
-│   │   └── openrouter.js    # OpenRouter API client
-│   ├── index.js             # Main bot entry point
-│   └── deploy-commands.js   # Command deployment script
-├── .env.example             # Environment variables template
-├── .gitignore
+│   │   ├── musicQueue.js   # Music queue management
+│   │   ├── activityLogger.js
+│   │   ├── pestenGame.js   # Pesten card game logic
+│   │   ├── hitsterGame.js  # Hitster game logic
+│   │   └── pictionaryGame.js
+│   ├── web/
+│   │   ├── server.js       # Express + WebSocket server
+│   │   └── public/         # Web dashboard files
+│   │       ├── index.html  # Music player dashboard
+│   │       ├── pesten.html # Pesten game
+│   │       ├── hitster.html
+│   │       ├── pictionary.html
+│   │       └── stats.html  # Listening statistics
+│   ├── index.js            # Main bot entry point
+│   └── deploy-commands.js
+├── data/                   # Persistent storage
+│   ├── recentlyPlayed.json
+│   ├── listeningStats.json
+│   ├── playerSettings.json
+│   └── ...
+├── .env.example
 ├── package.json
 └── README.md
 ```
 
-## Available Scripts
+## Web Dashboard
 
-- `npm start` - Start the bot
-- `npm run dev` - Start the bot with auto-reload (Node 18+ required)
-- `npm run deploy` - Deploy slash commands to Discord
+Access the web dashboard at `http://localhost:3001` (or your configured domain).
 
-## Linux Production Deployment
+### Pages
+- `/` - Music player with queue, controls, and recently played
+- `/stats` - Listening statistics and play counts
+- `/pesten` - Pesten card game
+- `/hitster` - Hitster music game
+- `/pictionary` - Pictionary drawing game
 
-### 1. Create Systemd Service
+## Discord Commands
+
+| Command | Description |
+|---------|-------------|
+| `/play <query>` | Play a song from YouTube |
+| `/skip` | Skip the current song |
+| `/queue` | Show the current queue |
+| `/pause` | Pause playback |
+| `/resume` | Resume playback |
+| `/stop` | Stop playback and clear queue |
+| `/volume <0-100>` | Set volume |
+| `/chat <message>` | Chat with AI |
+
+## Production Deployment
+
+### Systemd Service
 
 ```bash
 sudo nano /etc/systemd/system/jerrybot.service
@@ -164,7 +185,7 @@ sudo nano /etc/systemd/system/jerrybot.service
 
 ```ini
 [Unit]
-Description=JerryBot Discord Music Player
+Description=JerryBot Discord Bot
 After=network.target
 
 [Service]
@@ -185,13 +206,7 @@ sudo systemctl enable jerrybot
 sudo systemctl start jerrybot
 ```
 
-### 2. Set Up Nginx Reverse Proxy (for HTTPS)
-
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-
-sudo nano /etc/nginx/sites-available/jerrybot
-```
+### Nginx Reverse Proxy (HTTPS)
 
 ```nginx
 server {
@@ -199,7 +214,7 @@ server {
     server_name yourdomain.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -212,51 +227,29 @@ server {
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/jerrybot /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-
-# Get SSL certificate
 sudo certbot --nginx -d yourdomain.com
 ```
 
-### 3. Update Discord OAuth Settings
-
-Update your `.env`:
-```env
-OAUTH_REDIRECT_URI=https://yourdomain.com/auth/discord/callback
-```
-
-Update Discord Developer Portal OAuth2 redirect URL to match.
-
 ## Troubleshooting
 
-**Bot doesn't respond to commands:**
-- Make sure you ran `npm run deploy` to register the slash commands
-- Check that the bot has the necessary permissions in your Discord server
-- Verify your `DISCORD_TOKEN` and `CLIENT_ID` are correct
-
-**OpenRouter API errors:**
-- Verify your `OPENROUTER_API_KEY` is valid
-- Check that you have credits in your OpenRouter account
-- Ensure the `OPENROUTER_MODEL` value is a valid model name
-
-**Music not playing (Linux):**
-- Make sure FFmpeg is installed: `ffmpeg -version`
-- Make sure yt-dlp is installed: `yt-dlp --version`
+**Music not playing:**
+- Check FFmpeg: `ffmpeg -version`
+- Check yt-dlp: `yt-dlp --version`
 - Update yt-dlp: `sudo yt-dlp -U`
-- Check audio permissions
 
-**Native module errors on Linux:**
-- Install build tools: `sudo apt install build-essential python3`
-- Rebuild native modules: `npm rebuild`
+**Bot not responding:**
+- Run `npm run deploy` to register commands
+- Check bot permissions in Discord server
+- Verify tokens in `.env`
 
-**Port 3000 already in use:**
-- Find what's using it: `sudo lsof -i :3000`
-- Kill the process or change `WEB_PORT` in `.env`
+**Web dashboard login issues:**
+- Verify `CLIENT_SECRET` and `OAUTH_REDIRECT_URI`
+- Check redirect URL matches Discord Developer Portal settings
+- Ensure user has the required role
 
-**Dependencies warnings:**
-- The low severity vulnerabilities are in development dependencies and don't affect bot functionality
+**Port already in use:**
+- Find process: `sudo lsof -i :3001`
+- Change `WEB_PORT` in `.env`
 
 ## License
 

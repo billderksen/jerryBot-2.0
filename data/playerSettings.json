@@ -2,5 +2,5 @@
   "loopMode": "off",
   "is24_7": false,
   "sleepEndTime": null,
-  "radioEnabled": true
+  "radioEnabled": false
 }

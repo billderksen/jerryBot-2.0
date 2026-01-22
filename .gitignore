@@ -6,8 +6,15 @@ node_modules/
 # Session data (contains sensitive auth tokens)
 data/sessions/
 
-# Runtime data
+# Runtime data (user-specific, changes frequently)
 data/recentlyPlayed.json
+data/listeningStats.json
+data/playerSettings.json
+
+# Game leaderboards (user-generated stats)
+data/pestenLeaderboard.json
+data/hitsterLeaderboard.json
+data/pictionaryLeaderboard.json
 
 # Temporary audio cache files
 *.opus
