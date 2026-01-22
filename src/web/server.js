@@ -974,17 +974,37 @@ function handlePictionaryMessage(ws, data) {
         return;
       }
       ws.pictionaryRoomId = room.id;
+      ws.isSpectator = result.asSpectator || false;
       addClientToRoom(ws, room.id);
       ws.send(JSON.stringify({
         type: 'pictionary:room:joined',
-        data: { room: room.toJSON(), isHost: room.hostId === user.id }
+        data: {
+          room: room.toJSON(),
+          isHost: room.hostId === user.id,
+          isSpectator: result.asSpectator || false
+        }
       }));
-      // Send current draw state if game is in progress
-      if (room.state === 'playing') {
+      // Send current draw state and game info if game is in progress
+      if (room.state === 'playing' || room.state === 'between_rounds') {
         ws.send(JSON.stringify({
           type: 'pictionary:draw:state',
           data: room.getDrawState()
         }));
+        // Send current game state to spectator
+        if (result.asSpectator) {
+          ws.send(JSON.stringify({
+            type: 'pictionary:game:state',
+            data: {
+              round: room.currentRound,
+              totalRounds: room.totalRounds,
+              drawerId: room.getCurrentDrawer()?.id,
+              drawerName: room.getCurrentDrawer()?.displayName,
+              hint: room.currentHint,
+              state: room.state,
+              players: room.getPlayerList()
+            }
+          }));
+        }
       }
       broadcastRoomList();
       break;
@@ -996,12 +1016,14 @@ function handlePictionaryMessage(ws, data) {
         const room = getRoom(roomId);
         if (room) {
           room.removePlayer(user.id);
-          if (room.players.size === 0) {
+          // Delete room only if no players AND no spectators
+          if (room.players.size === 0 && room.spectators.size === 0) {
             deleteRoom(roomId);
           }
         }
         removeClientFromRoom(ws, roomId);
         ws.pictionaryRoomId = null;
+        ws.isSpectator = false;
         broadcastRoomList();
       }
       break;
@@ -1029,6 +1051,16 @@ function handlePictionaryMessage(ws, data) {
       break;
     }
 
+    case 'pictionary:game:selectWord': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'choosing') return;
+      if (room.getCurrentDrawer()?.id !== user.id) return;
+      const { word } = data;
+      room.selectWord(word);
+      break;
+    }
+
     case 'pictionary:game:guess': {
       const roomId = ws.pictionaryRoomId;
       const room = getRoom(roomId);
@@ -1053,6 +1085,18 @@ function handlePictionaryMessage(ws, data) {
         displayName: user.username,
         message: message.slice(0, 200) // Limit message length
       });
+      break;
+    }
+
+    case 'pictionary:reaction': {
+      const roomId = ws.pictionaryRoomId;
+      if (!roomId) return;
+      const { emoji } = data;
+      // Only allow specific emojis
+      const allowedEmojis = ['👍', '😂', '🔥', '😮', '🎨'];
+      if (!allowedEmojis.includes(emoji)) return;
+      // Broadcast to everyone except sender
+      broadcastToRoom(roomId, 'reaction', { emoji, playerId: user.id }, user.id);
       break;
     }
 

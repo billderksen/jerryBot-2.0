@@ -180,6 +180,81 @@
       font-size: 13px;
     }
 
+    .room-status {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-left: 8px;
+    }
+
+    .room-status.waiting {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .room-status.in-progress {
+      background: rgba(241, 196, 15, 0.2);
+      color: var(--warning);
+    }
+
+    .spectator-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(241, 196, 15, 0.2);
+      border: 1px solid var(--warning);
+      border-radius: 6px;
+      color: var(--warning);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .spectator-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .spectator-section h4 {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .spectator-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .spectator-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--bg-tertiary);
+      border-radius: 16px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .spectator-item .avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+
     .btn {
       padding: 10px 20px;
       border: none;
@@ -278,6 +353,152 @@
     .player-score {
       font-weight: 600;
       color: var(--accent);
+    }
+
+    .player-score-block {
+      text-align: right;
+    }
+
+    .player-games {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .stat-highlight {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .streak-badge {
+      margin-left: 4px;
+      font-size: 12px;
+    }
+
+    /* Word Choice Overlay */
+    .word-choice-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+      border-radius: 12px;
+    }
+
+    .word-choice-overlay.show {
+      display: flex;
+    }
+
+    .word-choice-title {
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .word-choices {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .word-choice-btn {
+      padding: 16px 32px;
+      background: var(--bg-tertiary);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .word-choice-btn:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      transform: scale(1.05);
+    }
+
+    .word-choice-timer {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Emoji Reactions */
+    .reaction-bar {
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      justify-content: center;
+    }
+
+    .reaction-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .reaction-btn:hover {
+      background: var(--bg-hover);
+      transform: scale(1.1);
+    }
+
+    .floating-reaction {
+      position: absolute;
+      font-size: 32px;
+      pointer-events: none;
+      animation: floatUp 2s ease-out forwards;
+      z-index: 200;
+    }
+
+    @keyframes floatUp {
+      0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-100px) scale(1.5);
+      }
+    }
+
+    /* Confetti */
+    .confetti-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2000;
+      overflow: hidden;
+    }
+
+    .confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      animation: confettiFall 3s ease-out forwards;
+    }
+
+    @keyframes confettiFall {
+      0% {
+        transform: translateY(-10px) rotate(0deg);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(100vh) rotate(720deg);
+        opacity: 0;
+      }
     }
 
     /* Create Room Modal */
@@ -461,17 +682,19 @@
     }
 
     .canvas-container {
-      flex: 1;
+      width: 800px;
+      height: 600px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
       position: relative;
+      margin: 0 auto;
     }
 
     #gameCanvas {
-      width: 100%;
-      height: 100%;
+      width: 800px;
+      height: 600px;
       display: block;
       background: #ffffff;
       cursor: crosshair;
@@ -881,6 +1104,8 @@
       .canvas-area {
         order: 1;
         gap: 10px;
+        flex: 1;
+        min-height: 0;
       }
 
       .players-panel {
@@ -978,12 +1203,18 @@
 
       /* Canvas */
       .canvas-container {
-        min-height: 300px;
+        width: 100%;
+        height: 40vh;
+        min-height: 250px;
         max-height: 50vh;
+        flex: none;
         touch-action: none;
+        margin: 0;
       }
 
       #gameCanvas {
+        width: 100% !important;
+        height: 100% !important;
         touch-action: none;
       }
 
@@ -1120,7 +1351,9 @@
       }
 
       .canvas-container {
-        min-height: 250px;
+        min-height: 200px;
+        height: 35vh;
+        max-height: 45vh;
       }
     }
 
@@ -1134,7 +1367,7 @@
   <div class="container">
     <div class="header">
       <div class="header-left">
-        <a href="/" class="back-btn">
+        <a href="/" class="back-btn" id="backBtn" onclick="handleBack(event)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
           </svg>
@@ -1203,6 +1436,19 @@
 
         <div class="canvas-container" id="canvasContainer" style="display: none;">
           <canvas id="gameCanvas"></canvas>
+          <div class="word-choice-overlay" id="wordChoiceOverlay">
+            <div class="word-choice-title">Choose a word to draw:</div>
+            <div class="word-choices" id="wordChoices"></div>
+            <div class="word-choice-timer" id="wordChoiceTimer">Auto-selecting in 10s...</div>
+          </div>
+        </div>
+
+        <div class="reaction-bar" id="reactionBar" style="display: none;">
+          <button class="reaction-btn" onclick="sendReaction('👍')">👍</button>
+          <button class="reaction-btn" onclick="sendReaction('😂')">😂</button>
+          <button class="reaction-btn" onclick="sendReaction('🔥')">🔥</button>
+          <button class="reaction-btn" onclick="sendReaction('😮')">😮</button>
+          <button class="reaction-btn" onclick="sendReaction('🎨')">🎨</button>
         </div>
 
         <div class="drawing-tools" id="drawingTools" style="display: none;">
@@ -1299,6 +1545,11 @@
           <option value="5">5 Rounds</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Custom Words (optional)</label>
+        <textarea id="customWordsInput" placeholder="Add your own words, one per line or comma-separated..." rows="3" style="width:100%;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;resize:vertical;"></textarea>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">These will be mixed in with regular words</div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="hideCreateRoomModal()">Cancel</button>
         <button class="btn btn-primary" onclick="createRoom()">Create</button>
@@ -1331,6 +1582,7 @@
     let ws = null;
     let currentRoom = null;
     let isHost = false;
+    let isSpectator = false;
     let isDrawing = false;
     let currentTool = 'pencil';
     let currentColor = '#000000';
@@ -1345,6 +1597,12 @@
     let lastX = 0, lastY = 0;
     let currentStroke = null;
     let previewCanvas, previewCtx;
+    let canvasSnapshot = null; // Saved canvas state for shape preview
+
+    // Undo/Redo stacks (canvas snapshots for performance)
+    const undoStack = [];
+    const redoStack = [];
+    const MAX_UNDO_STEPS = 30;
 
     // Initialize on load
     document.addEventListener('DOMContentLoaded', () => {
@@ -1396,6 +1654,19 @@
           removePlayerFromList(data.playerId);
           updateWaitingPlayers();
           break;
+        case 'pictionary:room:spectatorJoined':
+          addSpectatorToList(data.spectator);
+          addSystemMessage(`${data.spectator.displayName} joined as spectator`);
+          break;
+        case 'pictionary:room:spectatorLeft':
+          removeSpectatorFromList(data.playerId);
+          break;
+        case 'pictionary:room:spectatorPromoted':
+          // A spectator became a player
+          removeSpectatorFromList(data.player.id);
+          addPlayerToList(data.player);
+          addSystemMessage(`${data.player.displayName} is now a player`);
+          break;
         case 'pictionary:room:newHost':
           if (currentRoom) {
             currentRoom.hostId = data.hostId;
@@ -1404,7 +1675,20 @@
           }
           break;
         case 'pictionary:room:reset':
-          resetToWaiting(data.players);
+          resetToWaiting(data.players, data.spectators);
+          break;
+        case 'pictionary:game:state':
+          // Received by spectators joining mid-game
+          handleGameState(data);
+          break;
+        case 'pictionary:game:choosing':
+          showChoosingState(data);
+          break;
+        case 'pictionary:game:chooseWord':
+          showWordChoices(data.words);
+          break;
+        case 'pictionary:reaction':
+          showFloatingReaction(data.emoji, true);
           break;
         case 'pictionary:game:started':
           gameStarted(data);
@@ -1437,10 +1721,22 @@
           clearCanvasLocal();
           break;
         case 'pictionary:draw:undo':
-          // Redraw canvas from server state
+          // Non-drawer receives undo notification - restore from local stack
+          if (!canDraw && undoStack.length > 0) {
+            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            redoStack.push(currentState);
+            const previousState = undoStack.pop();
+            ctx.putImageData(previousState, 0, 0);
+          }
           break;
         case 'pictionary:draw:redo':
-          drawRemoteStroke(data.stroke);
+          // Non-drawer receives redo notification - restore from local redo stack
+          if (!canDraw && redoStack.length > 0) {
+            const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            undoStack.push(currentState);
+            const redoState = redoStack.pop();
+            ctx.putImageData(redoState, 0, 0);
+          }
           break;
         case 'pictionary:draw:state':
           restoreDrawState(data.history);
@@ -1470,13 +1766,20 @@
       const difficulty = document.getElementById('difficultySelect').value;
       const rounds = parseInt(document.getElementById('roundsSelect').value);
 
+      // Parse custom words
+      const customWordsInput = document.getElementById('customWordsInput').value.trim();
+      const customWords = customWordsInput
+        ? customWordsInput.split(/[,\n]/).map(w => w.trim()).filter(w => w.length > 0 && w.length <= 30)
+        : [];
+
       ws.send(JSON.stringify({
         type: 'pictionary:room:create',
         name,
-        settings: { language, difficulty, rounds }
+        settings: { language, difficulty, rounds, customWords }
       }));
 
       hideCreateRoomModal();
+      document.getElementById('customWordsInput').value = ''; // Clear for next time
     }
 
     function joinRoom(roomId) {
@@ -1490,7 +1793,18 @@
       ws.send(JSON.stringify({ type: 'pictionary:room:leave' }));
       currentRoom = null;
       isHost = false;
+      isSpectator = false;
+      const badge = document.getElementById('spectatorBadge');
+      if (badge) badge.remove();
       showLobby();
+    }
+
+    function handleBack(event) {
+      if (currentRoom) {
+        event.preventDefault();
+        leaveRoom();
+      }
+      // If not in a room, let the default href="/" navigate to music player
     }
 
     function startGame() {
@@ -1500,13 +1814,22 @@
     function joinedRoom(data) {
       currentRoom = data.room;
       isHost = data.isHost;
+      isSpectator = data.isSpectator || false;
       showGame();
       renderPlayerList(currentRoom.players);
+      renderSpectatorList(currentRoom.spectators || []);
       updateWaitingPlayers();
       updateStartButton();
+      updateSpectatorUI();
 
       if (currentRoom.state === 'waiting') {
         showWaitingRoom();
+      } else if (isSpectator && (currentRoom.state === 'playing' || currentRoom.state === 'between_rounds')) {
+        // Spectator joining active game
+        showCanvas();
+        if (isSpectator) {
+          showToast('You joined as a spectator. You can play in the next game!', 'info');
+        }
       }
     }
 
@@ -1530,13 +1853,19 @@
 
       container.innerHTML = rooms.map(room => {
         const lang = getLanguageDisplay(room.language);
+        const isInProgress = room.state === 'playing' || room.state === 'between_rounds';
+        const statusBadge = isInProgress
+          ? '<span class="room-status in-progress">In Progress</span>'
+          : '<span class="room-status waiting">Waiting</span>';
+        const joinText = isInProgress ? 'Spectate' : 'Join';
+        const spectatorInfo = room.spectatorCount > 0 ? ` + ${room.spectatorCount} watching` : '';
         return `
         <div class="room-item" onclick="joinRoom('${room.id}')">
           <div class="room-info">
-            <div class="room-name">${lang.flag} ${escapeHtml(room.name)}</div>
+            <div class="room-name">${lang.flag} ${escapeHtml(room.name)} ${statusBadge}</div>
             <div class="room-details">${room.difficulty} difficulty &bull; ${lang.name}</div>
           </div>
-          <div class="room-players">${room.playerCount}/${room.maxPlayers} players</div>
+          <div class="room-players">${room.playerCount}/${room.maxPlayers} players${spectatorInfo}</div>
         </div>
       `}).join('');
     }
@@ -1552,10 +1881,19 @@
         <div class="leaderboard-item">
           <div class="rank ${getRankClass(index)}">${index + 1}</div>
           <div class="player-info">
-            <div class="player-name">${escapeHtml(player.displayName)}</div>
-            <div class="player-stats">${player.gamesWon} wins / ${player.gamesPlayed} games</div>
+            <div class="player-name">
+              ${escapeHtml(player.displayName)}
+              ${player.winStreak >= 3 ? '<span class="streak-badge" title="On a winning streak!">🔥</span>' : ''}
+            </div>
+            <div class="player-stats">
+              <span class="stat-highlight">${player.winRate}%</span> win rate ·
+              <span class="stat-highlight">${player.avgPoints}</span> avg pts
+            </div>
           </div>
-          <div class="player-score">${player.totalPoints}</div>
+          <div class="player-score-block">
+            <div class="player-score">${player.gamesWon}W</div>
+            <div class="player-games">${player.gamesPlayed} games</div>
+          </div>
         </div>
       `).join('');
     }
@@ -1590,15 +1928,304 @@
       }
     }
 
+    function addSpectatorToList(spectator) {
+      if (!currentRoom) return;
+      if (!currentRoom.spectators) currentRoom.spectators = [];
+      currentRoom.spectators.push(spectator);
+      renderSpectatorList(currentRoom.spectators);
+    }
+
+    function removeSpectatorFromList(playerId) {
+      if (!currentRoom || !currentRoom.spectators) return;
+      currentRoom.spectators = currentRoom.spectators.filter(s => s.id !== playerId);
+      renderSpectatorList(currentRoom.spectators);
+    }
+
+    function renderSpectatorList(spectators) {
+      // Update spectator section in players panel
+      let spectatorSection = document.getElementById('spectatorSection');
+      if (!spectatorSection) {
+        // Create spectator section if it doesn't exist
+        const playersPanel = document.querySelector('.players-panel');
+        spectatorSection = document.createElement('div');
+        spectatorSection.id = 'spectatorSection';
+        spectatorSection.className = 'spectator-section';
+        playersPanel.appendChild(spectatorSection);
+      }
+
+      if (!spectators || spectators.length === 0) {
+        spectatorSection.style.display = 'none';
+        return;
+      }
+
+      spectatorSection.style.display = 'block';
+      spectatorSection.innerHTML = `
+        <h4>Spectators (${spectators.length})</h4>
+        <div class="spectator-list">
+          ${spectators.map(s => `
+            <div class="spectator-item">
+              <div class="avatar">${s.displayName[0].toUpperCase()}</div>
+              <span>${escapeHtml(s.displayName)}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function updateSpectatorUI() {
+      const chatInput = document.getElementById('chatInput');
+      const roomControls = document.getElementById('roomControls');
+
+      if (isSpectator) {
+        // Show spectator badge
+        let badge = document.getElementById('spectatorBadge');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.id = 'spectatorBadge';
+          badge.className = 'spectator-badge';
+          badge.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+            </svg>
+            Spectating
+          `;
+          roomControls.insertBefore(badge, roomControls.firstChild);
+        }
+        chatInput.disabled = true;
+        chatInput.placeholder = 'Spectators cannot chat or guess';
+      } else {
+        const badge = document.getElementById('spectatorBadge');
+        if (badge) badge.remove();
+      }
+    }
+
+    function handleGameState(data) {
+      // Called when a spectator receives current game state
+      currentRoom.state = data.state;
+      renderPlayerList(data.players);
+      document.getElementById('roundInfo').textContent = `Round ${data.round}/${data.totalRounds} - ${data.drawerName}'s turn`;
+      document.getElementById('wordHint').textContent = data.hint || '_ _ _ _ _';
+      showCanvas();
+    }
+
+    // Word choice functions
+    let wordChoiceInterval = null;
+
+    function showChoosingState(data) {
+      showCanvas();
+      document.getElementById('roundInfo').textContent = `Round ${data.round} - ${data.drawerName} is choosing a word...`;
+      document.getElementById('wordHint').textContent = '? ? ?';
+      document.getElementById('reactionBar').style.display = 'none';
+
+      // Update player list to show who's drawing
+      if (currentRoom) {
+        currentRoom.players.forEach(p => {
+          const el = document.getElementById(`player-${p.id}`);
+          if (el) {
+            el.classList.remove('drawing', 'guessed');
+            if (p.id === data.drawerId) {
+              el.classList.add('drawing');
+            }
+          }
+        });
+      }
+    }
+
+    function showWordChoices(words) {
+      const overlay = document.getElementById('wordChoiceOverlay');
+      const container = document.getElementById('wordChoices');
+      const timerEl = document.getElementById('wordChoiceTimer');
+
+      container.innerHTML = words.map(word => `
+        <button class="word-choice-btn" onclick="selectWord('${escapeHtml(word)}')">${escapeHtml(word)}</button>
+      `).join('');
+
+      overlay.classList.add('show');
+
+      // Countdown timer
+      let timeLeft = 10;
+      timerEl.textContent = `Auto-selecting in ${timeLeft}s...`;
+      if (wordChoiceInterval) clearInterval(wordChoiceInterval);
+      wordChoiceInterval = setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = `Auto-selecting in ${timeLeft}s...`;
+        if (timeLeft <= 0) {
+          clearInterval(wordChoiceInterval);
+          wordChoiceInterval = null;
+        }
+      }, 1000);
+    }
+
+    function selectWord(word) {
+      const overlay = document.getElementById('wordChoiceOverlay');
+      overlay.classList.remove('show');
+      if (wordChoiceInterval) {
+        clearInterval(wordChoiceInterval);
+        wordChoiceInterval = null;
+      }
+
+      ws.send(JSON.stringify({
+        type: 'pictionary:game:selectWord',
+        word: word
+      }));
+    }
+
+    function hideWordChoiceOverlay() {
+      document.getElementById('wordChoiceOverlay').classList.remove('show');
+      if (wordChoiceInterval) {
+        clearInterval(wordChoiceInterval);
+        wordChoiceInterval = null;
+      }
+    }
+
+    // Emoji reactions
+    function sendReaction(emoji) {
+      ws.send(JSON.stringify({
+        type: 'pictionary:reaction',
+        emoji: emoji
+      }));
+      showFloatingReaction(emoji);
+    }
+
+    function showFloatingReaction(emoji, fromOther = false) {
+      const container = document.getElementById('canvasContainer');
+      const reaction = document.createElement('div');
+      reaction.className = 'floating-reaction';
+      reaction.textContent = emoji;
+      reaction.style.left = (20 + Math.random() * 60) + '%';
+      reaction.style.bottom = '20px';
+      container.appendChild(reaction);
+
+      setTimeout(() => reaction.remove(), 2000);
+
+      if (!fromOther) playSound('pop');
+    }
+
+    // Sound effects
+    const sounds = {
+      correct: null,
+      tick: null,
+      pop: null,
+      win: null,
+      roundEnd: null
+    };
+
+    function initSounds() {
+      // Create audio context on first user interaction
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      // We'll use simple oscillator-based sounds
+      sounds.initialized = true;
+    }
+
+    function playSound(type) {
+      if (!sounds.initialized) initSounds();
+
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+
+        const ctx = new AudioContext();
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+
+        switch(type) {
+          case 'correct':
+            oscillator.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+            oscillator.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+            oscillator.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.4);
+            break;
+          case 'tick':
+            oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.1);
+            break;
+          case 'pop':
+            oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.15);
+            break;
+          case 'win':
+            // Fanfare
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+              const osc = ctx.createOscillator();
+              const g = ctx.createGain();
+              osc.connect(g);
+              g.connect(ctx.destination);
+              osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
+              g.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.15);
+              g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3);
+              osc.start(ctx.currentTime + i * 0.15);
+              osc.stop(ctx.currentTime + i * 0.15 + 0.3);
+            });
+            return;
+          case 'roundEnd':
+            oscillator.frequency.setValueAtTime(440, ctx.currentTime);
+            oscillator.frequency.setValueAtTime(330, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.4);
+            break;
+        }
+      } catch (e) {
+        // Audio not supported or blocked
+      }
+    }
+
+    // Confetti celebration
+    function showConfetti() {
+      const container = document.createElement('div');
+      container.className = 'confetti-container';
+      document.body.appendChild(container);
+
+      const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#fd79a8', '#a29bfe'];
+
+      for (let i = 0; i < 100; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + '%';
+        confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animationDelay = Math.random() * 2 + 's';
+        confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
+        container.appendChild(confetti);
+      }
+
+      setTimeout(() => container.remove(), 5000);
+    }
+
     function updateWaitingPlayers() {
       if (!currentRoom) return;
       const container = document.getElementById('waitingPlayers');
-      container.innerHTML = currentRoom.players.map(player => `
+      const spectators = currentRoom.spectators || [];
+
+      let html = currentRoom.players.map(player => `
         <div class="waiting-player">
           <div class="player-avatar">${player.displayName[0].toUpperCase()}</div>
           <span>${escapeHtml(player.displayName)}</span>
         </div>
       `).join('');
+
+      if (spectators.length > 0) {
+        html += `<div class="waiting-player" style="opacity: 0.6;">
+          <span>+ ${spectators.length} spectator${spectators.length > 1 ? 's' : ''}</span>
+        </div>`;
+      }
+
+      container.innerHTML = html;
     }
 
     function updateStartButton() {
@@ -1629,12 +2256,23 @@
       document.getElementById('waitingRoom').style.display = 'flex';
       document.getElementById('canvasContainer').style.display = 'none';
       document.getElementById('drawingTools').style.display = 'none';
+
+      // Update waiting message based on spectator status
+      const waitingMessage = document.getElementById('waitingMessage');
+      if (isSpectator) {
+        waitingMessage.textContent = 'You will join as a player when the next game starts...';
+      } else {
+        waitingMessage.textContent = 'Waiting for players to join...';
+      }
     }
 
     function showCanvas() {
       document.getElementById('waitingRoom').style.display = 'none';
       document.getElementById('canvasContainer').style.display = 'block';
-      resizeCanvas();
+      // Wait for layout to complete before sizing canvas
+      requestAnimationFrame(() => {
+        resizeCanvas();
+      });
     }
 
     // Game events
@@ -1649,6 +2287,8 @@
     function roundStarted(data) {
       canDraw = false;
       currentWord = null;
+      showCanvas(); // Ensure canvas is visible and sized
+      hideWordChoiceOverlay();
       clearCanvasLocal();
 
       document.getElementById('roundInfo').textContent = `Round ${data.round} - ${data.drawerName}'s turn`;
@@ -1669,11 +2309,23 @@
       // Enable/disable chat input
       const chatInput = document.getElementById('chatInput');
       const isDrawer = data.drawerId === getCurrentUserId();
-      chatInput.disabled = isDrawer;
-      chatInput.placeholder = isDrawer ? "You're drawing!" : "Type your guess...";
 
-      // Show/hide drawing tools
-      document.getElementById('drawingTools').style.display = isDrawer ? 'flex' : 'none';
+      if (isSpectator) {
+        chatInput.disabled = true;
+        chatInput.placeholder = 'Spectators cannot guess';
+      } else if (isDrawer) {
+        chatInput.disabled = true;
+        chatInput.placeholder = "You're drawing!";
+      } else {
+        chatInput.disabled = false;
+        chatInput.placeholder = 'Type your guess...';
+      }
+
+      // Show/hide drawing tools (never for spectators)
+      document.getElementById('drawingTools').style.display = (isDrawer && !isSpectator) ? 'flex' : 'none';
+
+      // Show reaction bar for non-drawers
+      document.getElementById('reactionBar').style.display = (!isDrawer && !isSpectator) ? 'flex' : 'none';
 
       // Start timer
       startTimer(data.timeLimit);
@@ -1707,6 +2359,7 @@
       if (el) el.classList.add('guessed');
 
       addChatMessage(data.displayName, 'guessed correctly!', 'correct');
+      playSound('correct');
 
       if (data.isFirst) {
         addSystemMessage(`${data.displayName} guessed first! +${data.score} points`);
@@ -1720,6 +2373,8 @@
     function roundEnded(data) {
       canDraw = false;
       stopTimer();
+      document.getElementById('reactionBar').style.display = 'none';
+      playSound('roundEnd');
 
       addSystemMessage(`The word was: ${data.word}`);
 
@@ -1731,6 +2386,7 @@
     function gameEnded(data) {
       stopTimer();
       currentRoom.state = 'ended';
+      document.getElementById('reactionBar').style.display = 'none';
 
       document.getElementById('resultsTitle').textContent = data.winner
         ? `${data.winner.displayName} wins!`
@@ -1747,19 +2403,36 @@
       `).join('');
 
       document.getElementById('resultsOverlay').classList.add('show');
+
+      // Celebration!
+      playSound('win');
+      showConfetti();
     }
 
     function hideResults() {
       document.getElementById('resultsOverlay').classList.remove('show');
     }
 
-    function resetToWaiting(players) {
+    function resetToWaiting(players, spectators = []) {
       currentRoom.state = 'waiting';
       currentRoom.players = players;
+      currentRoom.spectators = spectators;
+
+      // Check if we were promoted from spectator to player
+      const currentUserId = getCurrentUserId();
+      const wasSpectator = isSpectator;
+      isSpectator = spectators.some(s => s.id === currentUserId);
+
+      if (wasSpectator && !isSpectator) {
+        showToast('You are now a player! Get ready for the next game.', 'success');
+      }
+
       renderPlayerList(players);
+      renderSpectatorList(spectators);
       showWaitingRoom();
       updateWaitingPlayers();
       updateStartButton();
+      updateSpectatorUI();
       document.getElementById('chatMessages').innerHTML = '';
       addSystemMessage('Ready for another game!');
     }
@@ -1778,6 +2451,7 @@
 
         if (remaining <= 10) {
           timerEl.className = 'timer danger';
+          playSound('tick'); // Warning tick in final 10 seconds
         } else if (remaining <= 20) {
           timerEl.className = 'timer warning';
         }
@@ -1833,14 +2507,24 @@
     function resizeCanvas() {
       const container = document.getElementById('canvasContainer');
       const rect = container.getBoundingClientRect();
+      const isMobile = window.innerWidth <= 768;
+
+      // Use fixed size on desktop, dynamic on mobile
+      // Fallback to reasonable defaults if dimensions aren't available yet
+      let targetWidth = isMobile ? rect.width : 800;
+      let targetHeight = isMobile ? rect.height : 600;
+
+      // Ensure minimum dimensions (fallback if container not laid out yet)
+      if (targetWidth < 100) targetWidth = Math.min(window.innerWidth - 40, 800);
+      if (targetHeight < 100) targetHeight = Math.min(window.innerHeight * 0.4, 600);
 
       // Store current drawing
       const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
 
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      previewCanvas.width = rect.width;
-      previewCanvas.height = rect.height;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      previewCanvas.width = targetWidth;
+      previewCanvas.height = targetHeight;
 
       // Restore drawing
       if (imageData && ctx) {
@@ -1863,8 +2547,14 @@
       };
     }
 
+    // Reference canvas size for coordinate normalization
+    // All clients normalize/denormalize relative to this, ensuring consistency
+    const REFERENCE_WIDTH = 800;
+    const REFERENCE_HEIGHT = 600;
+
     // Normalize coordinates to 0-1 range for cross-device compatibility
     function normalizeCoord(x, y) {
+      // Normalize relative to actual canvas size
       return {
         x: x / canvas.width,
         y: y / canvas.height
@@ -1873,15 +2563,16 @@
 
     // Convert normalized coordinates back to pixels
     function denormalizeCoord(nx, ny) {
+      // Denormalize relative to actual canvas size
       return {
         x: nx * canvas.width,
         y: ny * canvas.height
       };
     }
 
-    // Normalize brush size relative to canvas (based on a 800px reference width)
+    // Normalize brush size relative to reference width
     function normalizeSize(size) {
-      return size / 800;
+      return size / REFERENCE_WIDTH;
     }
 
     function denormalizeSize(nsize) {
@@ -1923,9 +2614,18 @@
       lastX = x;
       lastY = y;
 
+      // Save canvas state to undo stack before any drawing
+      saveUndoState();
+
       if (currentTool === 'fill') {
         fillArea(x, y);
+        drawing = false;
         return;
+      }
+
+      // Save canvas state for shape preview (line, rect, ellipse)
+      if (currentTool !== 'pencil' && currentTool !== 'eraser') {
+        canvasSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
       }
 
       // Store normalized coordinates for network transmission
@@ -1994,13 +2694,15 @@
       }
 
       currentStroke = null;
+      canvasSnapshot = null;
       ctx.beginPath();
     }
 
     function drawShapePreview(x, y) {
-      // Restore canvas from preview
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Restore canvas from snapshot before drawing preview
+      if (canvasSnapshot) {
+        ctx.putImageData(canvasSnapshot, 0, 0);
+      }
 
       // Draw shape
       ctx.strokeStyle = currentColor;
@@ -2065,7 +2767,18 @@
       ctx.stroke();
     }
 
-    function drawRemoteStroke(stroke) {
+    function drawRemoteStroke(stroke, skipUndo = false) {
+      // Ensure canvas has valid dimensions before drawing
+      if (!canvas.width || !canvas.height || canvas.width < 50 || canvas.height < 50) {
+        // Canvas not ready, resize first
+        resizeCanvas();
+      }
+
+      // Save undo state for non-drawers (so they can see undo/redo)
+      if (!skipUndo && !canDraw) {
+        saveUndoState();
+      }
+
       if (stroke.type === 'fill') {
         // Fill coordinates are normalized
         const pos = denormalizeCoord(stroke.x, stroke.y);
@@ -2094,8 +2807,14 @@
     }
 
     function restoreDrawState(history) {
-      clearCanvasLocal();
-      history.forEach(stroke => drawRemoteStroke(stroke));
+      // Ensure canvas is properly sized before drawing
+      // Use requestAnimationFrame to wait for layout to complete
+      requestAnimationFrame(() => {
+        resizeCanvas();
+        clearCanvasLocal();
+        // Draw all strokes without adding to undo stack (initial state restore)
+        history.forEach(stroke => drawRemoteStroke(stroke, true));
+      });
     }
 
     function fillArea(x, y) {
@@ -2181,16 +2900,56 @@
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+      clearUndoStacks();
+    }
+
+    function saveUndoState() {
+      // Save current canvas state to undo stack
+      const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      undoStack.push(snapshot);
+      // Limit stack size
+      if (undoStack.length > MAX_UNDO_STEPS) {
+        undoStack.shift();
+      }
+      // Clear redo stack when new action is taken
+      redoStack.length = 0;
     }
 
     function undoDraw() {
       if (!canDraw) return;
+      if (undoStack.length === 0) return;
+
+      // Save current state to redo stack
+      const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      redoStack.push(currentState);
+
+      // Restore previous state
+      const previousState = undoStack.pop();
+      ctx.putImageData(previousState, 0, 0);
+
+      // Notify server and other clients
       ws.send(JSON.stringify({ type: 'pictionary:draw:undo' }));
     }
 
     function redoDraw() {
       if (!canDraw) return;
+      if (redoStack.length === 0) return;
+
+      // Save current state to undo stack
+      const currentState = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      undoStack.push(currentState);
+
+      // Restore redo state
+      const redoState = redoStack.pop();
+      ctx.putImageData(redoState, 0, 0);
+
+      // Notify server and other clients
       ws.send(JSON.stringify({ type: 'pictionary:draw:redo' }));
+    }
+
+    function clearUndoStacks() {
+      undoStack.length = 0;
+      redoStack.length = 0;
     }
 
     // Tool management

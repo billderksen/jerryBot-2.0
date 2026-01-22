@@ -2,10 +2,15 @@
   "players": {
     "183235848794406914": {
       "displayName": "qualitytime",
-      "gamesPlayed": 1,
-      "gamesWon": 1,
+      "gamesPlayed": 2,
+      "gamesWon": 2,
       "totalPoints": 0,
-      "correctGuesses": 0
+      "correctGuesses": 0,
+      "roundsDrawn": 3,
+      "successfulDrawings": 0,
+      "lastPlayed": 1769084007920,
+      "winStreak": 1,
+      "bestWinStreak": 1
     }
   }
 }
