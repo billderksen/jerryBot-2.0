@@ -16,7 +16,7 @@ const ROUND_TIME = 80; // seconds per round
 const MIN_PLAYERS = 1; // Set to 2 for production, 1 for testing
 const MAX_PLAYERS = 8;
 const ROUNDS_PER_GAME = 3;
-const HINT_INTERVALS = [20, 40, 60]; // seconds at which to reveal hints
+const MAX_HINTS_PER_ROUND = 3; // Maximum hints the drawer can give
 
 // Store active rooms
 const rooms = new Map();
@@ -89,25 +89,11 @@ function getRandomWord(difficulty = 'medium', language = 'en') {
   return wordList[Math.floor(Math.random() * wordList.length)];
 }
 
-// Generate hint from word (reveals some letters)
-function generateHint(word, revealCount) {
-  const letters = word.split('');
-  const indices = [];
-
-  // Get indices of non-space characters
-  letters.forEach((char, i) => {
-    if (char !== ' ') indices.push(i);
-  });
-
-  // Randomly select indices to reveal
-  const revealIndices = new Set();
-  while (revealIndices.size < Math.min(revealCount, indices.length)) {
-    revealIndices.add(indices[Math.floor(Math.random() * indices.length)]);
-  }
-
-  return letters.map((char, i) => {
+// Generate hint from word using provided revealed indices
+function generateHintFromIndices(word, revealedIndices) {
+  return word.split('').map((char, i) => {
     if (char === ' ') return ' ';
-    if (revealIndices.has(i)) return char;
+    if (revealedIndices.has(i)) return char;
     return '_';
   }).join('');
 }
@@ -136,10 +122,21 @@ function checkGuess(guess, word) {
   return { correct: false, close: false };
 }
 
-// Calculate score for guesser based on time
+// Calculate score for guesser based on time (uses clean round numbers)
 function calculateGuesserScore(timeElapsed, isFirst) {
-  const baseScore = Math.max(100, 500 - (timeElapsed * 5));
-  return isFirst ? baseScore + 50 : baseScore;
+  let baseScore;
+  if (timeElapsed <= 10) {
+    baseScore = 500;      // Very fast (0-10s)
+  } else if (timeElapsed <= 25) {
+    baseScore = 400;      // Fast (10-25s)
+  } else if (timeElapsed <= 45) {
+    baseScore = 300;      // Medium (25-45s)
+  } else if (timeElapsed <= 65) {
+    baseScore = 200;      // Slow (45-65s)
+  } else {
+    baseScore = 100;      // Very slow (65s+)
+  }
+  return isFirst ? baseScore + 100 : baseScore;
 }
 
 // Player class
@@ -195,14 +192,33 @@ export class Room {
     this.broadcastCallback = null;
     this.createdAt = Date.now();
     this.drawingStats = new Map(); // Track drawing stats per player
+    this.usedWords = new Set(); // Track used words to avoid repetition
+    this.revealedIndices = new Set(); // Track revealed letter positions for hints
   }
 
-  // Get a random word (includes custom words)
+  // Get a random word (includes custom words), avoiding recently used words
   getWord() {
-    // 30% chance to use custom word if available
-    if (this.customWords.length > 0 && Math.random() < 0.3) {
-      return this.customWords[Math.floor(Math.random() * this.customWords.length)];
+    const maxAttempts = 50;
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      let word;
+      // 30% chance to use custom word if available
+      if (this.customWords.length > 0 && Math.random() < 0.3) {
+        word = this.customWords[Math.floor(Math.random() * this.customWords.length)];
+      } else {
+        word = getRandomWord(this.difficulty, this.language);
+      }
+
+      // Check if word hasn't been used recently
+      if (!this.usedWords.has(word.toLowerCase())) {
+        return word;
+      }
+      attempts++;
     }
+
+    // If we couldn't find an unused word, clear used words and try again
+    this.usedWords.clear();
     return getRandomWord(this.difficulty, this.language);
   }
 
@@ -341,6 +357,7 @@ export class Room {
     this.state = 'playing';
     this.currentRound = 1;
     this.currentDrawerIndex = 0;
+    this.usedWords.clear(); // Clear used words for new game
 
     // Reset all player scores
     this.players.forEach(p => {
@@ -436,6 +453,8 @@ export class Room {
     }
 
     this.currentWord = word;
+    this.usedWords.add(word.toLowerCase()); // Track used word
+    this.revealedIndices = new Set(); // Reset revealed letters for new word
     this.currentHint = this.currentWord.split('').map(c => c === ' ' ? ' ' : '_').join('');
     this.roundStartTime = Date.now();
     this.state = 'playing';
@@ -450,43 +469,75 @@ export class Room {
       drawerName: drawer.displayName,
       hint: this.currentHint,
       wordLength: this.currentWord.length,
-      timeLimit: ROUND_TIME
+      timeLimit: ROUND_TIME,
+      maxHints: MAX_HINTS_PER_ROUND
     });
 
     // Send confirmed word to drawer
     if (this.broadcastCallback) {
       this.broadcastCallback(this.id, 'game:yourTurn', {
-        word: this.currentWord
+        word: this.currentWord,
+        maxHints: MAX_HINTS_PER_ROUND
       }, null, drawer.id);
     }
 
     // Start round timer
     this.roundTimer = setTimeout(() => this.endRound(false), ROUND_TIME * 1000);
 
-    // Schedule hint reveals
-    this.scheduleHints();
-
     return true;
   }
 
-  scheduleHints() {
-    const wordLength = this.currentWord.replace(/\s/g, '').length;
+  // Manual hint - called when drawer clicks the hint button
+  giveHint(drawerId) {
+    if (this.state !== 'playing' || !this.currentWord) {
+      return { success: false, error: 'Not in playing state' };
+    }
 
-    HINT_INTERVALS.forEach((seconds, index) => {
-      setTimeout(() => {
-        if (this.state !== 'playing' || !this.currentWord) return;
+    const drawer = this.getCurrentDrawer();
+    if (!drawer || drawer.id !== drawerId) {
+      return { success: false, error: 'Not the drawer' };
+    }
 
-        // Reveal more letters progressively
-        const revealCount = Math.min(Math.ceil(wordLength * (index + 1) * 0.2), wordLength - 1);
-        this.currentHint = generateHint(this.currentWord, revealCount);
-        this.hintsRevealed = index + 1;
+    if (this.hintsRevealed >= MAX_HINTS_PER_ROUND) {
+      return { success: false, error: 'No hints remaining' };
+    }
 
-        this.broadcast('game:hint', {
-          hint: this.currentHint,
-          hintsRevealed: this.hintsRevealed
-        });
-      }, seconds * 1000);
+    this.hintsRevealed++;
+
+    // Get indices of letters that can still be revealed (non-space, not already revealed)
+    const availableIndices = [];
+    this.currentWord.split('').forEach((char, i) => {
+      if (char !== ' ' && !this.revealedIndices.has(i)) {
+        availableIndices.push(i);
+      }
     });
+
+    // Reveal ~20% of the word's letters with each hint (at least 1)
+    const wordLength = this.currentWord.replace(/\s/g, '').length;
+    const lettersToReveal = Math.max(1, Math.ceil(wordLength * 0.2));
+
+    // Randomly pick letters to reveal, but keep at least 1 hidden
+    const maxReveal = Math.min(lettersToReveal, availableIndices.length - 1);
+    for (let i = 0; i < maxReveal && availableIndices.length > 1; i++) {
+      const randomIndex = Math.floor(Math.random() * availableIndices.length);
+      this.revealedIndices.add(availableIndices[randomIndex]);
+      availableIndices.splice(randomIndex, 1);
+    }
+
+    this.currentHint = generateHintFromIndices(this.currentWord, this.revealedIndices);
+
+    this.broadcast('game:hint', {
+      hint: this.currentHint,
+      hintsRevealed: this.hintsRevealed,
+      hintsRemaining: MAX_HINTS_PER_ROUND - this.hintsRevealed
+    });
+
+    return {
+      success: true,
+      hint: this.currentHint,
+      hintsRevealed: this.hintsRevealed,
+      hintsRemaining: MAX_HINTS_PER_ROUND - this.hintsRevealed
+    };
   }
 
   handleGuess(playerId, guess) {
@@ -532,7 +583,7 @@ export class Room {
       // Award drawer points
       const drawer = this.getCurrentDrawer();
       if (drawer) {
-        drawer.score += 25;
+        drawer.score += 50;
       }
 
       this.broadcast('game:correctGuess', {

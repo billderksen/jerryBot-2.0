@@ -82,6 +82,93 @@
       height: 18px;
     }
 
+    /* User profile dropdown */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+
+    .user-profile:hover { background: var(--bg-hover); }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      overflow: hidden;
+    }
+
+    .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .user-info-header { display: flex; flex-direction: column; }
+    .user-label { font-size: 11px; color: var(--text-muted); }
+    .user-name-display { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-width: 200px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.2s;
+      z-index: 2000;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .user-profile.open::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1999;
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .user-dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .user-dropdown-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .user-dropdown-item.logout { color: #ef4444; }
+    .user-dropdown-item.logout:hover { background: rgba(239,68,68,0.1); }
+
     h1 {
       font-size: 28px;
       font-weight: 700;
@@ -394,6 +481,34 @@
           Listening Stats
         </h1>
       </div>
+      <div class="user-profile" id="userProfile" onclick="toggleUserDropdown()">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-info-header">
+          <span class="user-label">Logged in as</span>
+          <span class="user-name-display" id="userNameDisplay">Loading...</span>
+        </div>
+        <div class="user-dropdown">
+          <a href="/" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+            Music Player
+          </a>
+          <a href="/stats" class="user-dropdown-item active">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            Listening Stats
+          </a>
+          <a href="/pictionary" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+            Pictionary Game
+          </a>
+          <a href="/osrs" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Runescape Tracker
+          </a>
+          <a href="/logout" class="user-dropdown-item logout">
+            &#128682; Logout
+          </a>
+        </div>
+      </div>
     </div>
 
     <div class="stats-overview" id="statsOverview">
@@ -653,6 +768,36 @@
     
     // Connect to WebSocket
     connectWebSocket();
+
+    // User profile dropdown
+    function toggleUserDropdown() {
+      document.getElementById('userProfile').classList.toggle('open');
+    }
+
+    document.addEventListener('click', (e) => {
+      const up = document.getElementById('userProfile');
+      if (up && !up.contains(e.target)) up.classList.remove('open');
+    });
+
+    async function loadUserInfo() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const user = await res.json();
+          document.getElementById('userNameDisplay').textContent = user.displayName || user.username;
+          if (user.avatar) {
+            const img = document.createElement('img');
+            img.src = 'https://cdn.discordapp.com/avatars/' + user.id + '/' + user.avatar + '.png';
+            img.alt = 'Avatar';
+            const avatarEl = document.getElementById('userAvatar');
+            avatarEl.textContent = '';
+            avatarEl.appendChild(img);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    loadUserInfo();
 
     // Load stats on page load
     loadStats();

@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSRS Tracker - Godcord</title>
+  <link rel="icon" type="image/jpeg" href="/images/jerry.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0b0b0b;
+      --bg-secondary: #141414;
+      --bg-card: #151515;
+      --bg-hover: #1e1e1e;
+      --bg-skill: #1a1a1a;
+      --border: #2a2a2a;
+      --border-accent: #3d3424;
+
+      --osrs-yellow: #ffff00;
+      --osrs-orange: #ff981f;
+      --osrs-green: #0dc10d;
+      --osrs-red: #ff3030;
+      --osrs-gold: #ffd700;
+      --osrs-light-gold: #c8aa6e;
+
+      --text-primary: #e0d6c2;
+      --text-secondary: #8b8069;
+      --text-muted: #5c5243;
+
+      --gain-positive: #0dc10d;
+      --gain-zero: #555;
+
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .back-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .back-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .page-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .page-title-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #3d3424, #2a2015);
+      border: 1px solid var(--border-accent);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .page-title h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--osrs-orange);
+    }
+
+    .page-title h1 span {
+      color: var(--osrs-gold);
+    }
+
+    /* Period selector */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .period-selector {
+      display: flex;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .period-btn {
+      padding: 8px 16px;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .period-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .period-btn.active {
+      color: var(--osrs-orange);
+      background: rgba(255, 152, 31, 0.1);
+    }
+
+    .sort-select {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 12px;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8069' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+
+    .sort-select:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-hover);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23e0d6c2' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    }
+
+    .sort-select:focus {
+      outline: none;
+      border-color: var(--osrs-orange);
+    }
+
+    /* User profile dropdown (matches other pages) */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+
+    .user-profile:hover { background: var(--bg-hover); }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      overflow: hidden;
+    }
+
+    .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .user-info { display: flex; flex-direction: column; }
+    .user-label { font-size: 11px; color: var(--text-muted); }
+    .user-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-width: 200px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.2s;
+      z-index: 2000;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .user-profile.open::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1999;
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .user-dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .user-dropdown-item.active {
+      background: rgba(255, 152, 31, 0.1);
+      color: var(--osrs-orange);
+    }
+
+    .user-dropdown-item.logout { color: #ef4444; }
+    .user-dropdown-item.logout:hover { background: rgba(239,68,68,0.1); }
+
+    /* Loading state */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      color: var(--text-secondary);
+      gap: 16px;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--osrs-orange);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Player grid */
+    .player-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Player card */
+    .player-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--osrs-gold);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .player-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .player-body {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.3s ease;
+    }
+
+    .player-card.collapsed .player-body {
+      grid-template-rows: 0fr;
+    }
+
+    .player-body-inner {
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .player-card.collapsed .player-header {
+      border-bottom: none;
+    }
+
+    .collapse-chevron {
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .player-card.collapsed .collapse-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .player-name-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .activity-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .activity-dot.active { background: var(--osrs-green); box-shadow: 0 0 6px var(--osrs-green); }
+    .activity-dot.recent { background: #ffff00; box-shadow: 0 0 6px #cccc00; }
+    .activity-dot.inactive { background: var(--osrs-orange); }
+    .activity-dot.dormant { background: var(--osrs-red); }
+
+    .player-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--osrs-yellow);
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    a.player-name:hover {
+      color: var(--osrs-gold);
+    }
+
+    .player-type {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .player-type.ironman { color: #aaa; }
+    .player-type.hardcore { color: #ff4444; }
+    .player-type.ultimate { color: #ccc; }
+
+    .player-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .player-meta {
+      text-align: right;
+    }
+
+    .combat-level {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--osrs-orange);
+    }
+
+    .last-active {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Stats bar */
+    .player-stats-bar {
+      display: flex;
+      justify-content: space-around;
+      padding: 14px 24px;
+      background: rgba(255,215,0,0.03);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--osrs-gold);
+    }
+
+    /* Skill grid */
+    .skill-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      margin: 0;
+    }
+
+    .skill-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--bg-skill);
+      min-height: 40px;
+      transition: background 0.15s;
+    }
+
+    .skill-cell:hover {
+      background: var(--bg-hover);
+    }
+
+    .skill-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      image-rendering: pixelated;
+    }
+
+    .skill-level {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--osrs-yellow);
+      min-width: 22px;
+      text-align: right;
+      text-shadow: 1px 1px 1px rgba(0,0,0,0.6);
+    }
+
+    .skill-gain {
+      font-size: 13px;
+      margin-left: auto;
+      font-weight: 500;
+    }
+
+    .skill-gain.positive { color: var(--gain-positive); }
+    .skill-gain.zero { color: var(--gain-zero); }
+
+    .skill-cell.has-gain {
+      background: rgba(13, 193, 13, 0.06);
+    }
+    .skill-cell.has-gain:hover {
+      background: rgba(13, 193, 13, 0.12);
+    }
+
+    /* Player card tabs */
+    .player-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .player-tab {
+      flex: 1;
+      padding: 11px 16px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .player-tab:hover {
+      color: var(--text-secondary);
+      background: var(--bg-hover);
+    }
+
+    .player-tab.active {
+      color: var(--osrs-orange);
+      border-bottom-color: var(--osrs-orange);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Boss/Activity list */
+    .boss-grid, .activity-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .boss-cell, .activity-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--bg-skill);
+      min-height: 40px;
+      transition: background 0.15s;
+    }
+
+    .boss-icon, .activity-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      object-fit: contain;
+    }
+
+    .boss-cell:hover, .activity-cell:hover {
+      background: var(--bg-hover);
+    }
+
+    .boss-name, .activity-name {
+      font-size: 14px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .boss-kc, .activity-score {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--osrs-yellow);
+      white-space: nowrap;
+    }
+
+    .boss-gain, .activity-gain {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .boss-gain.positive, .activity-gain.positive { color: var(--gain-positive); }
+    .boss-gain.zero, .activity-gain.zero { color: var(--gain-zero); }
+
+    .boss-cell.has-gain, .activity-cell.has-gain {
+      background: rgba(13, 193, 13, 0.06);
+    }
+    .boss-cell.has-gain:hover, .activity-cell.has-gain:hover {
+      background: rgba(13, 193, 13, 0.12);
+    }
+
+    .empty-tab {
+      padding: 50px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+      background: var(--bg-skill);
+    }
+
+    /* Total XP gained bar */
+    .total-gains-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      background: rgba(13, 193, 13, 0.05);
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .total-gains-bar .gain-value {
+      color: var(--gain-positive);
+      font-weight: 600;
+    }
+
+    .total-gains-bar .gain-value.zero {
+      color: var(--gain-zero);
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 900px;
+      margin: 24px auto 0;
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .footer a {
+      color: var(--osrs-light-gold);
+      text-decoration: none;
+    }
+
+    .footer a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .player-grid {
+        grid-template-columns: 1fr;
+      }
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .controls {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .boss-grid, .activity-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-left">
+        <a href="/" class="back-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          Back
+        </a>
+        <div class="page-title">
+          <div class="page-title-icon">&#9876;</div>
+          <h1>Runescape <span>Tracker</span></h1>
+        </div>
+      </div>
+
+      <div class="controls">
+        <select class="sort-select" id="sortSelect">
+          <option value="total-level">Sort: Total Level</option>
+          <option value="total-xp">Sort: Total XP</option>
+          <option value="combat">Sort: Combat Level</option>
+          <option value="recent">Sort: Recently Active</option>
+        </select>
+        <div class="period-selector">
+          <button class="period-btn" data-period="day">Day</button>
+          <button class="period-btn active" data-period="week">Week</button>
+          <button class="period-btn" data-period="month">Month</button>
+        </div>
+
+        <div class="user-profile" id="userProfile" onclick="toggleUserDropdown()">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <div class="user-info">
+            <span class="user-label">Logged in as</span>
+            <span class="user-name" id="userName">Loading...</span>
+          </div>
+          <div class="user-dropdown">
+            <a href="/" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+              Music Player
+            </a>
+            <a href="/stats" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+              Listening Stats
+            </a>
+            <a href="/pictionary" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+              Pictionary Game
+            </a>
+            <a href="/hitster" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              Hitster Music Game
+            </a>
+            <a href="/pesten" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+              Pesten Card Game
+            </a>
+            <a href="/osrs" class="user-dropdown-item active">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              Runescape Tracker
+            </a>
+            <a href="/logout" class="user-dropdown-item logout">
+              &#128682; Logout
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div id="content">
+      <div class="loading" id="loadingState">
+        <div class="loading-spinner"></div>
+        <span>Loading player data...</span>
+      </div>
+    </div>
+
+    <footer class="footer" id="footer" style="display:none;">
+      <span id="lastRefresh">Last updated: --</span>
+      <span id="nextRefresh">Next refresh in: --</span>
+    </footer>
+  </div>
+
+  <script>
+    // Skill order matching the OSRS skill tab layout
+    const SKILL_ORDER = [
+      'attack', 'hitpoints', 'mining',
+      'strength', 'agility', 'smithing',
+      'defence', 'herblore', 'fishing',
+      'ranged', 'thieving', 'cooking',
+      'prayer', 'crafting', 'firemaking',
+      'magic', 'fletching', 'woodcutting',
+      'runecrafting', 'slayer', 'farming',
+      'construction', 'hunter', 'sailing'
+    ];
+
+    const SKILL_ICONS = {
+      attack: 'https://oldschool.runescape.wiki/images/Attack_icon.png',
+      defence: 'https://oldschool.runescape.wiki/images/Defence_icon.png',
+      strength: 'https://oldschool.runescape.wiki/images/Strength_icon.png',
+      hitpoints: 'https://oldschool.runescape.wiki/images/Hitpoints_icon.png',
+      ranged: 'https://oldschool.runescape.wiki/images/Ranged_icon.png',
+      prayer: 'https://oldschool.runescape.wiki/images/Prayer_icon.png',
+      magic: 'https://oldschool.runescape.wiki/images/Magic_icon.png',
+      cooking: 'https://oldschool.runescape.wiki/images/Cooking_icon.png',
+      woodcutting: 'https://oldschool.runescape.wiki/images/Woodcutting_icon.png',
+      fletching: 'https://oldschool.runescape.wiki/images/Fletching_icon.png',
+      fishing: 'https://oldschool.runescape.wiki/images/Fishing_icon.png',
+      firemaking: 'https://oldschool.runescape.wiki/images/Firemaking_icon.png',
+      crafting: 'https://oldschool.runescape.wiki/images/Crafting_icon.png',
+      smithing: 'https://oldschool.runescape.wiki/images/Smithing_icon.png',
+      mining: 'https://oldschool.runescape.wiki/images/Mining_icon.png',
+      herblore: 'https://oldschool.runescape.wiki/images/Herblore_icon.png',
+      agility: 'https://oldschool.runescape.wiki/images/Agility_icon.png',
+      thieving: 'https://oldschool.runescape.wiki/images/Thieving_icon.png',
+      slayer: 'https://oldschool.runescape.wiki/images/Slayer_icon.png',
+      farming: 'https://oldschool.runescape.wiki/images/Farming_icon.png',
+      runecrafting: 'https://oldschool.runescape.wiki/images/Runecraft_icon.png',
+      hunter: 'https://oldschool.runescape.wiki/images/Hunter_icon.png',
+      construction: 'https://oldschool.runescape.wiki/images/Construction_icon.png',
+      sailing: 'https://oldschool.runescape.wiki/images/Sailing_icon.png'
+    };
+
+    const SKILL_NAMES = {
+      attack: 'Attack', defence: 'Defence', strength: 'Strength',
+      hitpoints: 'Hitpoints', ranged: 'Ranged', prayer: 'Prayer',
+      magic: 'Magic', cooking: 'Cooking', woodcutting: 'Woodcutting',
+      fletching: 'Fletching', fishing: 'Fishing', firemaking: 'Firemaking',
+      crafting: 'Crafting', smithing: 'Smithing', mining: 'Mining',
+      herblore: 'Herblore', agility: 'Agility', thieving: 'Thieving',
+      slayer: 'Slayer', farming: 'Farming', runecrafting: 'Runecrafting',
+      hunter: 'Hunter', construction: 'Construction', sailing: 'Sailing'
+    };
+
+    const BOSS_NAMES = {
+      abyssal_sire: 'Abyssal Sire', alchemical_hydra: 'Alchemical Hydra',
+      artio: 'Artio', barrows_chests: 'Barrows', bryophyta: 'Bryophyta',
+      callisto: 'Callisto', calvarion: "Calvar'ion", cerberus: 'Cerberus',
+      chambers_of_xeric: 'Chambers of Xeric', chambers_of_xeric_challenge_mode: 'CoX (CM)',
+      chaos_elemental: 'Chaos Elemental', chaos_fanatic: 'Chaos Fanatic',
+      commander_zilyana: 'Zilyana', corporeal_beast: 'Corp Beast',
+      crazy_archaeologist: 'Crazy Arch', dagannoth_prime: 'DK Prime',
+      dagannoth_rex: 'DK Rex', dagannoth_supreme: 'DK Supreme',
+      deranged_archaeologist: 'Deranged Arch', duke_sucellus: 'Duke Sucellus',
+      general_graardor: 'Graardor', giant_mole: 'Giant Mole',
+      grotesque_guardians: 'Grotesque Guard.', hespori: 'Hespori',
+      kalphite_queen: 'Kalphite Queen', king_black_dragon: 'KBD',
+      kraken: 'Kraken', kreearra: "Kree'arra",
+      kril_tsutsaroth: "K'ril Tsutsaroth", lunar_chests: 'Lunar Chests',
+      mimic: 'Mimic', nex: 'Nex', nightmare: 'Nightmare',
+      phosanis_nightmare: "Phosani's NM", obor: 'Obor',
+      phantom_muspah: 'Phantom Muspah', sarachnis: 'Sarachnis',
+      scorpia: 'Scorpia', scurrius: 'Scurrius', skotizo: 'Skotizo',
+      sol_heredit: 'Sol Heredit', spindel: 'Spindel', tempoross: 'Tempoross',
+      the_gauntlet: 'Gauntlet', the_corrupted_gauntlet: 'Corrupted Gauntlet',
+      the_leviathan: 'The Leviathan', the_whisperer: 'The Whisperer',
+      theatre_of_blood: 'Theatre of Blood', theatre_of_blood_hard_mode: 'ToB (HM)',
+      thermonuclear_smoke_devil: 'Thermy', tombs_of_amascut: 'Tombs of Amascut',
+      tombs_of_amascut_expert: 'ToA (Expert)', tzkal_zuk: 'TzKal-Zuk',
+      tztok_jad: 'TzTok-Jad', vardorvis: 'Vardorvis',
+      venenatis: 'Venenatis', vetion: "Vet'ion", vorkath: 'Vorkath',
+      wintertodt: 'Wintertodt', zalcano: 'Zalcano', zulrah: 'Zulrah',
+      colosseum: 'Colosseum', amoxliatl: 'Amoxliatl', araxxor: 'Araxxor',
+      hueycoatl: 'Hueycoatl'
+    };
+
+    const ACTIVITY_NAMES = {
+      bounty_hunter_hunter: 'Bounty Hunter', bounty_hunter_rogue: 'BH Rogue',
+      clue_scrolls_all: 'Clues (All)', clue_scrolls_beginner: 'Clues (Beginner)',
+      clue_scrolls_easy: 'Clues (Easy)', clue_scrolls_medium: 'Clues (Medium)',
+      clue_scrolls_hard: 'Clues (Hard)', clue_scrolls_elite: 'Clues (Elite)',
+      clue_scrolls_master: 'Clues (Master)', last_man_standing: 'LMS',
+      pvp_arena: 'PvP Arena', soul_wars_zeal: 'Soul Wars',
+      guardians_of_the_rift: 'Guardians of the Rift', league_points: 'League Points'
+    };
+
+    function formatBossName(key) {
+      return BOSS_NAMES[key] || key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    function formatActivityName(key) {
+      return ACTIVITY_NAMES[key] || key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // must match server
+
+    let currentPeriod = 'week';
+    let currentSort = 'total-level';
+    let cachedData = null;
+    let lastRefreshTime = null;
+
+    // User dropdown
+    function toggleUserDropdown() {
+      document.getElementById('userProfile').classList.toggle('open');
+    }
+
+    document.addEventListener('click', (e) => {
+      const up = document.getElementById('userProfile');
+      if (up && !up.contains(e.target)) up.classList.remove('open');
+    });
+
+    async function loadUserInfo() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const user = await res.json();
+          document.getElementById('userName').textContent = user.displayName || user.username;
+          if (user.avatar) {
+            const img = document.createElement('img');
+            img.src = 'https://cdn.discordapp.com/avatars/' + user.id + '/' + user.avatar + '.png';
+            img.alt = 'Avatar';
+            const avatarEl = document.getElementById('userAvatar');
+            avatarEl.textContent = '';
+            avatarEl.appendChild(img);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Data loading
+    async function loadData() {
+      try {
+        const res = await fetch('/api/osrs/players');
+        if (!res.ok) throw new Error('Failed to fetch');
+        cachedData = await res.json();
+        renderPlayers(cachedData);
+      } catch (error) {
+        const content = document.getElementById('content');
+        content.textContent = '';
+        const msg = document.createElement('div');
+        msg.className = 'empty-state';
+        const p = document.createElement('p');
+        p.textContent = 'Failed to load tracker data. Try refreshing the page.';
+        msg.appendChild(p);
+        content.appendChild(msg);
+      }
+    }
+
+    function sortPlayerIds(ids, players) {
+      return [...ids].sort((a, b) => {
+        const pa = players?.[a];
+        const pb = players?.[b];
+        if (!pa) return 1;
+        if (!pb) return -1;
+        switch (currentSort) {
+          case 'total-xp':
+            return (pb.skills?.overall?.experience || 0) - (pa.skills?.overall?.experience || 0);
+          case 'combat':
+            return (pb.combatLevel || 0) - (pa.combatLevel || 0);
+          case 'recent':
+            return new Date(pb.lastChangedAt || 0) - new Date(pa.lastChangedAt || 0);
+          case 'total-level':
+          default:
+            return (pb.skills?.overall?.level || 0) - (pa.skills?.overall?.level || 0);
+        }
+      });
+    }
+
+    function renderPlayers(data) {
+      const content = document.getElementById('content');
+      const playerIds = data.trackedPlayers || [];
+
+      if (playerIds.length === 0) {
+        content.textContent = '';
+        const msg = document.createElement('div');
+        msg.className = 'empty-state';
+        const p = document.createElement('p');
+        p.textContent = 'No players are being tracked.';
+        msg.appendChild(p);
+        content.appendChild(msg);
+        return;
+      }
+
+      const hasPlayerData = playerIds.some(id => data.players?.[id]);
+
+      if (!hasPlayerData) {
+        content.textContent = '';
+        const loading = document.createElement('div');
+        loading.className = 'loading';
+        const spinner = document.createElement('div');
+        spinner.className = 'loading-spinner';
+        const text = document.createElement('span');
+        text.textContent = 'Fetching player data from WiseOldMan... This may take a minute on first load.';
+        loading.appendChild(spinner);
+        loading.appendChild(text);
+        content.appendChild(loading);
+        return;
+      }
+
+      content.textContent = '';
+      const grid = document.createElement('div');
+      grid.className = 'player-grid';
+
+      const sortedIds = sortPlayerIds(playerIds, data.players);
+      for (const id of sortedIds) {
+        const player = data.players?.[id];
+        if (!player) continue;
+        const gains = data.gains?.[id]?.[currentPeriod];
+        grid.appendChild(createPlayerCard(player, gains));
+      }
+
+      content.appendChild(grid);
+      document.getElementById('footer').style.display = 'flex';
+
+      if (data.lastRefresh) {
+        lastRefreshTime = new Date(data.lastRefresh);
+        document.getElementById('lastRefresh').textContent = 'Last updated: ' + formatTimeAgo(lastRefreshTime);
+        updateCountdown();
+      }
+    }
+
+    function createPlayerCard(player, gains) {
+      const card = document.createElement('div');
+      card.className = 'player-card';
+
+      const activityClass = getActivityClass(player.lastChangedAt);
+      const lastActiveText = getLastActiveText(player.lastChangedAt);
+      const totalLevel = player.skills?.overall?.level || '?';
+      const totalXP = player.skills?.overall?.experience || 0;
+      const overallGained = gains?.skills?.overall?.experience?.gained || 0;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'player-header';
+
+      const nameSection = document.createElement('div');
+      nameSection.className = 'player-name-section';
+
+      const dot = document.createElement('div');
+      dot.className = 'activity-dot ' + activityClass;
+      dot.title = lastActiveText;
+
+      const nameWrapper = document.createElement('div');
+      const nameEl = document.createElement('a');
+      nameEl.className = 'player-name';
+      nameEl.href = 'https://wiseoldman.net/players/' + encodeURIComponent(player.username);
+      nameEl.target = '_blank';
+      nameEl.rel = 'noopener';
+      nameEl.textContent = player.displayName;
+      nameEl.addEventListener('click', (e) => e.stopPropagation());
+      nameWrapper.appendChild(nameEl);
+
+      if (player.type && player.type !== 'regular') {
+        const typeEl = document.createElement('div');
+        typeEl.className = 'player-type ' + player.type;
+        typeEl.textContent = player.type.charAt(0).toUpperCase() + player.type.slice(1);
+        nameWrapper.appendChild(typeEl);
+      }
+
+      nameSection.appendChild(dot);
+      nameSection.appendChild(nameWrapper);
+
+      const meta = document.createElement('div');
+      meta.className = 'player-meta';
+      const combatEl = document.createElement('div');
+      combatEl.className = 'combat-level';
+      combatEl.textContent = 'Combat ' + (player.combatLevel || '?');
+      const activeEl = document.createElement('div');
+      activeEl.className = 'last-active';
+      activeEl.textContent = lastActiveText;
+      meta.appendChild(combatEl);
+      meta.appendChild(activeEl);
+
+      const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      chevron.setAttribute('class', 'collapse-chevron');
+      chevron.setAttribute('viewBox', '0 0 24 24');
+      chevron.setAttribute('fill', 'none');
+      chevron.setAttribute('stroke', 'currentColor');
+      chevron.setAttribute('stroke-width', '2');
+      const chevronPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      chevronPath.setAttribute('d', 'M6 9l6 6 6-6');
+      chevron.appendChild(chevronPath);
+
+      const headerRight = document.createElement('div');
+      headerRight.className = 'player-header-right';
+      headerRight.appendChild(meta);
+      headerRight.appendChild(chevron);
+
+      header.appendChild(nameSection);
+      header.appendChild(headerRight);
+      header.addEventListener('click', () => {
+        card.classList.toggle('collapsed');
+        // Save state
+        const collapsed = JSON.parse(localStorage.getItem('osrsCollapsed') || '{}');
+        collapsed[player.id] = card.classList.contains('collapsed');
+        localStorage.setItem('osrsCollapsed', JSON.stringify(collapsed));
+      });
+
+      // Restore collapsed state
+      const collapsed = JSON.parse(localStorage.getItem('osrsCollapsed') || '{}');
+      if (collapsed[player.id]) card.classList.add('collapsed');
+
+      card.appendChild(header);
+
+      // Collapsible body wrapper
+      const body = document.createElement('div');
+      body.className = 'player-body';
+      const bodyInner = document.createElement('div');
+      bodyInner.className = 'player-body-inner';
+
+      // Stats bar
+      const statsBar = document.createElement('div');
+      statsBar.className = 'player-stats-bar';
+
+      const stats = [
+        { label: 'Total Level', value: formatNumber(totalLevel) },
+        { label: 'Total XP', value: formatXP(totalXP) },
+        { label: 'EHP', value: player.ehp ? player.ehp.toFixed(1) : '--' },
+        { label: 'EHB', value: player.ehb ? player.ehb.toFixed(1) : '--' }
+      ];
+
+      for (const stat of stats) {
+        const item = document.createElement('div');
+        item.className = 'stat-item';
+        const label = document.createElement('div');
+        label.className = 'stat-label';
+        label.textContent = stat.label;
+        const value = document.createElement('div');
+        value.className = 'stat-value';
+        value.textContent = stat.value;
+        item.appendChild(label);
+        item.appendChild(value);
+        statsBar.appendChild(item);
+      }
+
+      bodyInner.appendChild(statsBar);
+
+      // Tab bar
+      const tabBar = document.createElement('div');
+      tabBar.className = 'player-tabs';
+      const cardId = 'player-' + player.id;
+      const bossCount = Object.values(player.bosses || {}).filter(b => b.kills > 0).length;
+      const activityCount = Object.values(player.activities || {}).filter(a => a.score > 0).length;
+      const tabs = [
+        { id: 'skills', label: 'Skills' },
+        { id: 'bosses', label: 'Bosses' + (bossCount > 0 ? ' (' + bossCount + ')' : '') },
+        { id: 'activities', label: 'Activities' + (activityCount > 0 ? ' (' + activityCount + ')' : '') }
+      ];
+      for (const tab of tabs) {
+        const btn = document.createElement('button');
+        btn.className = 'player-tab' + (tab.id === 'skills' ? ' active' : '');
+        btn.textContent = tab.label;
+        btn.addEventListener('click', () => switchTab(cardId, tab.id));
+        tabBar.appendChild(btn);
+      }
+      bodyInner.appendChild(tabBar);
+
+      // Skills tab content
+      const skillsTab = document.createElement('div');
+      skillsTab.className = 'tab-content active';
+      skillsTab.id = cardId + '-skills';
+
+      const skillGrid = document.createElement('div');
+      skillGrid.className = 'skill-grid';
+
+      for (const skill of SKILL_ORDER) {
+        const skillData = player.skills?.[skill];
+        const gainData = gains?.skills?.[skill];
+        const level = skillData?.level ?? '--';
+        const xpGained = gainData?.experience?.gained ?? 0;
+
+        const cell = document.createElement('div');
+        cell.className = 'skill-cell' + (xpGained > 0 ? ' has-gain' : '');
+        cell.title = (SKILL_NAMES[skill] || skill) + ': Level ' + level + ', XP gained: ' + formatNumber(xpGained);
+
+        const icon = document.createElement('img');
+        icon.className = 'skill-icon';
+        icon.src = SKILL_ICONS[skill] || '';
+        icon.alt = skill;
+        icon.loading = 'lazy';
+
+        const levelEl = document.createElement('span');
+        levelEl.className = 'skill-level';
+        levelEl.textContent = level;
+
+        const gainEl = document.createElement('span');
+        gainEl.className = 'skill-gain ' + (xpGained > 0 ? 'positive' : 'zero');
+        gainEl.textContent = xpGained > 0 ? '+' + formatXPShort(xpGained) : '--';
+
+        cell.appendChild(icon);
+        cell.appendChild(levelEl);
+        cell.appendChild(gainEl);
+        skillGrid.appendChild(cell);
+      }
+
+      skillsTab.appendChild(skillGrid);
+
+      // Skills total gains bar
+      const gainsBar = document.createElement('div');
+      gainsBar.className = 'total-gains-bar';
+      gainsBar.appendChild(document.createTextNode('Total XP Gained: '));
+      const gainValue = document.createElement('span');
+      gainValue.className = 'gain-value' + (overallGained > 0 ? '' : ' zero');
+      gainValue.textContent = overallGained > 0 ? '+' + formatNumber(overallGained) : 'None';
+      gainsBar.appendChild(gainValue);
+      skillsTab.appendChild(gainsBar);
+      bodyInner.appendChild(skillsTab);
+
+      // Bosses tab content
+      const bossesTab = document.createElement('div');
+      bossesTab.className = 'tab-content';
+      bossesTab.id = cardId + '-bosses';
+      bodyInner.appendChild(bossesTab);
+      renderBossTab(bossesTab, player.bosses, gains?.bosses);
+
+      // Activities tab content
+      const activitiesTab = document.createElement('div');
+      activitiesTab.className = 'tab-content';
+      activitiesTab.id = cardId + '-activities';
+      bodyInner.appendChild(activitiesTab);
+      renderActivityTab(activitiesTab, player.activities, gains?.activities);
+
+      body.appendChild(bodyInner);
+      card.appendChild(body);
+
+      return card;
+    }
+
+    function switchTab(cardId, tabId) {
+      const card = document.getElementById(cardId + '-skills')?.closest('.player-card');
+      if (!card) return;
+      card.querySelectorAll('.player-tab').forEach(t => t.classList.remove('active'));
+      card.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      // Activate the clicked tab button (match by text prefix since labels may include counts)
+      card.querySelectorAll('.player-tab').forEach(t => {
+        if (t.textContent.toLowerCase().startsWith(tabId)) t.classList.add('active');
+      });
+      const content = document.getElementById(cardId + '-' + tabId);
+      if (content) content.classList.add('active');
+    }
+
+    function renderBossTab(container, bosses, bossGains) {
+      // Filter to bosses with KC > 0, sorted by KC descending
+      const entries = Object.entries(bosses || {})
+        .filter(([, b]) => b.kills > 0)
+        .sort((a, b) => b[1].kills - a[1].kills);
+
+      if (entries.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-tab';
+        empty.textContent = 'No boss kills recorded';
+        container.appendChild(empty);
+        return;
+      }
+
+      const grid = document.createElement('div');
+      grid.className = 'boss-grid';
+
+      for (const [name, boss] of entries) {
+        const gained = bossGains?.[name]?.kills?.gained ?? 0;
+
+        const cell = document.createElement('div');
+        cell.className = 'boss-cell' + (gained > 0 ? ' has-gain' : '');
+        cell.title = formatBossName(name) + ': ' + formatNumber(boss.kills) + ' KC' + (gained > 0 ? ' (+' + gained + ')' : '');
+
+        const icon = document.createElement('img');
+        icon.className = 'boss-icon';
+        icon.src = 'https://wiseoldman.net/img/metrics_small/' + name + '.png';
+        icon.alt = '';
+        icon.loading = 'lazy';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'boss-name';
+        nameEl.textContent = formatBossName(name);
+
+        const rightSide = document.createElement('span');
+        rightSide.style.display = 'flex';
+        rightSide.style.alignItems = 'center';
+        rightSide.style.gap = '6px';
+
+        const kcEl = document.createElement('span');
+        kcEl.className = 'boss-kc';
+        kcEl.textContent = formatNumber(boss.kills);
+
+        const gainEl = document.createElement('span');
+        gainEl.className = 'boss-gain ' + (gained > 0 ? 'positive' : 'zero');
+        gainEl.textContent = gained > 0 ? '+' + formatNumber(gained) : '';
+
+        rightSide.appendChild(gainEl);
+        rightSide.appendChild(kcEl);
+        cell.appendChild(icon);
+        cell.appendChild(nameEl);
+        cell.appendChild(rightSide);
+        grid.appendChild(cell);
+      }
+
+      container.appendChild(grid);
+
+      // Total KC gained bar
+      const totalGained = Object.values(bossGains || {}).reduce((sum, b) => sum + (b?.kills?.gained ?? 0), 0);
+      const totalBar = document.createElement('div');
+      totalBar.className = 'total-gains-bar';
+      totalBar.appendChild(document.createTextNode('Total KC Gained: '));
+      const totalVal = document.createElement('span');
+      totalVal.className = 'gain-value' + (totalGained > 0 ? '' : ' zero');
+      totalVal.textContent = totalGained > 0 ? '+' + formatNumber(totalGained) : 'None';
+      totalBar.appendChild(totalVal);
+      container.appendChild(totalBar);
+    }
+
+    function renderActivityTab(container, activities, activityGains) {
+      // Filter to activities with score > 0, sorted by score descending
+      const entries = Object.entries(activities || {})
+        .filter(([, a]) => a.score > 0)
+        .sort((a, b) => b[1].score - a[1].score);
+
+      if (entries.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-tab';
+        empty.textContent = 'No activity scores recorded';
+        container.appendChild(empty);
+        return;
+      }
+
+      const grid = document.createElement('div');
+      grid.className = 'activity-grid';
+
+      for (const [name, activity] of entries) {
+        const gained = activityGains?.[name]?.score?.gained ?? 0;
+
+        const cell = document.createElement('div');
+        cell.className = 'activity-cell' + (gained > 0 ? ' has-gain' : '');
+        cell.title = formatActivityName(name) + ': ' + formatNumber(activity.score) + (gained > 0 ? ' (+' + gained + ')' : '');
+
+        const icon = document.createElement('img');
+        icon.className = 'activity-icon';
+        icon.src = 'https://wiseoldman.net/img/metrics_small/' + name + '.png';
+        icon.alt = '';
+        icon.loading = 'lazy';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'activity-name';
+        nameEl.textContent = formatActivityName(name);
+
+        const rightSide = document.createElement('span');
+        rightSide.style.display = 'flex';
+        rightSide.style.alignItems = 'center';
+        rightSide.style.gap = '6px';
+
+        const scoreEl = document.createElement('span');
+        scoreEl.className = 'activity-score';
+        scoreEl.textContent = formatNumber(activity.score);
+
+        const gainEl = document.createElement('span');
+        gainEl.className = 'activity-gain ' + (gained > 0 ? 'positive' : 'zero');
+        gainEl.textContent = gained > 0 ? '+' + formatNumber(gained) : '';
+
+        rightSide.appendChild(gainEl);
+        rightSide.appendChild(scoreEl);
+        cell.appendChild(icon);
+        cell.appendChild(nameEl);
+        cell.appendChild(rightSide);
+        grid.appendChild(cell);
+      }
+
+      container.appendChild(grid);
+
+      // Total score gained bar
+      const totalGained = Object.values(activityGains || {}).reduce((sum, a) => sum + (a?.score?.gained ?? 0), 0);
+      const totalBar = document.createElement('div');
+      totalBar.className = 'total-gains-bar';
+      totalBar.appendChild(document.createTextNode('Total Score Gained: '));
+      const totalVal = document.createElement('span');
+      totalVal.className = 'gain-value' + (totalGained > 0 ? '' : ' zero');
+      totalVal.textContent = totalGained > 0 ? '+' + formatNumber(totalGained) : 'None';
+      totalBar.appendChild(totalVal);
+      container.appendChild(totalBar);
+    }
+
+    // Activity helpers
+    function getActivityClass(lastChangedAt) {
+      if (!lastChangedAt) return 'dormant';
+      const hours = (Date.now() - new Date(lastChangedAt).getTime()) / 3600000;
+      if (hours < 1) return 'active';
+      if (hours < 24) return 'recent';
+      if (hours < 168) return 'inactive';
+      return 'dormant';
+    }
+
+    function getLastActiveText(lastChangedAt) {
+      if (!lastChangedAt) return 'No data';
+      const diffMs = Date.now() - new Date(lastChangedAt).getTime();
+      const minutes = Math.floor(diffMs / 60000);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+
+      if (minutes < 1) return 'Active now';
+      if (minutes < 60) return minutes + 'm ago';
+      if (hours < 24) return hours + 'h ' + (minutes % 60) + 'm ago';
+      return days + 'd ' + (hours % 24) + 'h ago';
+    }
+
+    // Formatting helpers
+    function formatNumber(n) {
+      if (n == null || n === '?') return String(n);
+      return Number(n).toLocaleString();
+    }
+
+    function formatXP(xp) {
+      if (!xp) return '0';
+      if (xp >= 1000000) return (xp / 1000000).toFixed(1) + 'M';
+      if (xp >= 1000) return (xp / 1000).toFixed(1) + 'K';
+      return String(xp);
+    }
+
+    function formatXPShort(xp) {
+      if (xp >= 1000000) return (xp / 1000000).toFixed(1) + 'M';
+      if (xp >= 10000) return (xp / 1000).toFixed(0) + 'K';
+      if (xp >= 1000) return (xp / 1000).toFixed(1) + 'K';
+      return String(xp);
+    }
+
+    function formatTimeAgo(date) {
+      const diffMs = Date.now() - date.getTime();
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hours = Math.floor(mins / 60);
+      return hours + 'h ' + (mins % 60) + 'm ago';
+    }
+
+    // Period selector
+    document.querySelectorAll('.period-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector('.period-btn.active')?.classList.remove('active');
+        btn.classList.add('active');
+        currentPeriod = btn.dataset.period;
+        if (cachedData) renderPlayers(cachedData);
+      });
+    });
+
+    // Sort selector
+    document.getElementById('sortSelect').addEventListener('change', (e) => {
+      currentSort = e.target.value;
+      if (cachedData) renderPlayers(cachedData);
+    });
+
+    // Countdown timer
+    function updateCountdown() {
+      if (!lastRefreshTime) return;
+      const nextRefresh = new Date(lastRefreshTime.getTime() + REFRESH_INTERVAL_MS);
+      const remaining = nextRefresh - Date.now();
+      const el = document.getElementById('nextRefresh');
+      if (remaining <= 0) {
+        el.textContent = 'Refreshing...';
+      } else {
+        const mins = Math.floor(remaining / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        el.textContent = 'Next refresh in: ' + mins + 'm ' + String(secs).padStart(2, '0') + 's';
+      }
+      // Also keep "last updated" fresh
+      document.getElementById('lastRefresh').textContent = 'Last updated: ' + formatTimeAgo(lastRefreshTime);
+    }
+
+    // Init
+    loadUserInfo();
+    loadData();
+
+    // Update countdown every second
+    setInterval(updateCountdown, 1000);
+
+    // Auto-refresh every 5 minutes
+    setInterval(loadData, 5 * 60 * 1000);
+  </script>
+</body>
+</html>

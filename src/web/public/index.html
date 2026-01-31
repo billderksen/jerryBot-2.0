@@ -319,6 +319,56 @@
       color: var(--text-muted);
     }
 
+    .search-history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .search-history-clear {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+
+    .search-history-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .search-history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .search-history-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .search-history-item svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      opacity: 0.5;
+    }
+
     .search-loading-spinner {
       width: 32px;
       height: 32px;
@@ -1386,6 +1436,16 @@
       color: #000;
     }
 
+    .queue-duration {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .queue-tab.active .queue-duration {
+      color: var(--text-secondary);
+    }
+
     .queue-tab svg {
       width: 16px;
       height: 16px;
@@ -1894,6 +1954,22 @@
       height: 6px;
     }
 
+    /* Song transition animation */
+    .song-transition .album-art {
+      animation: songFadeIn 0.4s ease-out;
+    }
+    .song-transition .track-info {
+      animation: songSlideIn 0.4s ease-out;
+    }
+    @keyframes songFadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes songSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* Idle State */
     .idle-state {
       text-align: center;
@@ -1903,14 +1979,26 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      animation: idleFadeIn 0.5s ease-out;
+    }
+
+    @keyframes idleFadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .idle-icon {
       width: 80px;
       height: 80px;
       margin-bottom: 24px;
-      opacity: 0.3;
-      color: var(--text-primary);
+      opacity: 0.2;
+      color: var(--accent);
+      animation: idlePulse 3s ease-in-out infinite;
+    }
+
+    @keyframes idlePulse {
+      0%, 100% { opacity: 0.2; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(1.05); }
     }
 
     .idle-icon svg {
@@ -1926,6 +2014,33 @@
 
     .idle-subtext {
       color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    .idle-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--bg-secondary);
+      border-radius: 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .idle-hint:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    .idle-hint kbd {
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: inherit;
     }
 
     /* Toast Notifications */
@@ -2217,13 +2332,9 @@
               <svg style="width:16px;height:16px;"><use href="#icon-pictionary"/></svg>
               Pictionary Game
             </a>
-            <a href="/hitster" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;"><use href="#icon-hitster"/></svg>
-              Hitster Music Game
-            </a>
-            <a href="/pesten" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;"><use href="#icon-pesten"/></svg>
-              Pesten Card Game
+            <a href="/osrs" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              Runescape Tracker
             </a>
             <a href="/logout" class="user-dropdown-item logout">
               🚪 Logout
@@ -2255,6 +2366,7 @@
           <button class="queue-tab active" data-tab="queue" onclick="switchTab('queue')">
             <svg><use href="#icon-queue"/></svg> Queue
             <span class="queue-count" id="queueCount">0</span>
+            <span class="queue-duration" id="queueDuration"></span>
           </button>
           <button class="queue-tab" data-tab="history" onclick="switchTab('history')">
             <svg><use href="#icon-history"/></svg> Recently Played
@@ -2397,6 +2509,78 @@
     let currentSearchCount = 10;
     let currentSearchResults = [];
 
+    // Search history
+    const SEARCH_HISTORY_KEY = 'searchHistory';
+    const MAX_SEARCH_HISTORY = 8;
+
+    function getSearchHistory() {
+      try {
+        return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY)) || [];
+      } catch { return []; }
+    }
+
+    function addToSearchHistory(query) {
+      if (!query || query.length < 2) return;
+      if (/^https?:\/\//.test(query)) return;
+      let history = getSearchHistory();
+      history = history.filter(h => h.toLowerCase() !== query.toLowerCase());
+      history.unshift(query);
+      if (history.length > MAX_SEARCH_HISTORY) history = history.slice(0, MAX_SEARCH_HISTORY);
+      localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    }
+
+    function clearSearchHistory() {
+      localStorage.removeItem(SEARCH_HISTORY_KEY);
+      searchResults.classList.remove('visible');
+    }
+
+    function showSearchHistory() {
+      const history = getSearchHistory();
+      if (history.length === 0) return;
+
+      const header = document.createElement('div');
+      header.className = 'search-history-header';
+      header.appendChild(document.createTextNode('Recent searches'));
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'search-history-clear';
+      clearBtn.textContent = 'Clear';
+      clearBtn.onclick = (e) => { e.stopPropagation(); clearSearchHistory(); };
+      header.appendChild(clearBtn);
+
+      searchResults.textContent = '';
+      searchResults.appendChild(header);
+
+      for (const term of history) {
+        const item = document.createElement('div');
+        item.className = 'search-history-item';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '11');
+        circle.setAttribute('cy', '11');
+        circle.setAttribute('r', '8');
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        line.setAttribute('d', 'M21 21l-4.35-4.35');
+        svg.appendChild(circle);
+        svg.appendChild(line);
+        item.appendChild(svg);
+        const span = document.createElement('span');
+        span.textContent = term;
+        item.appendChild(span);
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          searchInput.value = term;
+          searchInput.dispatchEvent(new Event('input'));
+        });
+        searchResults.appendChild(item);
+      }
+
+      searchResults.classList.add('visible');
+    }
+
     // Check if input is a Spotify URL
     function isSpotifyUrl(text) {
       return /^https?:\/\/(open\.)?spotify\.com\/(track|playlist|album)\//.test(text);
@@ -2413,9 +2597,13 @@
       clearTimeout(searchTimeout);
       
       if (query.length < 2) {
-        searchResults.classList.remove('visible');
         currentSearchResults = [];
         currentSearchCount = 10;
+        if (query.length === 0 && document.activeElement === searchInput) {
+          showSearchHistory();
+        } else {
+          searchResults.classList.remove('visible');
+        }
         return;
       }
       
@@ -2451,6 +2639,8 @@
     searchInput.addEventListener('focus', () => {
       if (searchInput.value.trim().length >= 2) {
         searchResults.classList.add('visible');
+      } else if (searchInput.value.trim().length === 0) {
+        showSearchHistory();
       }
     });
 
@@ -2482,6 +2672,7 @@
           currentSearchResults = [...currentSearchResults, ...newSongs];
         } else {
           currentSearchResults = songs;
+          addToSearchHistory(query);
         }
         currentSearchCount = count;
         
@@ -2940,6 +3131,11 @@
       }
     }
 
+    function isSongInQueue(url) {
+      if (state.currentSong && state.currentSong.url === url) return true;
+      return state.queue.some(s => s.url === url);
+    }
+
     async function addSong(event, button) {
       event.stopPropagation();
       const item = button.closest('.search-result-item');
@@ -2947,7 +3143,12 @@
       const title = item.dataset.title;
       const duration = parseInt(item.dataset.duration) || 0;
       const thumbnail = item.dataset.thumbnail;
-      
+
+      if (isSongInQueue(url)) {
+        showToast('This song is already in the queue', 'error');
+        return;
+      }
+
       button.disabled = true;
       button.textContent = 'Adding...';
       
@@ -4172,6 +4373,7 @@
         playerStructureCreated = true;
         lastRenderedSongUrl = currentSongUrl;
         cachedAnimationShown = false;
+        playerContent.classList.add('song-transition');
         
         // Create the static player structure with current song data
         playerContent.innerHTML = `
@@ -4273,6 +4475,11 @@
         lastRenderedSongUrl = currentSongUrl;
         cachedAnimationShown = false;
 
+        // Trigger song transition animation
+        playerContent.classList.remove('song-transition');
+        void playerContent.offsetWidth; // Force reflow to restart animation
+        playerContent.classList.add('song-transition');
+
         // Update progress bar duration for accurate seeking
         currentSongDuration = song.duration || 0;
 
@@ -4369,11 +4576,16 @@
               console.log('Transitioning to idle state');
               playerStructureCreated = false;
               lastRenderedSongUrl = null;
+              playerContent.classList.remove('song-transition');
               playerContent.innerHTML = `
                 <div class="idle-state">
                   <div class="idle-icon"><svg><use href="#icon-headphones"/></svg></div>
-                  <div class="idle-text">Nothing Playing</div>
-                  <div class="idle-subtext">Search for songs above or use /play in Discord</div>
+                  <div class="idle-text">Ready to Play</div>
+                  <div class="idle-subtext">Search for a song, paste a link, or use /play in Discord</div>
+                  <div class="idle-hint" onclick="document.getElementById('searchInput').focus()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    Click here or start typing to search
+                  </div>
                 </div>
               `;
             }
@@ -4396,8 +4608,15 @@
       // Queue only shows upcoming songs, not the current song
       const queueSongs = state.queue;
 
-      // Update queue count (just the number for the tab badge)
+      // Update queue count and total duration
       queueCount.textContent = queueSongs.length;
+      const queueDurationEl = document.getElementById('queueDuration');
+      if (queueSongs.length > 0) {
+        const totalSeconds = queueSongs.reduce((sum, s) => sum + (s.duration || 0), 0);
+        queueDurationEl.textContent = totalSeconds > 0 ? '(' + formatDuration(totalSeconds) + ')' : '';
+      } else {
+        queueDurationEl.textContent = '';
+      }
 
       // Show/hide clear queue button (only on queue tab)
       const clearQueueBtn = document.getElementById('clearQueueBtn');

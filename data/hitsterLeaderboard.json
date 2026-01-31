@@ -1,3 +1,18 @@
 {
-  "players": {}
+  "players": {
+    "210093094241042433": {
+      "oderId": "210093094241042433",
+      "displayName": "Dre Haas",
+      "gamesPlayed": 0,
+      "gamesWon": 0,
+      "cardsWon": 1,
+      "correctPlacements": 1,
+      "wrongPlacements": 0,
+      "successfulSteals": 0,
+      "failedSteals": 0,
+      "winStreak": 0,
+      "bestWinStreak": 0,
+      "lastPlayed": 1769111069221
+    }
+  }
 }

@@ -10,6 +10,7 @@ import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMember
 import { createRoom, getRoom, deleteRoom, getRoomList, getLeaderboard, Player, setActivityLogger as setPictionaryActivityLogger } from '../utils/pictionaryGame.js';
 import { createRoom as createHitsterRoom, getRoom as getHitsterRoom, deleteRoom as deleteHitsterRoom, getRoomList as getHitsterRoomList, getLeaderboard as getHitsterLeaderboard } from '../utils/hitsterGame.js';
 import { createRoom as createPestenRoom, getRoom as getPestenRoom, deleteRoom as deletePestenRoom, getRoomList as getPestenRoomList, getLeaderboard as getPestenLeaderboard } from '../utils/pestenGame.js';
+import { getTrackerData, getPlayerInactivity } from '../utils/osrsTracker.js';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
@@ -356,7 +357,7 @@ app.get('/api/stats', (req, res) => {
       key,
       ...data
     }))
-    .sort((a, b) => b.playCount - a.playCount)
+    .sort((a, b) => (b.totalListeningTime || 0) - (a.totalListeningTime || 0))
     .slice(0, 50);
   
   res.json({
@@ -414,6 +415,20 @@ app.get('/api/pesten/leaderboard', (req, res) => {
 
 app.get('/api/pesten/rooms', (req, res) => {
   res.json(getPestenRoomList());
+});
+
+// Serve OSRS Tracker page
+app.get('/osrs', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'osrs.html'));
+});
+
+// OSRS Tracker API endpoints
+app.get('/api/osrs/players', (req, res) => {
+  res.json(getTrackerData());
+});
+
+app.get('/api/osrs/inactivity', (req, res) => {
+  res.json(getPlayerInactivity());
 });
 
 // API endpoint to search for songs
@@ -1209,6 +1224,21 @@ function handlePictionaryMessage(ws, data) {
           data: { guess }
         }));
       }
+      break;
+    }
+
+    case 'pictionary:game:giveHint': {
+      const roomId = ws.pictionaryRoomId;
+      const room = getRoom(roomId);
+      if (!room || room.state !== 'playing') return;
+      const result = room.giveHint(user.id);
+      if (!result.success) {
+        ws.send(JSON.stringify({
+          type: 'pictionary:game:hintError',
+          data: { error: result.error }
+        }));
+      }
+      // Hint broadcast is handled by room.giveHint()
       break;
     }
 

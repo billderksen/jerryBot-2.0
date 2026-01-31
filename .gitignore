@@ -16,6 +16,12 @@ data/pestenLeaderboard.json
 data/hitsterLeaderboard.json
 data/pictionaryLeaderboard.json
 
+# Game runtime data
+data/pictionaryWords.json
+
+# OSRS tracker cache (regenerates from WOM API)
+data/osrsTracker.json
+
 # Temporary audio cache files
 *.opus
 *.webm

@@ -793,6 +793,52 @@
       height: 18px;
     }
 
+    .hint-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #000;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .hint-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #f1c40f, #f39c12);
+      transform: scale(1.05);
+    }
+
+    .hint-btn:disabled {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .hint-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .hint-btn #hintCount {
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .hint-btn:disabled #hintCount {
+      background: var(--bg-secondary);
+      color: var(--text-muted);
+    }
+
     .brush-sizes {
       display: flex;
       gap: 4px;
@@ -1644,6 +1690,10 @@
               <svg style="width:16px;height:16px;"><use href="#icon-pesten"/></svg>
               Pesten Card Game
             </a>
+            <a href="/osrs" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              Runescape Tracker
+            </a>
             <a href="/logout" class="user-dropdown-item logout">
               🚪 Logout
             </a>
@@ -1782,6 +1832,14 @@
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
             </button>
           </div>
+
+          <div class="divider"></div>
+
+          <button class="hint-btn" id="hintBtn" onclick="giveHint()" title="Give a hint to guessers">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>
+            Hint
+            <span id="hintCount">3</span>
+          </button>
         </div>
       </div>
 
@@ -1875,6 +1933,7 @@
     let canDraw = false;
     let currentWord = null;
     let timerInterval = null;
+    let hintsRemaining = 3;
 
     // Canvas state
     let canvas, ctx;
@@ -1992,10 +2051,10 @@
           roundStarted(data);
           break;
         case 'pictionary:game:yourTurn':
-          yourTurn(data.word);
+          yourTurn(data);
           break;
         case 'pictionary:game:hint':
-          updateHint(data.hint);
+          updateHint(data.hint, data.hintsRemaining);
           break;
         case 'pictionary:game:correctGuess':
           correctGuess(data);
@@ -2598,6 +2657,10 @@
       hideWordChoiceOverlay();
       clearCanvasLocal();
 
+      // Reset hints for new round
+      hintsRemaining = data.maxHints || 3;
+      updateHintButton();
+
       document.getElementById('roundInfo').textContent = `Round ${data.round} - ${data.drawerName}'s turn`;
       document.getElementById('wordHint').textContent = data.hint;
       document.getElementById('wordHint').classList.remove('your-word');
@@ -2640,16 +2703,38 @@
       addSystemMessage(`${data.drawerName} is now drawing!`);
     }
 
-    function yourTurn(word) {
+    function yourTurn(data) {
       canDraw = true;
-      currentWord = word;
-      document.getElementById('wordHint').textContent = word;
+      currentWord = data.word;
+      hintsRemaining = data.maxHints || 3;
+      document.getElementById('wordHint').textContent = data.word;
       document.getElementById('wordHint').classList.add('your-word');
-      addSystemMessage(`Your word is: ${word}`);
+      updateHintButton();
+      addSystemMessage(`Your word is: ${data.word}`);
     }
 
-    function updateHint(hint) {
-      if (!currentWord) { // Only update for guessers
+    function giveHint() {
+      if (!canDraw || hintsRemaining <= 0) return;
+      ws.send(JSON.stringify({ type: 'pictionary:game:giveHint' }));
+    }
+
+    function updateHintButton() {
+      const btn = document.getElementById('hintBtn');
+      const countEl = document.getElementById('hintCount');
+      if (btn && countEl) {
+        countEl.textContent = hintsRemaining;
+        btn.disabled = hintsRemaining <= 0;
+      }
+    }
+
+    function updateHint(hint, hintsRemainingFromServer) {
+      // Update hints remaining if provided (for drawer)
+      if (typeof hintsRemainingFromServer === 'number' && canDraw) {
+        hintsRemaining = hintsRemainingFromServer;
+        updateHintButton();
+      }
+      // Only update hint display for guessers
+      if (!currentWord) {
         document.getElementById('wordHint').textContent = hint;
       }
     }
