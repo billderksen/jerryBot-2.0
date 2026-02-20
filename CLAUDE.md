@@ -38,6 +38,13 @@ setAddSongHandler(fn)           // Web dashboard adds songs to queue
 - `src/utils/hitsterGame.js` - Music timeline guessing game
 - `src/utils/activityLogger.js` - Logs user actions to Discord channel
 - `src/utils/openrouter.js` - AI API wrapper for OpenRouter
+- `src/utils/levelSystem.js` - XP/level system rewarding message and voice activity
+- `src/utils/birthdayTracker.js` - Birthday persistence + daily announcement scheduler
+- `src/utils/reminderTracker.js` - Reminder persistence + per-reminder setTimeout scheduling
+- `src/utils/triviaGame.js` - The Trivia API integration, leaderboard persistence, session management
+- `src/utils/lastSeenTracker.js` - Tracks user last-seen timestamps (messages, presence, voice)
+- `src/utils/f1Predictions.js` - F1 fantasy predictions (driver/race data, scoring, Jolpica API integration)
+- `src/utils/teamspeakStatus.js` - TeamSpeak 6 user count → Discord voice channel name
 
 ### Data Flow
 ```
@@ -51,6 +58,13 @@ JSON files in `data/` directory:
 - `listeningStats.json` - Play counts per song
 - `playerSettings.json` - User preferences (volume, loop mode)
 - `*Leaderboard.json` - Game scores
+- `levels.json` - User XP, levels, and role rewards
+- `birthdays.json` - User birthdays and announcement channel config
+- `reminders.json` - Pending reminders with fire timestamps
+- `triviaLeaderboard.json` - Trivia game player stats
+- `lastSeen.json` - User last-seen timestamps (messages, presence, voice)
+- `f1Predictions.json` - F1 fantasy predictions, results cache, season standings
+- `commandLog.txt` - Slash command usage log
 - `sessions/` - Express session files
 
 ## Technical Details
@@ -71,9 +85,185 @@ Copy `.env.example` to `.env`. Required:
 
 Optional:
 - `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` - AI chat feature
+- `TS6_API_KEY`, `TS6_STATUS_CHANNEL_ID` - TeamSpeak status voice channel
 
 ## Web Dashboard Routes
 
 - `/` - Music player with queue and controls
 - `/stats` - Listening statistics
 - `/pesten`, `/hitster`, `/pictionary` - Multiplayer games
+- `/trivia` - Trivia leaderboard
+- `/f1` - F1 Predictions fantasy league (race calendar, predictions, leaderboard)
+- `/birthdays` - Birthday calendar (month grid view of all registered birthdays)
+- `/admin` - Bot control panel (requires Control Panel role, manages birthday/recap/twitch/activity-log channels, AI chat model/prompt/tokens, OSRS tracker players, music status, server overview)
+
+## Level/XP System
+
+Users earn XP from messaging (15-25 XP per message, 60s cooldown) and voice chat (10 XP/min, requires 2+ humans, skips deafened users). XP curve: `xpForLevel(n) = 5n² + 50n + 100`. Level-up embeds are sent in-channel for messages, or system/general channel for voice. Optional role rewards configurable in `data/levels.json` under `roleRewards` (e.g. `{ "5": "roleId" }`).
+
+Commands:
+- `/rank [@user]` - Show level, XP, progress bar, and rank
+- `/leaderboard` - Top 10 users by XP
+
+Implementation: `src/utils/levelSystem.js` (core), `src/commands/rank.js`, `src/commands/leaderboard.js`
+
+## Birthday Tracker
+
+Users can register their birthday (day + month, no year for privacy). Daily check at 08:00 server time posts birthday announcements to a configured channel.
+
+Commands:
+- `/birthday set <day> <month>` - Set your birthday
+- `/birthday remove` - Remove your birthday
+- `/birthday list` - Show all birthdays sorted by next upcoming
+- `/birthday channel <#channel>` - Set announcement channel (Admin only)
+
+Implementation: `src/utils/birthdayTracker.js` (core + scheduler), `src/commands/birthday.js`
+
+## Reminders
+
+Users can set timed reminders that ping them (and optionally others) in the channel where the reminder was created.
+
+Commands:
+- `/reminder set <hour> <minute> <message>` - Set a reminder (optional: `day`, `month`, `user1`-`user5`, `role1`-`role3`)
+- `/reminder list` - Show your pending reminders
+- `/reminder cancel <id>` - Cancel a reminder by ID
+
+Reminders persist across restarts via `data/reminders.json`. Each reminder gets a unique ID and its own `setTimeout`. If the time has already passed today (and no date was specified), it schedules for tomorrow. If a specific date in the past is given, it rolls to next year.
+
+Implementation: `src/utils/reminderTracker.js` (core + scheduling), `src/commands/reminder.js`
+
+## Trivia Game
+
+Discord trivia game using The Trivia API (the-trivia-api.com, 12k+ vetted questions, no API key needed). Two modes: **buttons** (everyone picks, all correct score) and **race** (first correct answer wins). Leaderboard persists in `data/triviaLeaderboard.json`.
+
+**Custom local categories** with 150 hand-curated questions each (50 easy, 50 medium, 50 hard) stored in `data/`:
+- Lord of the Rings (`data/lotrQuestions.json`)
+- Old School RuneScape (`data/osrsQuestions.json`)
+- Pokemon (`data/pokemonQuestions.json`)
+- World of Warcraft (`data/wowQuestions.json`)
+
+Local categories are defined in the `LOCAL_CATEGORIES` map in `triviaGame.js`. To add a new custom category: create a JSON file in `data/`, add it to `LOCAL_CATEGORIES` and `CATEGORY_NAMES` in `triviaGame.js`, and add the choice to both `trivia.js` and `challenge.js` CATEGORIES arrays.
+
+Commands:
+- `/trivia start [mode] [questions] [category] [difficulty]` - Start a trivia game in the channel
+- `/trivia stop` - Stop the current game (starter or admin)
+- `/trivia leaderboard` - Show top 10 players
+
+Implementation: `src/utils/triviaGame.js` (core), `src/commands/trivia.js`
+
+## Challenge (1v1 Trivia Duel)
+
+Head-to-head trivia duels between two players. Uses the same Trivia API and leaderboard as `/trivia`. Challenger picks an opponent; opponent must accept within 30s. Both answer 5 questions with A/B/C/D buttons (15s per question). Only the two duelists can answer. Running score and per-question results shown after each question. Final embed declares winner with accuracy breakdown. Both players' stats update in `data/triviaLeaderboard.json`.
+
+Commands:
+- `/challenge @user [category] [difficulty]` - Challenge a user to a 1v1 trivia duel
+
+Implementation: `src/commands/challenge.js`, reuses `fetchQuestions` and `updateLeaderboard` from `src/utils/triviaGame.js`
+
+## F1 Predictions (Fantasy League)
+
+Web-based F1 prediction game where users predict the podium (P1, P2, P3) and fastest lap for each race. Predictions can be submitted via the web dashboard or Discord slash command. Results are fetched from the Jolpica API and broadcast in Discord.
+
+### How It Works
+- Users predict P1, P2, P3, and fastest lap before each race
+- Predictions lock automatically at race start time
+- After the race, an admin fetches results via `/f1 fetchresults <round>` or the admin panel
+- Results are scored and broadcast to Discord + web dashboard via WebSocket
+
+### Scoring System
+| Category | Points |
+|---|---|
+| Correct P1 (winner) | 25 |
+| Correct P2 | 18 |
+| Correct P3 | 15 |
+| Right driver on podium, wrong position | 5 |
+| Correct fastest lap | 10 |
+| Perfect podium bonus (all 3 exact) | +10 |
+
+Max per race: 78 points (25 + 18 + 15 + 10 + 10 bonus).
+
+### Commands
+- `/f1 predict <round> <p1> <p2> <p3> <fastest_lap>` - Submit prediction (driver options have autocomplete)
+- `/f1 standings` - Show season leaderboard
+- `/f1 results <round>` - Show race results and scores
+- `/f1 mypredictions` - Show your predictions for the season
+
+### Web Dashboard
+Route: `/f1` - Full prediction UI with race calendar, driver picker, leaderboard, and results viewer.
+
+### Data
+- `data/f1Predictions.json` - All predictions, race results cache, and season standings
+- Results API: [Jolpica API](https://github.com/jolpica/jolpica-f1) (`https://api.jolpi.ca/ergast/f1/{year}/{round}/results/`)
+
+### API Routes (in `server.js`)
+- `GET /api/f1/drivers` - Driver list with team colors
+- `GET /api/f1/races` - All races with lock status and user predictions
+- `GET /api/f1/standings` - Season leaderboard
+- `GET /api/f1/predictions/:round` - All predictions for a race
+- `GET /api/f1/results/:round` - Race results + scored predictions
+- `POST /api/f1/predict` - Submit prediction `{ round, p1, p2, p3, fastestLap }`
+- `POST /api/f1/fetchresults/:round` - Admin: fetch + score results from Jolpica API
+
+### Updating for a New Season
+The driver grid and race calendar are defined as constants in `src/utils/f1Predictions.js`:
+
+**To update drivers** (e.g. new season, mid-season driver swap): Edit the `DRIVERS` array in `f1Predictions.js`. Each driver entry has: `{ id, name, number, constructor, teamColor }`. The `id` must match the Jolpica API `driverId` (lowercase surname, e.g. `"verstappen"`, `"norris"`). Team colors are hex codes used in the web UI.
+
+**To update the race calendar**: Edit the `RACES` array in `f1Predictions.js`. Each race has: `{ round, name, circuit, location, date (ISO string), sprint (bool) }`. The `round` number must match the Jolpica API round numbers. Also update `createF1Events.js` if you want matching Discord scheduled events.
+
+**To add a new season**: Clear or archive `data/f1Predictions.json`, update `DRIVERS` and `RACES` in `f1Predictions.js`, and optionally update the year in the Jolpica API URL (`API_YEAR` constant).
+
+Implementation: `src/utils/f1Predictions.js` (core logic + data), `src/commands/f1.js` (Discord command), `src/web/public/f1.html` (web UI), API routes in `src/web/server.js`
+
+## Last Seen
+
+Tracks when users were last active via messages, presence changes (going offline), and voice channel activity. Data persists in `data/lastSeen.json` with debounced saves.
+
+Commands:
+- `/lastseen @user` - Shows when the user was last seen, or their current status if online
+
+Implementation: `src/utils/lastSeenTracker.js` (core + persistence), `src/commands/lastseen.js`, tracking hooks in `src/index.js` (MessageCreate, PresenceUpdate, VoiceStateUpdate)
+
+## TeamSpeak Status Channel
+
+A Discord voice channel that displays the current TeamSpeak 6 user count in its name (e.g. "TeamSpeak: 3 online"). The channel is view-only — permissions are set on startup to allow `ViewChannel` but deny `Connect` for @everyone.
+
+- Polls the TS6 WebQuery HTTP API (`/1/clientlist` on port 10080) every 5 minutes
+- Only renames the channel when the count actually changes (Discord rate-limits renames to 2 per 10 minutes)
+- Filters out ServerQuery clients (type 1), only counts real users (type 0)
+
+Environment variables (in `.env`):
+- `TS6_API_KEY` - TeamSpeak 6 ServerQuery API key
+- `TS6_STATUS_CHANNEL_ID` - Discord voice channel ID to update
+
+Implementation: `src/utils/teamspeakStatus.js`, initialized in `src/index.js` (`ClientReady` handler)
+
+## Command Logging
+
+All slash command usage is logged to `data/commandLog.txt` with timestamp, user, command name, subcommand, and options.
+
+## Deleted Message Logging
+
+Deleted messages are logged both to `data/deletedMessages.log` (file) and to a `delete-log` Discord channel (red embed, matching the `edit-log` pattern for edited messages).
+
+## AI Chat (Multi-turn Conversations)
+
+The `/chat` command uses OpenRouter API (currently Grok model) for AI responses. Supports **multi-turn conversations** via Discord reply chains:
+- User runs `/chat` with a question → bot replies with answer
+- User **replies** to the bot's answer with a follow-up → bot reads the full conversation history from the reply chain and responds with context
+- Conversation history is capped at 10 turns to limit token usage
+- The bot identifies its own chat messages by the `**Question:**` prefix format
+- Implementation spans: `src/utils/openrouter.js` (accepts message history), `src/index.js` (reply chain handler), `src/commands/chat.js` (initial question)
+
+## Help Command
+
+`/help` — Shows all bot commands in an interactive embed with a dropdown menu to browse categories. The command dynamically reads from `interaction.client.commands`, so new commands appear automatically. Categories are defined in the `CATEGORIES` array at the top of `src/commands/help.js`.
+
+**When adding a new command**: Add the command name to the appropriate category's `commands` array in `src/commands/help.js`. Available categories: `music`, `games`, `social`, `stats`, `utility`. If the command doesn't fit, create a new category entry.
+
+## Maintenance Notes
+
+- **Keep CLAUDE.md updated**: When making significant changes (new features, new modules, architectural changes, new commands, new environment variables), update this file to reflect them. This ensures future Claude Code sessions have accurate context.
+- **Restart bot after every edit**: The bot runs under pm2 as `jerrybot`. After making code changes, always restart with `pm2 restart jerrybot` and check logs with `pm2 logs jerrybot --lines 20 --nostream` to verify no startup errors.
+- **Command logging is automatic**: All slash commands are logged to `data/commandLog.txt` via the `InteractionCreate` handler in `src/index.js` (before `command.execute()`). New commands added to `src/commands/` are logged automatically — no extra code needed per command.
+- **Help command categories**: When adding a new slash command, also add its name to the appropriate category in `src/commands/help.js` `CATEGORIES` array so it shows up in `/help`.
