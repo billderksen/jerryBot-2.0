@@ -206,12 +206,29 @@ export function setupWebSocket(wss, sessionMiddleware) {
       }
 
       // Add to room_players DB (only if not already there)
-      const existingPlayer = db.prepare(
-        'SELECT * FROM room_players WHERE room_id = ? AND (user_id = ? OR guest_name = ?)'
-      ).get(roomId, user?.id || null, guestName);
-      if (!existingPlayer) {
+      if (user?.id) {
+        // Authenticated user: check by user_id
+        const existingPlayer = db.prepare(
+          'SELECT * FROM room_players WHERE room_id = ? AND user_id = ?'
+        ).get(roomId, user.id);
+        if (!existingPlayer) {
+          db.prepare('INSERT INTO room_players (room_id, user_id, guest_name) VALUES (?, ?, ?)').run(
+            roomId, user.id, null
+          );
+        }
+      } else if (guestName) {
+        // Guest: check for name collision and append suffix if needed
+        let uniqueGuestName = guestName;
+        const existingGuest = db.prepare(
+          'SELECT * FROM room_players WHERE room_id = ? AND guest_name = ?'
+        ).get(roomId, guestName);
+        if (existingGuest) {
+          uniqueGuestName = `${guestName}_${Math.random().toString(36).slice(2, 6)}`;
+          playerEntry.guestName = uniqueGuestName;
+          playerEntry.username = uniqueGuestName;
+        }
         db.prepare('INSERT INTO room_players (room_id, user_id, guest_name) VALUES (?, ?, ?)').run(
-          roomId, user?.id || null, guestName
+          roomId, null, uniqueGuestName
         );
       }
 
@@ -259,6 +276,20 @@ export function setupWebSocket(wss, sessionMiddleware) {
             lockedByColor: p.lockedBy ? roomState.players.get(p.lockedBy)?.color : null
           }));
         }
+      }
+
+      // Attach grid/piece dimensions to puzzleState so the client can set up the puzzle
+      if (roomState.started && puzzleState.length > 0) {
+        puzzleState = {
+          pieces: puzzleState,
+          cols: roomState.grid.cols,
+          rows: roomState.grid.rows,
+          pieceWidth: roomState.pieceWidth,
+          pieceHeight: roomState.pieceHeight,
+          seed: roomState.seed
+        };
+      } else if (!roomState.started) {
+        puzzleState = null;
       }
 
       // Send joined to new player
@@ -361,7 +392,12 @@ export function setupWebSocket(wss, sessionMiddleware) {
           }));
           sendMsg(player.ws, {
             type: 'started',
-            pieces: piecesData
+            pieces: piecesData,
+            cols,
+            rows,
+            pieceWidth: roomState.pieceWidth,
+            pieceHeight: roomState.pieceHeight,
+            seed: roomState.seed
           });
         }
       } else {
@@ -376,7 +412,12 @@ export function setupWebSocket(wss, sessionMiddleware) {
 
         broadcastToRoom(roomState, {
           type: 'started',
-          pieces: piecesData
+          pieces: piecesData,
+          cols,
+          rows,
+          pieceWidth: roomState.pieceWidth,
+          pieceHeight: roomState.pieceHeight,
+          seed: roomState.seed
         });
       }
     }
@@ -443,6 +484,7 @@ export function setupWebSocket(wss, sessionMiddleware) {
 
     function handleMove(msg) {
       if (!currentRoomId || !playerId) return;
+      if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !isFinite(msg.x) || !isFinite(msg.y)) return;
 
       const roomState = activeRooms.get(currentRoomId);
       if (!roomState || !roomState.started) return;
@@ -487,6 +529,7 @@ export function setupWebSocket(wss, sessionMiddleware) {
       if (!currentRoomId || !playerId) {
         return sendMsg(ws, { type: 'error', message: 'Not in a room' });
       }
+      if (typeof msg.x !== 'number' || typeof msg.y !== 'number' || !isFinite(msg.x) || !isFinite(msg.y)) return;
 
       const roomState = activeRooms.get(currentRoomId);
       if (!roomState || !roomState.started) {

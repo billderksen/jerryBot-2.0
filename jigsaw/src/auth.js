@@ -104,7 +104,13 @@ export function setupAuth(app) {
             const avatarUrl = profile.avatar
               ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
               : null;
-            const username = profile.username;
+            let username = profile.username;
+
+            // Avoid username collision with existing local or Discord accounts
+            const existingName = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+            if (existingName) {
+              username = `${username}_${profile.discriminator || profile.id.slice(-4)}`;
+            }
 
             const result = db.prepare(
               'INSERT INTO users (username, discord_id, avatar_url) VALUES (?, ?, ?)'

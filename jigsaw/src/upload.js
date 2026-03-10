@@ -31,6 +31,7 @@ const upload = multer({
 });
 
 // POST /api/upload — upload a puzzle image
+// TODO: Add rate limiting for production (e.g. max 5 uploads per IP per hour)
 router.post('/api/upload', (req, res, next) => {
   upload.single('image')(req, res, async (err) => {
     if (err) {

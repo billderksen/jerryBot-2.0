@@ -84,7 +84,7 @@ class Game {
     // Handle "joined" — receive full state
     this.network.on('joined', (msg) => {
       this.myPlayerId = msg.playerId;
-      this.players = new Map(Object.entries(msg.players || {}));
+      this.players = new Map((msg.players || []).map(p => [p.id, p]));
       this.isHost = msg.isHost;
       this.isRaceMode = msg.roomInfo?.mode === 'race';
 

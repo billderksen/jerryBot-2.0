@@ -193,12 +193,9 @@ router.delete('/api/rooms/:id', (req, res) => {
 
   const userId = req.user?.id ?? null;
 
-  // Check if requester is the host
-  const isHost = (userId && room.host_user_id === userId) ||
-    (!userId && req.body?.guestName && room.host_guest_name === req.body.guestName);
-
-  if (!isHost) {
-    return res.status(403).json({ error: 'Only the host can delete this room' });
+  // Only allow authenticated hosts to delete rooms — guest rooms are cleaned up automatically
+  if (!userId || room.host_user_id !== userId) {
+    return res.status(403).json({ error: 'Only the authenticated host can delete this room' });
   }
 
   db.prepare('DELETE FROM rooms WHERE id = ?').run(req.params.id);
