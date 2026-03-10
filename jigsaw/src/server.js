@@ -27,6 +27,9 @@ const sessionMiddleware = session({
 });
 app.use(sessionMiddleware);
 
+import { setupAuth } from './auth.js';
+setupAuth(app);
+
 // Static files
 app.use(express.static(join(__dirname, '..', 'public')));
 
