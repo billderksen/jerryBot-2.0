@@ -373,5 +373,100 @@ function hideFormError() {
   formError.classList.remove('visible');
 }
 
+// ── Tabs ──
+document.querySelectorAll('.lobby-tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.lobby-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-content').forEach(function(c) {
+      c.classList.remove('active');
+      c.style.display = 'none';
+    });
+    tab.classList.add('active');
+    const target = document.getElementById('tab-' + tab.dataset.tab);
+    if (target) {
+      target.classList.add('active');
+      target.style.display = 'block';
+    }
+    if (tab.dataset.tab === 'leaderboard') {
+      loadLeaderboard();
+    }
+  });
+});
+
+// ── Leaderboard ──
+async function loadLeaderboard() {
+  const container = document.getElementById('leaderboard-content');
+  try {
+    const res = await fetch('/api/leaderboard');
+    const data = await res.json();
+    renderLeaderboard(data);
+  } catch {
+    container.textContent = '';
+    const msg = document.createElement('div');
+    msg.className = 'leaderboard-empty';
+    msg.textContent = 'Failed to load leaderboard.';
+    container.appendChild(msg);
+  }
+}
+
+function renderLeaderboard(players) {
+  const container = document.getElementById('leaderboard-content');
+  container.textContent = '';
+
+  if (!players || players.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'leaderboard-empty';
+    empty.textContent = 'No ranked games played yet. Be the first!';
+    container.appendChild(empty);
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'leaderboard-table';
+
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  ['Rank', 'Player', 'Pieces Placed', 'Puzzles Completed'].forEach(function(text) {
+    const th = document.createElement('th');
+    th.textContent = text;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  players.forEach(function(player, index) {
+    const row = document.createElement('tr');
+
+    const rankCell = document.createElement('td');
+    rankCell.className = 'leaderboard-rank';
+    if (index === 0) rankCell.classList.add('gold');
+    else if (index === 1) rankCell.classList.add('silver');
+    else if (index === 2) rankCell.classList.add('bronze');
+    rankCell.textContent = '#' + (index + 1);
+    row.appendChild(rankCell);
+
+    const nameCell = document.createElement('td');
+    nameCell.className = 'leaderboard-username';
+    const link = document.createElement('a');
+    link.href = '/profile.html?user=' + player.id;
+    link.textContent = player.username;
+    nameCell.appendChild(link);
+    row.appendChild(nameCell);
+
+    const piecesCell = document.createElement('td');
+    piecesCell.textContent = player.ranked_pieces_placed;
+    row.appendChild(piecesCell);
+
+    const puzzlesCell = document.createElement('td');
+    puzzlesCell.textContent = player.ranked_puzzles_completed;
+    row.appendChild(puzzlesCell);
+
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
 // ── Start ──
 init();

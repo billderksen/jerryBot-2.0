@@ -37,6 +37,9 @@ app.use(roomRoutes);
 import uploadRoutes from './upload.js';
 app.use(uploadRoutes);
 
+import statsRoutes from './stats.js';
+app.use(statsRoutes);
+
 // Static files
 app.use(express.static(join(__dirname, '..', 'public')));
 

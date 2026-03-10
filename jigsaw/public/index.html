@@ -15,20 +15,39 @@
       <div id="auth-area" class="auth-area"></div>
     </header>
 
-    <!-- Toolbar -->
-    <div class="toolbar">
-      <h2>Available Rooms</h2>
-      <button id="create-room-btn" class="btn btn-primary btn-lg">+ Create Room</button>
+    <!-- Tabs -->
+    <div class="lobby-tabs">
+      <button class="lobby-tab active" data-tab="rooms">Rooms</button>
+      <button class="lobby-tab" data-tab="leaderboard">Leaderboard</button>
     </div>
 
-    <!-- Room Grid -->
-    <div id="room-grid" class="room-grid"></div>
+    <!-- Rooms Tab -->
+    <div id="tab-rooms" class="tab-content active">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <h2>Available Rooms</h2>
+        <button id="create-room-btn" class="btn btn-primary btn-lg">+ Create Room</button>
+      </div>
 
-    <!-- Empty State -->
-    <div id="empty-state" class="empty-state" style="display:none">
-      <div class="empty-state-icon">&#129513;</div>
-      <h3>No rooms yet</h3>
-      <p>Be the first to create a puzzle room and invite your friends to join!</p>
+      <!-- Room Grid -->
+      <div id="room-grid" class="room-grid"></div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state" style="display:none">
+        <div class="empty-state-icon">&#129513;</div>
+        <h3>No rooms yet</h3>
+        <p>Be the first to create a puzzle room and invite your friends to join!</p>
+      </div>
+    </div>
+
+    <!-- Leaderboard Tab -->
+    <div id="tab-leaderboard" class="tab-content" style="display:none">
+      <div class="toolbar">
+        <h2>Top Players</h2>
+      </div>
+      <div id="leaderboard-content" class="leaderboard-wrap">
+        <div class="profile-loading">Loading leaderboard...</div>
+      </div>
     </div>
 
     <!-- Create Room Modal -->
