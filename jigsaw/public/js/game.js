@@ -26,6 +26,8 @@ class Game {
     this.isHost = false;
     this.totalPieces = 0;
     this.placedPieces = 0;
+    this.isRaceMode = false;
+    this.raceProgress = new Map(); // playerId → { name, color, progress, placedCount, totalPieces }
 
     this.init();
   }
@@ -84,6 +86,7 @@ class Game {
       this.myPlayerId = msg.playerId;
       this.players = new Map(Object.entries(msg.players || {}));
       this.isHost = msg.isHost;
+      this.isRaceMode = msg.roomInfo?.mode === 'race';
 
       this.updatePlayerList();
       this.updateRoomInfo();
@@ -110,6 +113,20 @@ class Game {
       this.setupPuzzle(msg);
       this.hideWaitingOverlay();
       document.getElementById('start-btn').style.display = 'none';
+
+      // In race mode, initialize progress for all players at 0%
+      if (this.isRaceMode) {
+        for (const [pid, player] of this.players) {
+          this.raceProgress.set(pid, {
+            name: player.name || player.username || 'Guest',
+            color: player.color || '#888',
+            progress: 0,
+            placedCount: 0,
+            totalPieces: this.totalPieces
+          });
+        }
+        this.updateRaceProgressUI();
+      }
     });
 
     // Handle "player_joined"
@@ -141,8 +158,9 @@ class Game {
       this.interaction?.requestRedraw();
     });
 
-    // Handle "moved" — another player moved a piece
+    // Handle "moved" — another player moved a piece (co-op only)
     this.network.on('moved', (msg) => {
+      if (this.isRaceMode) return; // Race mode: no shared pieces
       if (msg.playerId === this.myPlayerId) return;
       this.renderer?.updatePieceState(msg.pieceIndex, { x: msg.x, y: msg.y });
       this.interaction?.requestRedraw();
@@ -162,6 +180,20 @@ class Game {
       this.updatePlayerList();
       this.updateProgress();
       this.interaction?.confirmPlacement(msg.pieceIndex, msg.correctX, msg.correctY);
+
+      // In race mode, update own progress in the race progress map
+      if (this.isRaceMode && msg.playerId === this.myPlayerId) {
+        const me = this.players.get(this.myPlayerId);
+        const progress = this.totalPieces > 0 ? Math.round((this.placedPieces / this.totalPieces) * 100) : 0;
+        this.raceProgress.set(this.myPlayerId, {
+          name: me?.name || 'You',
+          color: me?.color || '#888',
+          progress,
+          placedCount: this.placedPieces,
+          totalPieces: this.totalPieces
+        });
+        this.updateRaceProgressUI();
+      }
     });
 
     // Handle "unlocked" — piece released
@@ -178,9 +210,26 @@ class Game {
       this.interaction?.requestRedraw();
     });
 
-    // Handle "completed" — puzzle finished
+    // Handle "completed" — puzzle finished (co-op)
     this.network.on('completed', (msg) => {
       this.showCompletionScreen(msg.scores, msg.isRanked);
+    });
+
+    // Handle "race_progress" — another player's progress update
+    this.network.on('race_progress', (msg) => {
+      this.raceProgress.set(msg.playerId, {
+        name: msg.playerName,
+        color: msg.playerColor,
+        progress: msg.progress,
+        placedCount: msg.placedCount,
+        totalPieces: msg.totalPieces
+      });
+      this.updateRaceProgressUI();
+    });
+
+    // Handle "race_complete" — someone finished the race
+    this.network.on('race_complete', (msg) => {
+      this.showRaceCompleteScreen(msg.winner, msg.scores);
     });
 
     // Handle "chat_msg"
@@ -446,6 +495,138 @@ class Game {
     el.textContent = text;
     container.appendChild(el);
     container.scrollTop = container.scrollHeight;
+  }
+
+  updateRaceProgressUI() {
+    let container = document.getElementById('race-progress');
+    if (!container) {
+      // Create the race progress container in the sidebar, after the progress container
+      const progressContainer = document.getElementById('progress-container');
+      if (!progressContainer) return;
+      container = document.createElement('div');
+      container.id = 'race-progress';
+      container.style.cssText = 'margin-top: 12px;';
+      const heading = document.createElement('h4');
+      heading.textContent = 'Race Progress';
+      heading.style.cssText = 'margin: 0 0 8px; font-size: 13px; color: var(--text-secondary, #aaa);';
+      container.appendChild(heading);
+      progressContainer.parentNode.insertBefore(container, progressContainer.nextSibling);
+    }
+
+    // Remove old bars (keep heading)
+    while (container.children.length > 1) {
+      container.removeChild(container.lastChild);
+    }
+
+    // Sort by progress descending
+    const sorted = [...this.raceProgress.entries()].sort((a, b) => b[1].progress - a[1].progress);
+
+    for (const [pid, data] of sorted) {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom: 6px;';
+
+      const label = document.createElement('div');
+      label.style.cssText = 'display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px;';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = data.name + (pid === this.myPlayerId ? ' (you)' : '');
+      nameSpan.style.color = data.color;
+      const pctSpan = document.createElement('span');
+      pctSpan.textContent = data.progress + '%';
+      pctSpan.style.color = 'var(--text-secondary, #aaa)';
+      label.appendChild(nameSpan);
+      label.appendChild(pctSpan);
+
+      const track = document.createElement('div');
+      track.style.cssText = 'height: 6px; background: var(--bg-tertiary, #333); border-radius: 3px; overflow: hidden;';
+      const bar = document.createElement('div');
+      bar.style.cssText = `height: 100%; width: ${data.progress}%; background: ${data.color}; border-radius: 3px; transition: width 0.3s ease;`;
+      track.appendChild(bar);
+
+      row.appendChild(label);
+      row.appendChild(track);
+      container.appendChild(row);
+    }
+  }
+
+  showRaceCompleteScreen(winner, scores) {
+    const overlay = document.getElementById('completion-overlay');
+    const scoresContainer = document.getElementById('final-scores');
+    if (!overlay || !scoresContainer) return;
+
+    scoresContainer.textContent = '';
+
+    // Winner announcement
+    const winnerDiv = document.createElement('div');
+    winnerDiv.style.cssText = 'text-align: center; margin-bottom: 16px;';
+
+    const winnerName = document.createElement('div');
+    winnerName.style.cssText = `font-size: 22px; font-weight: bold; color: ${winner.color || '#f1c40f'};`;
+    winnerName.textContent = winner.name + ' wins!';
+
+    const winnerTime = document.createElement('div');
+    winnerTime.style.cssText = 'font-size: 14px; color: var(--text-secondary, #aaa); margin-top: 4px;';
+    const mins = Math.floor(winner.time / 60);
+    const secs = winner.time % 60;
+    winnerTime.textContent = 'Completed in ' + (mins > 0 ? mins + 'm ' : '') + secs + 's';
+
+    winnerDiv.appendChild(winnerName);
+    winnerDiv.appendChild(winnerTime);
+    scoresContainer.appendChild(winnerDiv);
+
+    // Scores table
+    const table = document.createElement('div');
+    table.className = 'scores-table';
+
+    const header = document.createElement('div');
+    header.className = 'scores-header';
+    const headerPlayer = document.createElement('span');
+    headerPlayer.textContent = 'Player';
+    const headerScore = document.createElement('span');
+    headerScore.textContent = 'Progress';
+    header.appendChild(headerPlayer);
+    header.appendChild(headerScore);
+    table.appendChild(header);
+
+    const sortedScores = Array.isArray(scores)
+      ? scores.sort((a, b) => (b.score || 0) - (a.score || 0))
+      : [];
+
+    sortedScores.forEach((entry, i) => {
+      const row = document.createElement('div');
+      const medal = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      row.className = 'scores-row' + (medal ? ' ' + medal : '');
+      if (entry.playerId === winner.id) {
+        row.style.border = '1px solid ' + (winner.color || '#f1c40f');
+      }
+
+      const rank = document.createElement('span');
+      rank.className = 'score-rank';
+      rank.textContent = '#' + (i + 1);
+
+      const name = document.createElement('span');
+      name.className = 'score-name';
+      name.style.color = entry.color || '#888';
+      name.textContent = entry.username || 'Guest';
+
+      const score = document.createElement('span');
+      score.className = 'score-value';
+      const total = entry.totalPieces || this.totalPieces;
+      const pct = total > 0 ? Math.round((entry.score / total) * 100) : 0;
+      score.textContent = entry.score + '/' + total + ' (' + pct + '%)';
+
+      row.appendChild(rank);
+      row.appendChild(name);
+      row.appendChild(score);
+      table.appendChild(row);
+    });
+
+    scoresContainer.appendChild(table);
+
+    // Update the overlay heading for race mode
+    const heading = overlay.querySelector('h2');
+    if (heading) heading.textContent = 'Race Complete!';
+
+    overlay.style.display = 'flex';
   }
 
   showCompletionScreen(scores, isRanked) {

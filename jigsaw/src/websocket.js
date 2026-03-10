@@ -228,15 +228,38 @@ export function setupWebSocket(wss, sessionMiddleware) {
       }
 
       // Build puzzle state
-      const puzzleState = roomState.started ? roomState.pieces.map(p => ({
-        index: p.index,
-        currentX: p.currentX,
-        currentY: p.currentY,
-        placed: p.placed,
-        lockedBy: p.lockedBy,
-        lockedByName: p.lockedBy ? roomState.players.get(p.lockedBy)?.username : null,
-        lockedByColor: p.lockedBy ? roomState.players.get(p.lockedBy)?.color : null
-      })) : [];
+      let puzzleState = [];
+      if (roomState.started) {
+        if (roomState.mode === 'race' && roomState.playerPuzzles) {
+          // Race mode: give new player their own puzzle copy if they don't have one
+          if (!roomState.playerPuzzles.has(playerId)) {
+            roomState.playerPuzzles.set(playerId, {
+              pieces: roomState.pieces.map(p => ({ ...p })),
+              placedCount: 0
+            });
+          }
+          const playerPuzzle = roomState.playerPuzzles.get(playerId);
+          puzzleState = playerPuzzle.pieces.map(p => ({
+            index: p.index,
+            currentX: p.currentX,
+            currentY: p.currentY,
+            placed: p.placed,
+            lockedBy: null,
+            lockedByName: null,
+            lockedByColor: null
+          }));
+        } else {
+          puzzleState = roomState.pieces.map(p => ({
+            index: p.index,
+            currentX: p.currentX,
+            currentY: p.currentY,
+            placed: p.placed,
+            lockedBy: p.lockedBy,
+            lockedByName: p.lockedBy ? roomState.players.get(p.lockedBy)?.username : null,
+            lockedByColor: p.lockedBy ? roomState.players.get(p.lockedBy)?.color : null
+          }));
+        }
+      }
 
       // Send joined to new player
       sendMsg(ws, {
@@ -298,7 +321,7 @@ export function setupWebSocket(wss, sessionMiddleware) {
         cols, rows, roomState.pieceWidth, roomState.pieceHeight, roomState.seed
       );
 
-      roomState.pieces = positions.map((p, i) => ({
+      const pieces = positions.map((p, i) => ({
         index: i,
         correctCol: p.col,
         correctRow: p.row,
@@ -308,6 +331,7 @@ export function setupWebSocket(wss, sessionMiddleware) {
         lockedBy: null
       }));
 
+      roomState.pieces = pieces;
       roomState.placedCount = 0;
       roomState.started = true;
       roomState.startTime = Date.now();
@@ -315,19 +339,46 @@ export function setupWebSocket(wss, sessionMiddleware) {
       // Update DB
       db.prepare('UPDATE rooms SET status = ? WHERE id = ?').run('playing', currentRoomId);
 
-      // Broadcast started with piece positions
-      const piecesData = roomState.pieces.map(p => ({
-        index: p.index,
-        currentX: p.currentX,
-        currentY: p.currentY,
-        placed: false,
-        lockedBy: null
-      }));
+      if (roomState.mode === 'race') {
+        // Race mode: each player gets their own copy of the puzzle
+        roomState.playerPuzzles = new Map();
+        for (const [pid] of roomState.players) {
+          roomState.playerPuzzles.set(pid, {
+            pieces: pieces.map(p => ({ ...p })),
+            placedCount: 0
+          });
+        }
 
-      broadcastToRoom(roomState, {
-        type: 'started',
-        pieces: piecesData
-      });
+        // Send each player their own piece positions
+        for (const [pid, player] of roomState.players) {
+          const playerPuzzle = roomState.playerPuzzles.get(pid);
+          const piecesData = playerPuzzle.pieces.map(p => ({
+            index: p.index,
+            currentX: p.currentX,
+            currentY: p.currentY,
+            placed: false,
+            lockedBy: null
+          }));
+          sendMsg(player.ws, {
+            type: 'started',
+            pieces: piecesData
+          });
+        }
+      } else {
+        // Co-op mode: shared pieces
+        const piecesData = roomState.pieces.map(p => ({
+          index: p.index,
+          currentX: p.currentX,
+          currentY: p.currentY,
+          placed: false,
+          lockedBy: null
+        }));
+
+        broadcastToRoom(roomState, {
+          type: 'started',
+          pieces: piecesData
+        });
+      }
     }
 
     function handleLock(msg) {
@@ -338,6 +389,31 @@ export function setupWebSocket(wss, sessionMiddleware) {
       const roomState = activeRooms.get(currentRoomId);
       if (!roomState || !roomState.started) {
         return sendMsg(ws, { type: 'error', message: 'Game not started' });
+      }
+
+      // Race mode: each player has their own pieces, no conflicts possible
+      if (roomState.mode === 'race') {
+        const playerPuzzle = roomState.playerPuzzles?.get(playerId);
+        if (!playerPuzzle) return;
+
+        const pieceIndex = msg.pieceIndex;
+        if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= playerPuzzle.pieces.length) return;
+
+        const piece = playerPuzzle.pieces[pieceIndex];
+        if (piece.placed) return;
+
+        piece.lockedBy = playerId;
+        const player = roomState.players.get(playerId);
+
+        // Only send confirmation back to the requesting player
+        sendMsg(ws, {
+          type: 'locked',
+          pieceIndex,
+          playerId,
+          playerName: player.username,
+          playerColor: player.color
+        });
+        return;
       }
 
       const pieceIndex = msg.pieceIndex;
@@ -371,6 +447,23 @@ export function setupWebSocket(wss, sessionMiddleware) {
       const roomState = activeRooms.get(currentRoomId);
       if (!roomState || !roomState.started) return;
 
+      // Race mode: update the player's own puzzle, no broadcast needed
+      if (roomState.mode === 'race') {
+        const playerPuzzle = roomState.playerPuzzles?.get(playerId);
+        if (!playerPuzzle) return;
+
+        const pieceIndex = msg.pieceIndex;
+        if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= playerPuzzle.pieces.length) return;
+
+        const piece = playerPuzzle.pieces[pieceIndex];
+        if (piece.lockedBy !== playerId) return;
+
+        piece.currentX = msg.x;
+        piece.currentY = msg.y;
+        // No broadcast — each player only sees their own board
+        return;
+      }
+
       const pieceIndex = msg.pieceIndex;
       if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= roomState.pieces.length) return;
 
@@ -400,6 +493,111 @@ export function setupWebSocket(wss, sessionMiddleware) {
         return sendMsg(ws, { type: 'error', message: 'Game not started' });
       }
 
+      // Race mode: validate against the player's own puzzle
+      if (roomState.mode === 'race') {
+        const playerPuzzle = roomState.playerPuzzles?.get(playerId);
+        if (!playerPuzzle) return;
+
+        const pieceIndex = msg.pieceIndex;
+        if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= playerPuzzle.pieces.length) return;
+
+        const piece = playerPuzzle.pieces[pieceIndex];
+        if (piece.lockedBy !== playerId) return;
+
+        const correctX = piece.correctCol * roomState.pieceWidth;
+        const correctY = piece.correctRow * roomState.pieceHeight;
+        const dist = Math.sqrt((msg.x - correctX) ** 2 + (msg.y - correctY) ** 2);
+        const snapThreshold = Math.min(roomState.pieceWidth, roomState.pieceHeight) * 0.25;
+
+        if (dist <= snapThreshold) {
+          piece.placed = true;
+          piece.currentX = correctX;
+          piece.currentY = correctY;
+          piece.lockedBy = null;
+          playerPuzzle.placedCount++;
+
+          const player = roomState.players.get(playerId);
+          player.score++;
+
+          // Update DB pieces_placed
+          if (player.userId) {
+            db.prepare(
+              'UPDATE room_players SET pieces_placed = pieces_placed + 1 WHERE room_id = ? AND user_id = ?'
+            ).run(currentRoomId, player.userId);
+          } else if (player.guestName) {
+            db.prepare(
+              'UPDATE room_players SET pieces_placed = pieces_placed + 1 WHERE room_id = ? AND guest_name = ?'
+            ).run(currentRoomId, player.guestName);
+          }
+
+          const totalPieces = playerPuzzle.pieces.length;
+          const progress = Math.round((playerPuzzle.placedCount / totalPieces) * 100);
+
+          // Send placed confirmation to the player
+          sendMsg(ws, {
+            type: 'placed',
+            pieceIndex,
+            correctX,
+            correctY,
+            playerId,
+            score: player.score
+          });
+
+          // Broadcast progress to all players
+          broadcastToRoom(roomState, {
+            type: 'race_progress',
+            playerId,
+            playerName: player.username,
+            playerColor: player.color,
+            progress,
+            placedCount: playerPuzzle.placedCount,
+            totalPieces
+          });
+
+          // Check if this player completed the puzzle
+          if (playerPuzzle.placedCount === totalPieces) {
+            const completionTime = roomState.startTime ? Math.floor((Date.now() - roomState.startTime) / 1000) : 0;
+
+            // Build scores for all players
+            const scores = [];
+            for (const [pid, p] of roomState.players) {
+              const pp = roomState.playerPuzzles.get(pid);
+              scores.push({
+                playerId: pid,
+                username: p.username,
+                color: p.color,
+                score: pp ? pp.placedCount : 0,
+                totalPieces,
+                completionTime: pp && pp.placedCount === totalPieces ? completionTime : null
+              });
+            }
+
+            scores.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+            broadcastToRoom(roomState, {
+              type: 'race_complete',
+              winner: { id: playerId, name: player.username, color: player.color, time: completionTime },
+              scores
+            });
+
+            // Update DB and stats
+            handleRaceCompletion(roomState, currentRoomId);
+          }
+        } else {
+          // Incorrect - update position and unlock
+          piece.currentX = msg.x;
+          piece.currentY = msg.y;
+          piece.lockedBy = null;
+
+          sendMsg(ws, {
+            type: 'unlocked',
+            pieceIndex
+          });
+        }
+        return;
+      }
+
+      // Co-op mode (original logic)
       const pieceIndex = msg.pieceIndex;
       if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= roomState.pieces.length) {
         return sendMsg(ws, { type: 'error', message: 'Invalid piece index' });
@@ -472,6 +670,26 @@ export function setupWebSocket(wss, sessionMiddleware) {
       const roomState = activeRooms.get(currentRoomId);
       if (!roomState || !roomState.started) return;
 
+      // Race mode: unlock in the player's own puzzle
+      if (roomState.mode === 'race') {
+        const playerPuzzle = roomState.playerPuzzles?.get(playerId);
+        if (!playerPuzzle) return;
+
+        const pieceIndex = msg.pieceIndex;
+        if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= playerPuzzle.pieces.length) return;
+
+        const piece = playerPuzzle.pieces[pieceIndex];
+        if (piece.lockedBy !== playerId) return;
+
+        piece.lockedBy = null;
+
+        sendMsg(ws, {
+          type: 'unlocked',
+          pieceIndex
+        });
+        return;
+      }
+
       const pieceIndex = msg.pieceIndex;
       if (pieceIndex == null || pieceIndex < 0 || pieceIndex >= roomState.pieces.length) return;
 
@@ -504,6 +722,48 @@ export function setupWebSocket(wss, sessionMiddleware) {
         text,
         color: player.color
       });
+    }
+
+    function handleRaceCompletion(roomState, roomId) {
+      // Update room status
+      db.prepare('UPDATE rooms SET status = ? WHERE id = ?').run('completed', roomId);
+
+      const playTime = roomState.startTime ? Math.floor((Date.now() - roomState.startTime) / 1000) : 0;
+      const isRanked = roomState.isRanked;
+      const totalPieces = roomState.pieces.length;
+
+      for (const [pid, player] of roomState.players) {
+        const pp = roomState.playerPuzzles?.get(pid);
+        const piecesPlaced = pp ? pp.placedCount : 0;
+
+        if (player.userId) {
+          const piecesCol = isRanked ? 'ranked_pieces_placed' : 'unranked_pieces_placed';
+          const puzzlesCol = isRanked ? 'ranked_puzzles_completed' : 'unranked_puzzles_completed';
+
+          db.prepare('INSERT OR IGNORE INTO stats (user_id) VALUES (?)').run(player.userId);
+
+          db.prepare(`
+            UPDATE stats SET
+              ${piecesCol} = ${piecesCol} + ?,
+              ${puzzlesCol} = ${puzzlesCol} + 1,
+              total_time_played = total_time_played + ?
+            WHERE user_id = ?
+          `).run(piecesPlaced, playTime, player.userId);
+
+          db.prepare(`
+            INSERT INTO puzzle_history (user_id, room_id, image_name, piece_count, pieces_placed, mode, is_ranked)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            player.userId,
+            roomId,
+            roomState.imageFilename,
+            totalPieces,
+            piecesPlaced,
+            'race',
+            isRanked ? 1 : 0
+          );
+        }
+      }
     }
 
     function handleCompletion(roomState, roomId) {
@@ -576,7 +836,12 @@ export function setupWebSocket(wss, sessionMiddleware) {
       if (!roomState) return;
 
       // Unlock all pieces locked by this player
-      if (roomState.pieces) {
+      if (roomState.mode === 'race') {
+        // Race mode: just remove their puzzle state
+        if (roomState.playerPuzzles) {
+          roomState.playerPuzzles.delete(pid);
+        }
+      } else if (roomState.pieces) {
         for (const piece of roomState.pieces) {
           if (piece.lockedBy === pid) {
             piece.lockedBy = null;
