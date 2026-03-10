@@ -163,15 +163,25 @@ class PuzzleRenderer {
   /* ------------------------------------------------------------------ */
 
   _drawGrid(ctx) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 0.5;
-
     const totalW = this.cols * this.pieceWidth;
     const totalH = this.rows * this.pieceHeight;
 
-    // Outer border
+    ctx.save();
+
+    // Board area background — subtle fill to distinguish from tray/scatter area
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.fillRect(0, 0, totalW, totalH);
+
+    // Board area border — slightly stronger to mark the target zone
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([8, 4]);
     ctx.strokeRect(0, 0, totalW, totalH);
+    ctx.setLineDash([]);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 0.5;
 
     // Vertical lines
     for (let c = 1; c < this.cols; c++) {
@@ -362,7 +372,7 @@ class PuzzleRenderer {
   }
 
   /**
-   * Center the puzzle in the viewport with zoom-to-fit.
+   * Center the puzzle board in the viewport with zoom-to-fit.
    */
   centerBoard() {
     const rect = this.canvas.parentElement.getBoundingClientRect();
@@ -379,6 +389,52 @@ class PuzzleRenderer {
     // Center
     this.panX = (rect.width - totalW * this.zoom) / 2;
     this.panY = (rect.height - totalH * this.zoom) / 2;
+  }
+
+  /**
+   * Zoom to fit ALL pieces (board + scattered pieces in tray area).
+   * Computes a bounding box around all piece positions and fits the view.
+   */
+  fitAllPieces() {
+    if (this.pieceStates.size === 0) {
+      this.centerBoard();
+      return;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const [i, state] of this.pieceStates) {
+      const x = state.x;
+      const y = state.y;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + this.pieceWidth > maxX) maxX = x + this.pieceWidth;
+      if (y + this.pieceHeight > maxY) maxY = y + this.pieceHeight;
+    }
+
+    // Also include the board area itself
+    const boardW = this.cols * this.pieceWidth;
+    const boardH = this.rows * this.pieceHeight;
+    if (0 < minX) minX = 0;
+    if (0 < minY) minY = 0;
+    if (boardW > maxX) maxX = boardW;
+    if (boardH > maxY) maxY = boardH;
+
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const marginFactor = 0.85;
+    const scaleX = (rect.width * marginFactor) / contentW;
+    const scaleY = (rect.height * marginFactor) / contentH;
+    this.zoom = Math.min(scaleX, scaleY);
+    this.zoom = Math.max(0.1, Math.min(3, this.zoom));
+
+    // Center the bounding box
+    const centerBoardX = (minX + maxX) / 2;
+    const centerBoardY = (minY + maxY) / 2;
+    this.panX = rect.width / 2 - centerBoardX * this.zoom;
+    this.panY = rect.height / 2 - centerBoardY * this.zoom;
   }
 }
 

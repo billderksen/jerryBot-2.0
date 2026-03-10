@@ -710,8 +710,11 @@ export function setupWebSocket(wss, sessionMiddleware) {
       const roomState = activeRooms.get(currentRoomId);
       if (!roomState) return;
 
-      const text = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
+      let text = typeof msg.text === 'string' ? msg.text.slice(0, 200) : '';
       if (!text) return;
+
+      // Sanitize for XSS — escape HTML entities
+      text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
       const player = roomState.players.get(playerId);
 

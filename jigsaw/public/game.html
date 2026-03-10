@@ -18,6 +18,20 @@
         <span id="connection-status" class="status-dot connected" title="Connected"></span>
       </div>
 
+      <!-- Floating action buttons (mobile) -->
+      <div class="fab-container">
+        <button id="fab-center" class="fab" title="Center Board">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+          </svg>
+        </button>
+        <button id="fab-fit-all" class="fab" title="Fit All Pieces">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+        </button>
+      </div>
+
       <!-- Waiting overlay (shown before game starts) -->
       <div id="waiting-overlay">
         <div id="waiting-message">

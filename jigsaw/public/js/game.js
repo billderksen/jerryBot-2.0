@@ -145,6 +145,17 @@ class Game {
       this.addSystemMessage(name + ' left');
     });
 
+    // Handle "host_changed" — host migrated to another player
+    this.network.on('host_changed', (msg) => {
+      for (const [pid, player] of this.players) {
+        player.isHost = (pid === msg.playerId);
+      }
+      this.isHost = (msg.playerId === this.myPlayerId);
+      this.updatePlayerList();
+      const newHost = this.players.get(msg.playerId);
+      this.addSystemMessage((newHost?.name || 'Someone') + ' is now the host');
+    });
+
     // Handle "locked" — a piece was locked by a player
     this.network.on('locked', (msg) => {
       if (msg.playerId === this.myPlayerId) {
@@ -346,12 +357,55 @@ class Game {
       location.href = '/';
     });
 
-    // Mobile sidebar toggle
+    // Mobile sidebar toggle with swipe support
     const sidebar = document.getElementById('sidebar');
     const handle = document.getElementById('sidebar-handle');
     if (handle) {
       handle.addEventListener('click', () => {
         sidebar.classList.toggle('expanded');
+      });
+
+      // Swipe gesture on sidebar handle
+      let touchStartY = 0;
+      let touchStartTime = 0;
+      handle.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+      }, { passive: true });
+
+      handle.addEventListener('touchend', (e) => {
+        const touchEndY = e.changedTouches[0].clientY;
+        const deltaY = touchStartY - touchEndY;
+        const elapsed = Date.now() - touchStartTime;
+        // Quick swipe threshold: >40px in <300ms
+        if (elapsed < 300 && Math.abs(deltaY) > 40) {
+          if (deltaY > 0) {
+            sidebar.classList.add('expanded');     // swipe up → open
+          } else {
+            sidebar.classList.remove('expanded');  // swipe down → close
+          }
+        }
+      }, { passive: true });
+    }
+
+    // Floating action buttons (mobile)
+    const fabCenter = document.getElementById('fab-center');
+    if (fabCenter) {
+      fabCenter.addEventListener('click', () => {
+        if (this.renderer) {
+          this.renderer.centerBoard();
+          this.renderer.drawBoard();
+        }
+      });
+    }
+
+    const fabFitAll = document.getElementById('fab-fit-all');
+    if (fabFitAll) {
+      fabFitAll.addEventListener('click', () => {
+        if (this.renderer) {
+          this.renderer.fitAllPieces();
+          this.renderer.drawBoard();
+        }
       });
     }
   }
@@ -470,15 +524,25 @@ class Game {
     const el = document.createElement('div');
     el.className = 'chat-msg';
 
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'chat-time';
+    timeSpan.textContent = timeStr;
+
     const nameSpan = document.createElement('span');
     nameSpan.className = 'chat-name';
     nameSpan.style.color = color || '#888';
     nameSpan.textContent = name + ':';
 
+    // textContent is safe against XSS — no innerHTML used
     const textSpan = document.createElement('span');
     textSpan.className = 'chat-text';
     textSpan.textContent = ' ' + text;
 
+    el.appendChild(timeSpan);
+    el.appendChild(document.createTextNode(' '));
     el.appendChild(nameSpan);
     el.appendChild(textSpan);
     container.appendChild(el);

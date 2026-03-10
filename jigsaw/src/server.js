@@ -31,7 +31,7 @@ app.use(sessionMiddleware);
 import { setupAuth } from './auth.js';
 setupAuth(app);
 
-import roomRoutes from './rooms.js';
+import roomRoutes, { startRoomCleanup } from './rooms.js';
 app.use(roomRoutes);
 
 import uploadRoutes from './upload.js';
@@ -57,6 +57,9 @@ setupWebSocket(wss, sessionMiddleware);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Start periodic room cleanup
+startRoomCleanup();
 
 server.listen(PORT, () => {
   console.log(`Jigsaw server running on port ${PORT}`);

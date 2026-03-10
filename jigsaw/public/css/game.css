@@ -475,6 +475,13 @@ html, body {
   font-size: 0.75rem;
 }
 
+.chat-time {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  margin-left: 0.3rem;
+}
+
 #chat-input-area {
   display: flex;
   gap: 0.35rem;
@@ -590,6 +597,45 @@ html, body {
   border-color: var(--accent);
 }
 
+/* ── Floating Action Buttons (mobile) ── */
+
+.fab-container {
+  position: absolute;
+  bottom: 60px;
+  right: 12px;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fab {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
+  transition: background 0.2s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fab:active {
+  transform: scale(0.92);
+}
+
+.fab svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* ── Mobile Layout ── */
 
 @media (max-width: 768px) {
@@ -599,6 +645,10 @@ html, body {
 
   #puzzle-area {
     flex: 1;
+  }
+
+  .fab-container {
+    display: flex;
   }
 
   #sidebar {

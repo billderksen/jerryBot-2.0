@@ -7,6 +7,74 @@ const router = Router();
 // In-memory room state for puzzle pieces, player connections (used by WebSocket later)
 export const activeRooms = new Map();
 
+// ── Periodic Room Cleanup ──
+// Runs every 5 minutes: deletes stale rooms from DB and activeRooms
+const CLEANUP_INTERVAL = 5 * 60 * 1000;      // 5 minutes
+const COMPLETION_TTL = 5 * 60 * 1000;         // 5 min after completion
+const INACTIVITY_TTL = 30 * 60 * 1000;        // 30 min inactivity
+
+export function startRoomCleanup() {
+  setInterval(() => {
+    const now = Date.now();
+
+    // 1. Clean up active rooms with no players (inactivity)
+    for (const [roomId, state] of activeRooms) {
+      if (state.players.size === 0) {
+        // Room has no players — check if it has been empty long enough
+        if (!state._emptyAt) {
+          state._emptyAt = now;
+        } else if (now - state._emptyAt > 60000) {
+          // Empty for over 1 minute, remove from memory
+          activeRooms.delete(roomId);
+        }
+      } else {
+        // Reset empty timer if players exist
+        state._emptyAt = null;
+        // Track last activity
+        state._lastActivity = now;
+      }
+    }
+
+    // 2. Delete completed rooms from DB older than COMPLETION_TTL
+    try {
+      const completedCutoff = new Date(now - COMPLETION_TTL).toISOString();
+      const completedRooms = db.prepare(
+        "SELECT id FROM rooms WHERE status = 'completed' AND created_at < ?"
+      ).all(completedCutoff);
+
+      for (const room of completedRooms) {
+        db.prepare('DELETE FROM room_players WHERE room_id = ?').run(room.id);
+        db.prepare('DELETE FROM rooms WHERE id = ?').run(room.id);
+        activeRooms.delete(room.id);
+      }
+    } catch (err) {
+      console.error('Room cleanup error (completed):', err.message);
+    }
+
+    // 3. Delete waiting/playing rooms with no active players that are stale (30 min)
+    try {
+      const staleCutoff = new Date(now - INACTIVITY_TTL).toISOString();
+      const staleRooms = db.prepare(
+        "SELECT id FROM rooms WHERE status IN ('waiting', 'playing') AND created_at < ?"
+      ).all(staleCutoff);
+
+      for (const room of staleRooms) {
+        // Only delete if no active players in memory
+        const active = activeRooms.get(room.id);
+        if (!active || active.players.size === 0) {
+          db.prepare('DELETE FROM room_players WHERE room_id = ?').run(room.id);
+          db.prepare('DELETE FROM rooms WHERE id = ?').run(room.id);
+          activeRooms.delete(room.id);
+        }
+      }
+    } catch (err) {
+      console.error('Room cleanup error (stale):', err.message);
+    }
+  }, CLEANUP_INTERVAL);
+
+  console.log('Room cleanup interval started (every 5 min)');
+}
+
 const VALID_PIECE_COUNTS = [24, 48, 100, 200];
 const VALID_MODES = ['coop', 'race'];
 
