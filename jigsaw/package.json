@@ -1,0 +1,29 @@
+{
+  "name": "jigsaw-puzzle",
+  "version": "1.0.0",
+  "description": "Multiplayer web-hosted jigsaw puzzle game",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "multer": "^2.1.1",
+    "passport": "^0.7.0",
+    "passport-discord": "^0.1.4",
+    "passport-local": "^1.0.0",
+    "sharp": "^0.34.5",
+    "uuid": "^13.0.0",
+    "ws": "^8.19.0"
+  }
+}
