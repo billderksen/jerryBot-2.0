@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import db from './db.js';
 import { seedBuiltinImages } from './seedImages.js';
+import { setupWebSocket } from './websocket.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -45,6 +46,9 @@ app.use('/uploads', express.static(join(__dirname, '..', 'uploads')));
 
 // Seed built-in images
 seedBuiltinImages();
+
+// WebSocket handler
+setupWebSocket(wss, sessionMiddleware);
 
 // Health check
 app.get('/api/health', (req, res) => {
