@@ -30,6 +30,12 @@ app.use(sessionMiddleware);
 import { setupAuth } from './auth.js';
 setupAuth(app);
 
+import roomRoutes from './rooms.js';
+app.use(roomRoutes);
+
+import uploadRoutes from './upload.js';
+app.use(uploadRoutes);
+
 // Static files
 app.use(express.static(join(__dirname, '..', 'public')));
 
