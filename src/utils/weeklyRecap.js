@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { EmbedBuilder } from 'discord.js';
 import { getDiscordActivity } from './discordTracker.js';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,30 +23,15 @@ let discordClient = null;
 let scheduleTimeout = null;
 
 function loadJSON(path) {
-  try {
-    if (existsSync(path)) {
-      return JSON.parse(readFileSync(path, 'utf8'));
-    }
-  } catch (e) {
-    console.error(`[WeeklyRecap] Error loading ${path}:`, e.message);
-  }
-  return null;
+  return loadJsonSync(path, null);
 }
 
 function saveRecaps() {
-  try {
-    writeFileSync(RECAPS_FILE, JSON.stringify(recapData, null, 2));
-  } catch (e) {
-    console.error('[WeeklyRecap] Error saving recaps:', e.message);
-  }
+  saveJsonSync(RECAPS_FILE, recapData);
 }
 
 function saveSnapshots() {
-  try {
-    writeFileSync(SNAPSHOTS_FILE, JSON.stringify(snapshots, null, 2));
-  } catch (e) {
-    console.error('[WeeklyRecap] Error saving snapshots:', e.message);
-  }
+  saveJsonSync(SNAPSHOTS_FILE, snapshots);
 }
 
 function getWeekBounds(now = new Date()) {

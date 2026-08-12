@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { EmbedBuilder } from 'discord.js';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,24 +16,11 @@ let scheduleTimeout = null;
 
 function load() {
   if (data !== null) return;
-  try {
-    if (existsSync(DATA_FILE)) {
-      data = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-    } else {
-      data = { birthdays: {}, channels: {} };
-    }
-  } catch (error) {
-    console.error('[BirthdayTracker] Error loading data:', error.message);
-    data = { birthdays: {}, channels: {} };
-  }
+  data = loadJsonSync(DATA_FILE, { birthdays: {}, channels: {} });
 }
 
 function save() {
-  try {
-    writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('[BirthdayTracker] Error saving data:', error.message);
-  }
+  saveJsonSync(DATA_FILE, data);
 }
 
 function msUntilNext8AM() {

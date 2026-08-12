@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { fetch } from 'undici';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,31 +18,16 @@ let isRefreshing = false;
 // --- Data persistence ---
 
 function loadData() {
-  try {
-    if (existsSync(DATA_FILE)) {
-      return JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-    }
-  } catch (error) {
-    console.error('[OSRS Tracker] Error loading data:', error.message);
-  }
-  return {
+  return loadJsonSync(DATA_FILE, {
     trackedPlayers: [2338746, 2339388, 2338689, 2498203],
     players: {},
     gains: {},
     lastRefresh: null
-  };
+  });
 }
 
 function saveData() {
-  try {
-    const dataDir = dirname(DATA_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(DATA_FILE, JSON.stringify(trackerData, null, 2));
-  } catch (error) {
-    console.error('[OSRS Tracker] Error saving data:', error.message);
-  }
+  saveJsonSync(DATA_FILE, trackerData);
 }
 
 // --- WOM API ---

@@ -1,33 +1,20 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const DATA_FILE = join(__dirname, '..', '..', 'data', 'lastSeen.json');
 
-let data = {};
+let data = loadJsonSync(DATA_FILE, {});
 let saveTimeout = null;
-
-// Load on startup
-try {
-  if (existsSync(DATA_FILE)) {
-    data = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-  }
-} catch (e) {
-  console.error('[LastSeen] Error loading data:', e.message);
-}
 
 // Debounced save — writes at most once per 10 seconds to avoid excessive I/O
 function scheduleSave() {
   if (saveTimeout) return;
   saveTimeout = setTimeout(() => {
     saveTimeout = null;
-    try {
-      writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-    } catch (e) {
-      console.error('[LastSeen] Error saving data:', e.message);
-    }
+    saveJsonSync(DATA_FILE, data);
   }, 10000);
 }
 

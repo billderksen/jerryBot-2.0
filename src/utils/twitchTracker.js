@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { fetch } from 'undici';
 import { EmbedBuilder } from 'discord.js';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,29 +20,14 @@ let tokenExpiresAt = 0;
 // --- Data persistence ---
 
 function loadData() {
-  try {
-    if (existsSync(DATA_FILE)) {
-      return JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-    }
-  } catch (error) {
-    console.error('[Twitch Tracker] Error loading data:', error.message);
-  }
-  return {
+  return loadJsonSync(DATA_FILE, {
     streamers: {},
     notificationChannelId: null
-  };
+  });
 }
 
 function saveData() {
-  try {
-    const dataDir = dirname(DATA_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(DATA_FILE, JSON.stringify(trackerData, null, 2));
-  } catch (error) {
-    console.error('[Twitch Tracker] Error saving data:', error.message);
-  }
+  saveJsonSync(DATA_FILE, trackerData);
 }
 
 // --- Twitch API auth (Client Credentials) ---

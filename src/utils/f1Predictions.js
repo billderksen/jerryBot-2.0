@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { fetch } from 'undici';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,22 +60,11 @@ const DRIVERS = [
 // --- Persistence ---
 
 function loadData() {
-  try {
-    if (existsSync(DATA_FILE)) {
-      return JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-    }
-  } catch (e) {
-    console.error('[F1] Error loading data:', e.message);
-  }
-  return { predictions: {}, results: {}, standings: {} };
+  return loadJsonSync(DATA_FILE, { predictions: {}, results: {}, standings: {} });
 }
 
 function saveData(data) {
-  try {
-    writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error('[F1] Error saving data:', e.message);
-  }
+  saveJsonSync(DATA_FILE, data);
 }
 
 // --- Exports ---

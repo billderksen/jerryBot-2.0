@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { EmbedBuilder } from 'discord.js';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,30 +21,16 @@ let dirty = false;
 let discordClient = null;
 
 function loadData() {
-  try {
-    if (existsSync(DATA_FILE)) {
-      const raw = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-      data = {
-        users: raw.users || {},
-        roleRewards: raw.roleRewards || {}
-      };
-    }
-  } catch (e) {
-    console.error('[LevelSystem] Error loading data:', e.message);
-  }
+  const raw = loadJsonSync(DATA_FILE, { users: {}, roleRewards: {} });
+  data = {
+    users: raw.users || {},
+    roleRewards: raw.roleRewards || {}
+  };
 }
 
 function saveData() {
-  try {
-    const dataDir = dirname(DATA_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-    dirty = false;
-  } catch (e) {
-    console.error('[LevelSystem] Error saving data:', e.message);
-  }
+  saveJsonSync(DATA_FILE, data);
+  dirty = false;
 }
 
 function markDirty() {

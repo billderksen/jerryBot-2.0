@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,28 +14,11 @@ let data = null;
 
 function load() {
   if (data !== null) return;
-  try {
-    if (existsSync(DATA_FILE)) {
-      data = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-    } else {
-      data = {};
-    }
-  } catch (error) {
-    console.error('Error loading playlists:', error);
-    data = {};
-  }
+  data = loadJsonSync(DATA_FILE, {});
 }
 
 function save() {
-  try {
-    const dir = dirname(DATA_FILE);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('Error saving playlists:', error);
-  }
+  saveJsonSync(DATA_FILE, data);
 }
 
 function ensureUser(userId) {

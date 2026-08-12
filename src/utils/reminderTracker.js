@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -13,24 +13,11 @@ const activeTimeouts = new Map();
 
 function load() {
   if (data !== null) return;
-  try {
-    if (existsSync(DATA_FILE)) {
-      data = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-    } else {
-      data = { reminders: [] };
-    }
-  } catch (error) {
-    console.error('[ReminderTracker] Error loading data:', error.message);
-    data = { reminders: [] };
-  }
+  data = loadJsonSync(DATA_FILE, { reminders: [] });
 }
 
 function save() {
-  try {
-    writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('[ReminderTracker] Error saving data:', error.message);
-  }
+  saveJsonSync(DATA_FILE, data);
 }
 
 function generateId() {

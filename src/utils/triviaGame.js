@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { fetch } from 'undici';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -131,22 +132,11 @@ function formatQuestions(questions) {
 // --- Leaderboard ---
 
 function loadLeaderboard() {
-  try {
-    if (existsSync(LEADERBOARD_FILE)) {
-      return JSON.parse(readFileSync(LEADERBOARD_FILE, 'utf8'));
-    }
-  } catch (e) {
-    console.error('[Trivia] Error loading leaderboard:', e.message);
-  }
-  return { players: {} };
+  return loadJsonSync(LEADERBOARD_FILE, { players: {} });
 }
 
 function saveLeaderboard(data) {
-  try {
-    writeFileSync(LEADERBOARD_FILE, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error('[Trivia] Error saving leaderboard:', e.message);
-  }
+  saveJsonSync(LEADERBOARD_FILE, data);
 }
 
 /**
