@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Birthday Calendar - Godcord Music Bot</title>
+  <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #050507;
+      --bg-secondary: #0c0c10;
+      --bg-tertiary: #131318;
+      --surface: #18181d;
+      --surface-hover: #1f1f26;
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+      --accent-glow: rgba(29, 185, 84, 0.4);
+      --text-primary: #ededf0;
+      --text-secondary: #a0a0ad;
+      --text-muted: #5c5c6e;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.1);
+      --bg-hover: rgba(255, 255, 255, 0.04);
+      --danger: #f04848;
+      --birthday-bg: rgba(255, 105, 180, 0.15);
+      --birthday-border: rgba(255, 105, 180, 0.4);
+      --birthday-text: #ff69b4;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .back-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+    .back-btn svg { width: 18px; height: 18px; }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* User profile dropdown */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+    .user-profile:hover { background: var(--bg-hover); }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      overflow: hidden;
+    }
+    .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .user-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-width: 200px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.2s;
+      z-index: 2000;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    .user-profile.open::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1999;
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .user-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .user-dropdown-item.active { background: rgba(29, 185, 84, 0.1); color: var(--accent); }
+    .user-dropdown-item.logout { color: #ef4444; }
+    .user-dropdown-item.logout:hover { background: rgba(239,68,68,0.1); }
+
+    /* Month Navigation */
+    .month-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .month-nav-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 18px;
+    }
+    .month-nav-btn:hover {
+      background: var(--surface-hover);
+      border-color: var(--border-hover);
+    }
+    .month-nav-btn svg { width: 20px; height: 20px; }
+
+    .month-title {
+      font-size: 22px;
+      font-weight: 600;
+      min-width: 220px;
+      text-align: center;
+    }
+
+    /* Calendar Grid */
+    .calendar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+
+    .calendar-header {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .calendar-header-cell {
+      padding: 14px 0;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .calendar-body {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+
+    .calendar-cell {
+      min-height: 90px;
+      padding: 8px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+      position: relative;
+    }
+    .calendar-cell:nth-child(7n) { border-right: none; }
+    .calendar-body .calendar-cell:nth-last-child(-n+7) { border-bottom: none; }
+
+    .calendar-cell.empty {
+      background: var(--bg-primary);
+      opacity: 0.4;
+    }
+
+    .calendar-cell.today {
+      border: 2px solid var(--accent);
+      border-radius: 4px;
+    }
+
+    .calendar-cell.has-birthday {
+      background: var(--birthday-bg);
+      border-color: var(--birthday-border);
+    }
+    .calendar-cell.today.has-birthday {
+      border-color: var(--accent);
+    }
+
+    .cell-day {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .calendar-cell.today .cell-day {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .cell-birthday {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--birthday-text);
+      font-weight: 500;
+      padding: 2px 6px;
+      background: rgba(255, 105, 180, 0.1);
+      border-radius: 4px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cell-birthday-icon {
+      flex-shrink: 0;
+    }
+
+    /* Month Summary */
+    .month-summary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .month-summary-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .month-summary-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .month-summary-list {
+      padding: 0;
+    }
+
+    .summary-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .summary-item:last-child { border-bottom: none; }
+    .summary-item:hover { background: var(--bg-hover); }
+
+    .summary-date {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      background: var(--birthday-bg);
+      border: 1px solid var(--birthday-border);
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--birthday-text);
+      flex-shrink: 0;
+    }
+
+    .summary-info {
+      flex: 1;
+    }
+    .summary-name {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .summary-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .summary-empty {
+      padding: 40px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container { padding: 16px; }
+      .header { flex-wrap: wrap; gap: 12px; }
+      .header-left { gap: 10px; }
+      h1 { font-size: 22px; }
+      .calendar-cell { min-height: 70px; padding: 4px; }
+      .cell-day { font-size: 11px; }
+      .cell-birthday { font-size: 10px; padding: 1px 4px; }
+      .month-title { font-size: 18px; min-width: 180px; }
+      .calendar-header-cell { font-size: 10px; padding: 10px 0; }
+    }
+
+    @media (max-width: 480px) {
+      .back-btn span { display: none; }
+      .calendar-cell { min-height: 56px; }
+      .cell-birthday { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-left">
+        <a href="/" class="back-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          <span>Back to Player</span>
+        </a>
+        <h1>&#127874; Birthday Calendar</h1>
+      </div>
+      <div class="user-profile" id="userProfile">
+        <img class="user-avatar" id="userAvatar" src="" alt="">
+        <span class="user-name" id="userName"></span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <div class="user-dropdown">
+          <a href="/" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Music Player
+          </a>
+          <a href="/stats" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Listening Stats
+          </a>
+          <a href="/recap" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Weekly Recap
+          </a>
+          <a href="/pictionary" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+            Pictionary
+          </a>
+          <a href="/osrs" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Runescape Tracker
+          </a>
+          <a href="/twitch" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/><path d="M10 6v6"/><path d="M14 6v6"/></svg>
+            Twitch Alerts
+          </a>
+          <a href="/playlists" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-3-7 3V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            My Playlists
+          </a>
+          <a href="/trivia" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Trivia
+          </a>
+          <a href="/f1" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            F1 Predictions
+          </a>
+          <a href="/birthdays" class="user-dropdown-item active">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+            Birthdays
+          </a>
+          <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            Bot Settings
+          </a>
+          <a href="/logout" class="user-dropdown-item logout">Logout</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Month Navigation -->
+    <div class="month-nav">
+      <button class="month-nav-btn" id="prevMonth" title="Previous month">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="month-title" id="monthTitle"></div>
+      <button class="month-nav-btn" id="nextMonth" title="Next month">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+
+    <!-- Calendar -->
+    <div class="calendar">
+      <div class="calendar-header">
+        <div class="calendar-header-cell">Mon</div>
+        <div class="calendar-header-cell">Tue</div>
+        <div class="calendar-header-cell">Wed</div>
+        <div class="calendar-header-cell">Thu</div>
+        <div class="calendar-header-cell">Fri</div>
+        <div class="calendar-header-cell">Sat</div>
+        <div class="calendar-header-cell">Sun</div>
+      </div>
+      <div class="calendar-body" id="calendarBody">
+        <div class="loading">Loading birthdays...</div>
+      </div>
+    </div>
+
+    <!-- Month Summary -->
+    <div class="month-summary">
+      <div class="month-summary-header">
+        <span style="font-size: 20px;">&#127881;</span>
+        <h2 id="summaryTitle">Birthdays this month</h2>
+      </div>
+      <div class="month-summary-list" id="summaryList">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let birthdays = {};
+    let currentMonth = new Date().getMonth();
+    let currentYear = new Date().getFullYear();
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    // User dropdown
+    const userProfile = document.getElementById('userProfile');
+    userProfile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userProfile.classList.toggle('open');
+    });
+    document.addEventListener('click', () => userProfile.classList.remove('open'));
+
+    // Load user info
+    async function loadUserInfo() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const user = await res.json();
+          document.getElementById('userName').textContent = user.displayName || user.username;
+          if (user.avatar) {
+            document.getElementById('userAvatar').src =
+              'https://cdn.discordapp.com/avatars/' + user.id + '/' + user.avatar + '.png';
+          }
+          if (user.hasControlPanel) {
+            document.getElementById('adminLink').style.display = '';
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Load birthdays from API
+    async function loadBirthdays() {
+      try {
+        const res = await fetch('/api/birthdays');
+        if (res.ok) {
+          birthdays = await res.json();
+          renderCalendar();
+        }
+      } catch (e) {
+        console.error('Failed to load birthdays:', e);
+        document.getElementById('calendarBody').textContent = '';
+        const msg = document.createElement('div');
+        msg.className = 'loading';
+        msg.textContent = 'Failed to load birthdays';
+        document.getElementById('calendarBody').appendChild(msg);
+      }
+    }
+
+    // Get birthdays for a specific day
+    function getBirthdaysForDay(month, day) {
+      // API uses 1-indexed months
+      const apiMonth = month + 1;
+      const results = [];
+      for (const [userId, data] of Object.entries(birthdays)) {
+        if (data.month === apiMonth && data.day === day) {
+          results.push(data.displayName);
+        }
+      }
+      return results;
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Ordinal suffix helper
+    function getOrdinalSuffix(day) {
+      if (day >= 11 && day <= 13) return 'th';
+      switch (day % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+      }
+    }
+
+    // Render the calendar using DOM methods
+    function renderCalendar() {
+      const now = new Date();
+      const todayDay = now.getDate();
+      const todayMonth = now.getMonth();
+      const todayYear = now.getFullYear();
+
+      // Update month title
+      document.getElementById('monthTitle').textContent =
+        monthNames[currentMonth] + ' ' + currentYear;
+
+      // Calculate grid
+      const firstDay = new Date(currentYear, currentMonth, 1);
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      // Day of week for first day (0=Sun, convert to Mon=0)
+      let startDow = firstDay.getDay() - 1;
+      if (startDow < 0) startDow = 6; // Sunday becomes 6
+
+      const body = document.getElementById('calendarBody');
+      body.textContent = '';
+
+      // Empty cells before month starts
+      for (let i = 0; i < startDow; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell empty';
+        body.appendChild(cell);
+      }
+
+      // Day cells
+      for (let day = 1; day <= daysInMonth; day++) {
+        const cell = document.createElement('div');
+        const classes = ['calendar-cell'];
+        const names = getBirthdaysForDay(currentMonth, day);
+
+        const isToday = day === todayDay && currentMonth === todayMonth && currentYear === todayYear;
+        if (isToday) classes.push('today');
+        if (names.length > 0) classes.push('has-birthday');
+
+        cell.className = classes.join(' ');
+
+        const dayNum = document.createElement('div');
+        dayNum.className = 'cell-day';
+        dayNum.textContent = day;
+        cell.appendChild(dayNum);
+
+        names.forEach(function(name) {
+          const badge = document.createElement('div');
+          badge.className = 'cell-birthday';
+          const icon = document.createElement('span');
+          icon.className = 'cell-birthday-icon';
+          icon.textContent = '\uD83C\uDF82'; // cake emoji
+          badge.appendChild(icon);
+          const nameSpan = document.createTextNode(' ' + name);
+          badge.appendChild(nameSpan);
+          badge.title = name;
+          cell.appendChild(badge);
+        });
+
+        body.appendChild(cell);
+      }
+
+      // Trailing empty cells to fill the last row
+      const totalCells = startDow + daysInMonth;
+      const remainingCells = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+      for (let i = 0; i < remainingCells; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-cell empty';
+        body.appendChild(cell);
+      }
+
+      // Render month summary
+      renderSummary();
+    }
+
+    // Render the summary section using DOM methods
+    function renderSummary() {
+      const list = document.getElementById('summaryList');
+      const apiMonth = currentMonth + 1;
+
+      const monthBirthdays = [];
+      for (const [userId, data] of Object.entries(birthdays)) {
+        if (data.month === apiMonth) {
+          monthBirthdays.push({ name: data.displayName, day: data.day });
+        }
+      }
+
+      // Sort by day
+      monthBirthdays.sort((a, b) => a.day - b.day);
+
+      document.getElementById('summaryTitle').textContent =
+        'Birthdays in ' + monthNames[currentMonth];
+
+      list.textContent = '';
+
+      if (monthBirthdays.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'summary-empty';
+        empty.textContent = 'No birthdays this month';
+        list.appendChild(empty);
+        return;
+      }
+
+      monthBirthdays.forEach(function(b) {
+        const ordinal = getOrdinalSuffix(b.day);
+
+        const item = document.createElement('div');
+        item.className = 'summary-item';
+
+        const dateEl = document.createElement('div');
+        dateEl.className = 'summary-date';
+        dateEl.textContent = b.day;
+
+        const info = document.createElement('div');
+        info.className = 'summary-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'summary-name';
+        nameEl.textContent = b.name;
+
+        const labelEl = document.createElement('div');
+        labelEl.className = 'summary-label';
+        labelEl.textContent = monthNames[currentMonth] + ' ' + b.day + ordinal;
+
+        info.appendChild(nameEl);
+        info.appendChild(labelEl);
+        item.appendChild(dateEl);
+        item.appendChild(info);
+        list.appendChild(item);
+      });
+    }
+
+    // Month navigation
+    document.getElementById('prevMonth').addEventListener('click', function() {
+      currentMonth--;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+      }
+      renderCalendar();
+    });
+
+    document.getElementById('nextMonth').addEventListener('click', function() {
+      currentMonth++;
+      if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      }
+      renderCalendar();
+    });
+
+    // WebSocket connection to register as a viewer
+    let ws;
+    function connectWebSocket() {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(wsProtocol + '//' + window.location.host);
+      ws.onopen = function() { console.log('Connected to server (birthdays page)'); };
+      ws.onclose = function() { console.log('Disconnected, reconnecting...'); setTimeout(connectWebSocket, 3000); };
+      ws.onerror = function(err) { console.error('WebSocket error:', err); };
+    }
+    connectWebSocket();
+
+    // Initialize
+    loadUserInfo();
+    loadBirthdays();
+  </script>
+</body>
+</html>

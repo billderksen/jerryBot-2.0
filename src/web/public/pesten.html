@@ -1623,6 +1623,7 @@
             ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
             : `https://cdn.discordapp.com/embed/avatars/${parseInt(userData.id) % 5}.png`
         };
+        if (userData.hasControlPanel) { document.querySelectorAll('a[href="/admin"]').forEach(el => el.style.display = ''); }
         connectWebSocket();
         renderLobby();
       } catch (error) {
@@ -1859,6 +1860,22 @@
                     <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
                     Runescape Tracker
                   </a>
+                  <a href="/trivia" class="user-dropdown-item">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Trivia
+                  </a>
+                  <a href="/f1" class="user-dropdown-item">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                    F1 Predictions
+                  </a>
+                  <a href="/birthdays" class="user-dropdown-item">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+                    Birthdays
+                  </a>
+                  <a href="/admin" class="user-dropdown-item" style="display:none">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    Bot Settings
+                  </a>
                   <a href="/logout" class="user-dropdown-item logout">
                     🚪 Logout
                   </a>
@@ -2032,6 +2049,18 @@
                   <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
                   Runescape Tracker
                 </a>
+                <a href="/trivia" class="user-dropdown-item">
+                  <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  Trivia
+                </a>
+                <a href="/birthdays" class="user-dropdown-item">
+                  <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+                  Birthdays
+                </a>
+                <a href="/admin" class="user-dropdown-item" style="display:none">
+                  <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                  Bot Settings
+                </a>
                 <a href="/logout" class="user-dropdown-item logout">
                   🚪 Logout
                 </a>
@@ -2135,6 +2164,18 @@
                   <a href="/osrs" class="user-dropdown-item">
                     <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
                     Runescape Tracker
+                  </a>
+                  <a href="/trivia" class="user-dropdown-item">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Trivia
+                  </a>
+                  <a href="/birthdays" class="user-dropdown-item">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+                    Birthdays
+                  </a>
+                  <a href="/admin" class="user-dropdown-item" style="display:none">
+                    <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    Bot Settings
                   </a>
                   <a href="/logout" class="user-dropdown-item logout">
                     🚪 Logout

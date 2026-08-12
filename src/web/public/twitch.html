@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Alerts - JerryBot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #050507;
+      --bg-secondary: #0c0c10;
+      --bg-tertiary: #131318;
+      --surface: #18181d;
+      --surface-hover: #1f1f26;
+      --accent: #9146FF;
+      --accent-hover: #a970ff;
+      --accent-glow: rgba(145, 70, 255, 0.4);
+      --accent-subtle: rgba(145, 70, 255, 0.08);
+      --text-primary: #ededf0;
+      --text-secondary: #a0a0ad;
+      --text-muted: #5c5c6e;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.1);
+      --bg-hover: rgba(255, 255, 255, 0.04);
+      --danger: #f04848;
+      --danger-glow: rgba(240, 72, 72, 0.3);
+      --success: #00e676;
+      --success-glow: rgba(0, 230, 118, 0.5);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background mesh */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(145, 70, 255, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(88, 28, 207, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 0%, rgba(145, 70, 255, 0.03) 0%, transparent 40%);
+      animation: bgShift 20s ease-in-out infinite alternate;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    @keyframes bgShift {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-2%, 1%) scale(1.02); }
+      100% { transform: translate(1%, -1%) scale(1); }
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .back-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .back-link:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .twitch-icon {
+      color: var(--accent);
+      filter: drop-shadow(0 0 8px var(--accent-glow));
+      animation: iconPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes iconPulse {
+      0%, 100% { filter: drop-shadow(0 0 6px rgba(145, 70, 255, 0.3)); }
+      50% { filter: drop-shadow(0 0 14px rgba(145, 70, 255, 0.5)); }
+    }
+
+    /* ===== USER DROPDOWN ===== */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 5px 10px 5px 5px;
+      border-radius: 50px;
+      transition: all 0.25s;
+      border: 1px solid transparent;
+    }
+
+    .user-profile:hover {
+      background: var(--bg-hover);
+      border-color: var(--border);
+    }
+
+    .user-profile.open::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 1999;
+    }
+
+    .user-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      transition: border-color 0.2s;
+    }
+
+    .user-profile:hover .user-avatar {
+      border-color: var(--accent);
+    }
+
+    .user-name { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border-hover);
+      border-radius: 14px;
+      padding: 6px;
+      min-width: 180px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px) scale(0.97);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 2000;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.03) inset;
+      backdrop-filter: blur(20px);
+    }
+
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .user-dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .user-dropdown-item.logout { color: var(--danger); }
+    .user-dropdown-item.logout:hover { background: rgba(240, 72, 72, 0.08); }
+
+    /* ===== MAIN CONTAINER ===== */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* ===== HERO BANNER ===== */
+    .hero {
+      position: relative;
+      padding: 40px 36px;
+      border-radius: 20px;
+      margin-bottom: 36px;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(145, 70, 255, 0.12) 0%, rgba(88, 28, 207, 0.06) 50%, rgba(145, 70, 255, 0.03) 100%);
+      border: 1px solid rgba(145, 70, 255, 0.15);
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 70% 30%, rgba(145, 70, 255, 0.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      top: -100px;
+      right: -60px;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(145, 70, 255, 0.08) 0%, transparent 70%);
+      animation: heroOrb 8s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+
+    @keyframes heroOrb {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(-30px, 20px); }
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fff 0%, #c9a0ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 28px;
+      margin-top: 24px;
+    }
+
+    .hero-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .hero-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .hero-stat-value.live-count {
+      color: var(--success);
+      text-shadow: 0 0 20px var(--success-glow);
+    }
+
+    .hero-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+
+    /* ===== SECTIONS ===== */
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+    }
+
+    .section-badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(145, 70, 255, 0.15);
+    }
+
+    /* ===== STREAMER LIST ===== */
+    .streamer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .streamer-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      animation: cardSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .streamer-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(145, 70, 255, 0.0) 0%, rgba(145, 70, 255, 0.0) 100%);
+      transition: all 0.3s;
+      pointer-events: none;
+    }
+
+    .streamer-card:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-tertiary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(145, 70, 255, 0.06);
+    }
+
+    .streamer-card:hover::before {
+      background: linear-gradient(135deg, rgba(145, 70, 255, 0.03) 0%, rgba(145, 70, 255, 0.01) 100%);
+    }
+
+    .streamer-card.is-live {
+      border-color: rgba(0, 230, 118, 0.12);
+    }
+
+    .streamer-card.is-live:hover {
+      border-color: rgba(0, 230, 118, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 230, 118, 0.08);
+    }
+
+    .streamer-card.is-live::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--success), rgba(0, 230, 118, 0.3));
+      border-radius: 0 4px 4px 0;
+    }
+
+    @keyframes cardSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Avatar */
+    .avatar-wrapper {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .streamer-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: var(--bg-tertiary);
+      object-fit: cover;
+      transition: all 0.3s;
+      border: 2px solid var(--border);
+    }
+
+    .streamer-card:hover .streamer-avatar {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px rgba(145, 70, 255, 0.2);
+    }
+
+    .streamer-card.is-live .streamer-avatar {
+      border-color: var(--success);
+      box-shadow: 0 0 12px var(--success-glow);
+    }
+
+    .avatar-status {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 3px solid var(--bg-secondary);
+      transition: all 0.3s;
+    }
+
+    .avatar-status.live {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success-glow);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+
+    .avatar-status.offline {
+      background: #444;
+    }
+
+    @keyframes livePulse {
+      0%, 100% { box-shadow: 0 0 6px var(--success-glow); }
+      50% { box-shadow: 0 0 14px var(--success-glow), 0 0 24px rgba(0, 230, 118, 0.2); }
+    }
+
+    /* Live badge */
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(240, 40, 40, 0.9);
+      color: white;
+      animation: liveBadgePulse 2.5s ease-in-out infinite;
+    }
+
+    .live-badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: white;
+    }
+
+    @keyframes liveBadgePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.8; }
+    }
+
+    /* Info */
+    .streamer-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .streamer-name-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .streamer-name {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.2px;
+    }
+
+    .streamer-name a {
+      color: inherit;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .streamer-name a:hover {
+      color: var(--accent);
+    }
+
+    .streamer-status {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .streamer-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 2px;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .meta-item svg {
+      opacity: 0.6;
+    }
+
+    .viewer-count {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    /* Actions */
+    .streamer-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      position: relative;
+      padding: 9px 18px;
+      border-radius: 10px;
+      border: none;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+      letter-spacing: 0.2px;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.2) 0%, transparent 70%);
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .btn:active::after {
+      opacity: 1;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+      color: white;
+      box-shadow: 0 2px 12px rgba(145, 70, 255, 0.25);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(145, 70, 255, 0.35);
+      filter: brightness(1.1);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-subscribed {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border: 1px solid rgba(145, 70, 255, 0.2);
+    }
+
+    .btn-subscribed:hover {
+      background: rgba(145, 70, 255, 0.12);
+      border-color: rgba(145, 70, 255, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: rgba(240, 72, 72, 0.08);
+      color: var(--danger);
+      border: 1px solid rgba(240, 72, 72, 0.12);
+    }
+
+    .btn-danger:hover {
+      background: rgba(240, 72, 72, 0.14);
+      border-color: rgba(240, 72, 72, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* ===== ADD FORM ===== */
+    .add-form {
+      display: flex;
+      gap: 10px;
+    }
+
+    .add-form input {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.25s;
+    }
+
+    .add-form input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(145, 70, 255, 0.12), 0 0 20px rgba(145, 70, 255, 0.06);
+      background: var(--bg-tertiary);
+    }
+
+    .add-form input::placeholder { color: var(--text-muted); }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state {
+      text-align: center;
+      padding: 64px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-icon {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      padding: 18px;
+      border-radius: 20px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .empty-state p {
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .empty-state .empty-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ===== LOADING ===== */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 64px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 10px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--surface);
+      border: 1px solid var(--border-hover);
+      padding: 12px 22px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 3000;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      border-color: rgba(240, 72, 72, 0.25);
+      color: var(--danger);
+    }
+
+    .toast.success {
+      border-color: rgba(145, 70, 255, 0.25);
+    }
+
+    /* ===== DJ-ONLY ===== */
+    .dj-only { display: none; }
+    body.is-dj .dj-only { display: flex; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 640px) {
+      .header { margin-bottom: 20px; padding-bottom: 16px; }
+      .container { padding: 20px 16px; }
+      .hero { padding: 28px 24px; border-radius: 16px; }
+      .hero-title { font-size: 22px; }
+      .hero-stats { gap: 20px; }
+      .hero-stat-value { font-size: 20px; }
+      .streamer-card { flex-wrap: wrap; padding: 14px 16px; gap: 12px; }
+      .streamer-actions { width: 100%; justify-content: flex-end; margin-top: 4px; }
+      .user-name { display: none; }
+      .streamer-avatar { width: 44px; height: 44px; border-radius: 12px; }
+    }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-left">
+        <a href="/" class="back-link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor" stroke="none"/></svg>
+          Back to Player
+        </a>
+        <div class="page-title">
+        <svg class="twitch-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/>
+          <path d="M10 6v6"/>
+          <path d="M14 6v6"/>
+        </svg>
+        Twitch Alerts
+      </div>
+    </div>
+    <div class="user-profile" id="userProfile">
+      <img class="user-avatar" id="userAvatar" src="" alt="">
+      <span class="user-name" id="userName"></span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+      <div class="user-dropdown">
+        <a href="/" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Music Player
+        </a>
+        <a href="/stats" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Listening Stats
+        </a>
+        <a href="/recap" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Weekly Recap
+        </a>
+        <a href="/pictionary" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+          Pictionary
+        </a>
+        <a href="/osrs" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Runescape Tracker
+        </a>
+        <a href="/playlists" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-3-7 3V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          My Playlists
+        </a>
+        <a href="/trivia" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Trivia
+        </a>
+        <a href="/f1" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          F1 Predictions
+        </a>
+        <a href="/birthdays" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+          Birthdays
+        </a>
+        <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          Bot Settings
+        </a>
+        <a href="/logout" class="user-dropdown-item logout">Logout</a>
+      </div>
+    </div>
+    </div>
+
+    <!-- Hero Banner -->
+    <div class="hero" id="heroBanner">
+      <div class="hero-content">
+        <div class="hero-title">Stream Notifications</div>
+        <div class="hero-subtitle">Get notified when your favorite streamers go live. Subscribe to streamers and receive a ping in Discord.</div>
+        <div class="hero-stats" id="heroStats"></div>
+      </div>
+    </div>
+
+    <!-- Add Streamer (DJ only) -->
+    <div class="section dj-only">
+      <div class="section-header">
+        <div class="section-title">Add Streamer</div>
+      </div>
+      <div class="add-form" id="addForm">
+        <input type="text" id="addInput" placeholder="Enter a Twitch username..." autocomplete="off">
+        <button class="btn btn-primary" id="addBtn">Add</button>
+      </div>
+    </div>
+
+    <!-- Streamer List -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Tracked Streamers</div>
+        <div class="section-badge" id="streamerCount">0 streamers</div>
+      </div>
+      <div class="streamer-list" id="streamerList">
+        <div class="loading"><div class="spinner"></div> Loading streamers...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    var currentUser = null;
+    var trackerData = null;
+
+    function showToast(msg, isError) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast' + (isError ? ' error' : ' success');
+      t.classList.add('show');
+      clearTimeout(t._timeout);
+      t._timeout = setTimeout(function() { t.classList.remove('show'); }, 3000);
+    }
+
+    function createEl(tag, attrs, children) {
+      var el = document.createElement(tag);
+      if (attrs) {
+        Object.keys(attrs).forEach(function(k) {
+          if (k === 'className') el.className = attrs[k];
+          else if (k === 'textContent') el.textContent = attrs[k];
+          else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+          else el.setAttribute(k, attrs[k]);
+        });
+      }
+      if (children) {
+        children.forEach(function(c) {
+          if (typeof c === 'string') el.appendChild(document.createTextNode(c));
+          else if (c) el.appendChild(c);
+        });
+      }
+      return el;
+    }
+
+    function createSVG(paths, size) {
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('width', size || 14);
+      svg.setAttribute('height', size || 14);
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      paths.forEach(function(d) {
+        var path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', d);
+        svg.appendChild(path);
+      });
+      return svg;
+    }
+
+    async function fetchUser() {
+      try {
+        var res = await fetch('/api/me');
+        if (!res.ok) { window.location.href = '/login'; return; }
+        currentUser = await res.json();
+        document.getElementById('userName').textContent = currentUser.displayName || currentUser.username;
+        var avatarUrl = currentUser.avatar
+          ? 'https://cdn.discordapp.com/avatars/' + currentUser.id + '/' + currentUser.avatar + '.png?size=64'
+          : 'https://cdn.discordapp.com/embed/avatars/' + (parseInt(currentUser.id) % 5) + '.png';
+        document.getElementById('userAvatar').src = avatarUrl;
+        if (currentUser.hasDJRole) {
+          document.body.classList.add('is-dj');
+        }
+        if (currentUser.hasControlPanel) { var al = document.getElementById('adminLink'); if (al) al.style.display = ''; }
+      } catch(e) {
+        window.location.href = '/login';
+      }
+    }
+
+    async function fetchStreamers() {
+      try {
+        var res = await fetch('/api/twitch/streamers');
+        if (!res.ok) return;
+        trackerData = await res.json();
+        renderStreamers();
+      } catch (e) {
+        console.error('Failed to fetch streamers:', e);
+      }
+    }
+
+    function renderStreamers() {
+      var list = document.getElementById('streamerList');
+      while (list.firstChild) list.removeChild(list.firstChild);
+
+      var entries = Object.entries(trackerData.streamers || {});
+      var liveCount = entries.filter(function(e) { return e[1].isLive; }).length;
+
+      // Update badge
+      var badge = document.getElementById('streamerCount');
+      badge.textContent = entries.length + ' streamer' + (entries.length !== 1 ? 's' : '');
+
+      // Update hero stats
+      var heroStats = document.getElementById('heroStats');
+      while (heroStats.firstChild) heroStats.removeChild(heroStats.firstChild);
+
+      var statTotal = createEl('div', { className: 'hero-stat' }, [
+        createEl('div', { className: 'hero-stat-value', textContent: String(entries.length) }),
+        createEl('div', { className: 'hero-stat-label', textContent: 'Tracked' })
+      ]);
+      heroStats.appendChild(statTotal);
+
+      var statLive = createEl('div', { className: 'hero-stat' }, [
+        createEl('div', { className: 'hero-stat-value live-count', textContent: String(liveCount) }),
+        createEl('div', { className: 'hero-stat-label', textContent: 'Live Now' })
+      ]);
+      heroStats.appendChild(statLive);
+
+      var totalSubs = entries.reduce(function(sum, e) { return sum + (e[1].subscribers || []).length; }, 0);
+      var statSubs = createEl('div', { className: 'hero-stat' }, [
+        createEl('div', { className: 'hero-stat-value', textContent: String(totalSubs) }),
+        createEl('div', { className: 'hero-stat-label', textContent: 'Subscriptions' })
+      ]);
+      heroStats.appendChild(statSubs);
+
+      if (entries.length === 0) {
+        var emptyDiv = createEl('div', { className: 'empty-state' });
+        var emptyIcon = createEl('div', { className: 'empty-icon' });
+        emptyIcon.appendChild(createSVG(['M21 2H3v16h5v4l4-4h5l4-4V2z', 'M10 6v6', 'M14 6v6'], 32));
+        emptyDiv.appendChild(emptyIcon);
+        emptyDiv.appendChild(createEl('p', { textContent: 'No streamers tracked yet' }));
+        emptyDiv.appendChild(createEl('div', { className: 'empty-hint', textContent: 'Use /streamer add or the form above to start tracking.' }));
+        list.appendChild(emptyDiv);
+        return;
+      }
+
+      // Sort: live first, then alphabetical
+      entries.sort(function(a, b) {
+        if (a[1].isLive && !b[1].isLive) return -1;
+        if (!a[1].isLive && b[1].isLive) return 1;
+        return (a[1].displayName || a[0]).localeCompare(b[1].displayName || b[0]);
+      });
+
+      entries.forEach(function(entry, index) {
+        var login = entry[0];
+        var s = entry[1];
+        var isLive = s.isLive;
+        var isSubscribed = currentUser && (s.subscribers || []).includes(currentUser.id);
+        var subCount = (s.subscribers || []).length;
+
+        var card = createEl('div', { className: 'streamer-card' + (isLive ? ' is-live' : '') });
+        card.style.animationDelay = (index * 0.05) + 's';
+
+        // Avatar wrapper with status indicator
+        var avatarWrap = createEl('div', { className: 'avatar-wrapper' });
+        var avatar = createEl('img', { className: 'streamer-avatar', alt: '' });
+        if (s.profileImage) avatar.src = s.profileImage;
+        avatar.addEventListener('error', function() { this.style.visibility = 'hidden'; });
+        avatarWrap.appendChild(avatar);
+        avatarWrap.appendChild(createEl('div', { className: 'avatar-status ' + (isLive ? 'live' : 'offline') }));
+        card.appendChild(avatarWrap);
+
+        // Info
+        var info = createEl('div', { className: 'streamer-info' });
+
+        var nameRow = createEl('div', { className: 'streamer-name-row' });
+        var nameSpan = createEl('span', { className: 'streamer-name' });
+        nameSpan.appendChild(createEl('a', {
+          href: 'https://twitch.tv/' + encodeURIComponent(login),
+          target: '_blank',
+          rel: 'noopener',
+          textContent: s.displayName || login
+        }));
+        nameRow.appendChild(nameSpan);
+
+        if (isLive) {
+          var liveBadge = createEl('span', { className: 'live-badge' }, [
+            createEl('span', { className: 'live-badge-dot' }),
+            'LIVE'
+          ]);
+          nameRow.appendChild(liveBadge);
+        }
+
+        info.appendChild(nameRow);
+
+        if (isLive) {
+          info.appendChild(createEl('div', { className: 'streamer-status', textContent: s.streamTitle || s.gameName || 'Streaming' }));
+        }
+
+        var meta = createEl('div', { className: 'streamer-meta' });
+
+        if (isLive && s.gameName) {
+          var gameItem = createEl('span', { className: 'meta-item' });
+          gameItem.appendChild(createSVG(['M6 12h12', 'M12 6v12'], 12));
+          gameItem.appendChild(document.createTextNode(s.gameName));
+          meta.appendChild(gameItem);
+        }
+
+        if (isLive && s.viewerCount != null) {
+          var viewerItem = createEl('span', { className: 'meta-item viewer-count' });
+          viewerItem.appendChild(createSVG(['M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z', 'M12 9a3 3 0 100 6 3 3 0 000-6z'], 12));
+          viewerItem.appendChild(document.createTextNode((s.viewerCount || 0).toLocaleString()));
+          meta.appendChild(viewerItem);
+        }
+
+        if (!isLive) {
+          var offlineItem = createEl('span', { className: 'meta-item', textContent: 'Offline' });
+          meta.appendChild(offlineItem);
+        }
+
+        var subItem = createEl('span', { className: 'meta-item' });
+        subItem.appendChild(createSVG(['M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2', 'M9 11a4 4 0 100-8 4 4 0 000 8z'], 12));
+        subItem.appendChild(document.createTextNode(subCount));
+        meta.appendChild(subItem);
+
+        info.appendChild(meta);
+        card.appendChild(info);
+
+        // Actions
+        var actions = createEl('div', { className: 'streamer-actions' });
+
+        var subBtn = createEl('button', {
+          className: 'btn ' + (isSubscribed ? 'btn-subscribed' : 'btn-primary'),
+          textContent: isSubscribed ? 'Subscribed \u2713' : 'Subscribe'
+        });
+        (function(l, sub) {
+          subBtn.addEventListener('click', function() { toggleSubscribe(l, sub); });
+        })(login, isSubscribed);
+        actions.appendChild(subBtn);
+
+        if (currentUser && currentUser.hasDJRole) {
+          var removeBtn = createEl('button', { className: 'btn btn-danger', textContent: 'Remove' });
+          (function(l) {
+            removeBtn.addEventListener('click', function() { removeStreamerAction(l); });
+          })(login);
+          actions.appendChild(removeBtn);
+        }
+
+        card.appendChild(actions);
+        list.appendChild(card);
+      });
+
+    }
+
+    async function toggleSubscribe(login, isSubscribed) {
+      var endpoint = isSubscribed ? '/api/twitch/streamers/unsubscribe' : '/api/twitch/streamers/subscribe';
+      try {
+        var res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: login })
+        });
+        var data = await res.json();
+        if (data.success) {
+          showToast(isSubscribed ? 'Unsubscribed from ' + data.displayName : 'Subscribed to ' + data.displayName);
+          await fetchStreamers();
+        } else {
+          showToast(data.error || 'Failed', true);
+        }
+      } catch(e) {
+        showToast('Request failed', true);
+      }
+    }
+
+    async function addStreamerAction() {
+      var input = document.getElementById('addInput');
+      var username = input.value.trim();
+      if (!username) return;
+
+      var btn = document.getElementById('addBtn');
+      btn.disabled = true;
+      btn.textContent = 'Adding...';
+
+      try {
+        var res = await fetch('/api/twitch/streamers/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username })
+        });
+        var data = await res.json();
+        if (data.success) {
+          showToast('Added ' + data.displayName);
+          input.value = '';
+          await fetchStreamers();
+        } else {
+          showToast(data.error || 'Failed to add', true);
+        }
+      } catch(e) {
+        showToast('Request failed', true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add';
+      }
+    }
+
+    async function removeStreamerAction(login) {
+      if (!confirm('Remove ' + login + ' from the watch list?')) return;
+      try {
+        var res = await fetch('/api/twitch/streamers/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: login })
+        });
+        var data = await res.json();
+        if (data.success) {
+          showToast('Removed ' + data.displayName);
+          await fetchStreamers();
+        } else {
+          showToast(data.error || 'Failed', true);
+        }
+      } catch(e) {
+        showToast('Request failed', true);
+      }
+    }
+
+    document.getElementById('userProfile').addEventListener('click', function(e) {
+      e.stopPropagation();
+      this.classList.toggle('open');
+    });
+    document.addEventListener('click', function() {
+      document.getElementById('userProfile').classList.remove('open');
+    });
+
+    document.getElementById('addBtn').addEventListener('click', addStreamerAction);
+    document.getElementById('addInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') addStreamerAction();
+    });
+
+    (async function() {
+      await fetchUser();
+      await fetchStreamers();
+      setInterval(fetchStreamers, 30000);
+    })();
+  </script>
+</body>
+</html>

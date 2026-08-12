@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivia Leaderboard - Godcord Music Bot</title>
+  <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #050507;
+      --bg-secondary: #0c0c10;
+      --bg-tertiary: #131318;
+      --surface: #18181d;
+      --surface-hover: #1f1f26;
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+      --accent-glow: rgba(29, 185, 84, 0.4);
+      --text-primary: #ededf0;
+      --text-secondary: #a0a0ad;
+      --text-muted: #5c5c6e;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.1);
+      --bg-hover: rgba(255, 255, 255, 0.04);
+      --danger: #f04848;
+      --trivia-accent: #9B59B6;
+      --trivia-glow: rgba(155, 89, 182, 0.4);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0;
+      margin-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* User profile dropdown */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 6px 12px 6px 6px;
+      border-radius: 12px;
+      transition: all 0.2s;
+    }
+    .user-profile:hover { background: var(--bg-hover); }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+    }
+    .user-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px;
+      min-width: 200px;
+      z-index: 2000;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .user-profile.open .user-dropdown {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    .user-profile.open::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1999;
+    }
+
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .user-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .user-dropdown-item.active { background: rgba(29, 185, 84, 0.1); color: var(--accent); }
+    .user-dropdown-item.logout { color: #ef4444; }
+    .user-dropdown-item.logout:hover { background: rgba(239,68,68,0.1); }
+
+    /* Info text */
+    .info-text {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+    .info-text code {
+      background: var(--surface);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+
+    /* Leaderboard table */
+    .leaderboard-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 4px;
+    }
+    .leaderboard-table th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .leaderboard-table td {
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      background: var(--surface);
+      color: var(--text-primary);
+    }
+    .leaderboard-table tr td:first-child {
+      border-radius: 10px 0 0 10px;
+    }
+    .leaderboard-table tr td:last-child {
+      border-radius: 0 10px 10px 0;
+    }
+    .leaderboard-table tbody tr:hover td {
+      background: var(--surface-hover);
+    }
+
+    .rank-cell {
+      font-weight: 700;
+      width: 50px;
+      text-align: center;
+    }
+    .rank-1 { color: #FFD700; }
+    .rank-2 { color: #C0C0C0; }
+    .rank-3 { color: #CD7F32; }
+
+    .player-name {
+      font-weight: 600;
+    }
+
+    .stat-cell {
+      text-align: center;
+      color: var(--text-secondary);
+    }
+    .stat-cell.highlight {
+      color: var(--trivia-accent);
+      font-weight: 600;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state svg {
+      margin-bottom: 16px;
+      opacity: 0.4;
+    }
+    .empty-state p {
+      font-size: 1rem;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 16px; }
+      .leaderboard-table th,
+      .leaderboard-table td { padding: 10px 8px; font-size: 0.8rem; }
+      .header h1 { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Trivia Leaderboard</h1>
+      <div class="user-profile" id="userProfile">
+        <img class="user-avatar" id="userAvatar" src="" alt="">
+        <span class="user-name" id="userName"></span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        <div class="user-dropdown">
+          <a href="/" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Music Player
+          </a>
+          <a href="/stats" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Listening Stats
+          </a>
+          <a href="/recap" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Weekly Recap
+          </a>
+          <a href="/pictionary" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+            Pictionary
+          </a>
+          <a href="/osrs" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Runescape Tracker
+          </a>
+          <a href="/twitch" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/><path d="M10 6v6"/><path d="M14 6v6"/></svg>
+            Twitch Alerts
+          </a>
+          <a href="/playlists" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-3-7 3V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            My Playlists
+          </a>
+          <a href="/trivia" class="user-dropdown-item active">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Trivia
+          </a>
+          <a href="/f1" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            F1 Predictions
+          </a>
+          <a href="/birthdays" class="user-dropdown-item">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+            Birthdays
+          </a>
+          <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            Bot Settings
+          </a>
+          <a href="/logout" class="user-dropdown-item logout">Logout</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="info-text">Play trivia in Discord with <code>/trivia start</code>. Top players by correct answers:</p>
+
+    <div id="content">
+      <div class="loading">Loading leaderboard...</div>
+    </div>
+  </div>
+
+  <script>
+    const userProfile = document.getElementById('userProfile');
+    userProfile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userProfile.classList.toggle('open');
+    });
+    document.addEventListener('click', () => userProfile.classList.remove('open'));
+
+    async function loadUserInfo() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const user = await res.json();
+          document.getElementById('userName').textContent = user.displayName || user.username;
+          if (user.avatar) {
+            document.getElementById('userAvatar').src =
+              'https://cdn.discordapp.com/avatars/' + user.id + '/' + user.avatar + '.png';
+          }
+          if (user.hasControlPanel) {
+            document.getElementById('adminLink').style.display = '';
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    async function loadLeaderboard() {
+      const content = document.getElementById('content');
+      try {
+        const res = await fetch('/api/trivia/leaderboard');
+        if (!res.ok) throw new Error('Failed to fetch');
+        const players = await res.json();
+
+        if (players.length === 0) {
+          content.textContent = '';
+          const empty = document.createElement('div');
+          empty.className = 'empty-state';
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('width', '48');
+          svg.setAttribute('height', '48');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('fill', 'none');
+          svg.setAttribute('stroke', 'currentColor');
+          svg.setAttribute('stroke-width', '1.5');
+          svg.setAttribute('stroke-linecap', 'round');
+          svg.setAttribute('stroke-linejoin', 'round');
+          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3');
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', '12'); line.setAttribute('y1', '17'); line.setAttribute('x2', '12.01'); line.setAttribute('y2', '17');
+          svg.append(circle, path, line);
+          const p = document.createElement('p');
+          p.textContent = 'No trivia games played yet. Start one in Discord with /trivia start!';
+          empty.append(svg, p);
+          content.appendChild(empty);
+          return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'leaderboard-table';
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        ['Rank', 'Player', 'Games', 'Correct', 'Accuracy', 'Wins', 'Best Streak'].forEach(text => {
+          const th = document.createElement('th');
+          th.textContent = text;
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        players.forEach((p, i) => {
+          const pct = p.questionsAnswered > 0 ? Math.round((p.correctAnswers / p.questionsAnswered) * 100) : 0;
+          const medal = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : (i + 1) + 'th';
+
+          const tr = document.createElement('tr');
+
+          const rankTd = document.createElement('td');
+          rankTd.className = 'rank-cell' + (i < 3 ? ' rank-' + (i + 1) : '');
+          rankTd.textContent = medal;
+
+          const nameTd = document.createElement('td');
+          nameTd.className = 'player-name';
+          nameTd.textContent = p.displayName;
+
+          const gamesTd = document.createElement('td');
+          gamesTd.className = 'stat-cell';
+          gamesTd.textContent = p.gamesPlayed;
+
+          const correctTd = document.createElement('td');
+          correctTd.className = 'stat-cell highlight';
+          correctTd.textContent = p.correctAnswers;
+
+          const accTd = document.createElement('td');
+          accTd.className = 'stat-cell';
+          accTd.textContent = pct + '%';
+
+          const winsTd = document.createElement('td');
+          winsTd.className = 'stat-cell';
+          winsTd.textContent = p.gamesWon;
+
+          const streakTd = document.createElement('td');
+          streakTd.className = 'stat-cell';
+          streakTd.textContent = p.bestWinStreak;
+
+          tr.append(rankTd, nameTd, gamesTd, correctTd, accTd, winsTd, streakTd);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+
+        content.textContent = '';
+        content.appendChild(table);
+      } catch (e) {
+        content.textContent = 'Failed to load leaderboard';
+        content.className = 'loading';
+      }
+    }
+
+    loadUserInfo();
+    loadLeaderboard();
+  </script>
+</body>
+</html>

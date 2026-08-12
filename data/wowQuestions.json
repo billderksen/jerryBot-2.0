@@ -1,0 +1,902 @@
+[
+  {
+    "question": "What year was World of Warcraft originally released?",
+    "correctAnswer": "2004",
+    "incorrectAnswers": ["2002", "2006", "2008"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are the two main factions in WoW?",
+    "correctAnswer": "Alliance and Horde",
+    "incorrectAnswers": ["Light and Dark", "Order and Chaos", "Empire and Republic"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Horde capital city?",
+    "correctAnswer": "Orgrimmar",
+    "incorrectAnswers": ["Thunder Bluff", "Undercity", "Silvermoon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Alliance capital city?",
+    "correctAnswer": "Stormwind",
+    "incorrectAnswers": ["Ironforge", "Darnassus", "Exodar"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What was the maximum character level in vanilla WoW?",
+    "correctAnswer": "60",
+    "incorrectAnswers": ["50", "70", "80"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which race is NOT part of the original Alliance?",
+    "correctAnswer": "Draenei",
+    "incorrectAnswers": ["Human", "Dwarf", "Night Elf"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which race is NOT part of the original Horde?",
+    "correctAnswer": "Blood Elf",
+    "incorrectAnswers": ["Orc", "Tauren", "Troll"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the first WoW expansion?",
+    "correctAnswer": "The Burning Crusade",
+    "incorrectAnswers": ["Wrath of the Lich King", "Cataclysm", "Mists of Pandaria"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of Arthas's legendary sword?",
+    "correctAnswer": "Frostmourne",
+    "incorrectAnswers": ["Ashbringer", "Thunderfury", "Gorehowl"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which class can tank, heal, and deal damage?",
+    "correctAnswer": "Paladin",
+    "incorrectAnswers": ["Warrior", "Mage", "Rogue"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the dragon aspect of the Red Dragonflight?",
+    "correctAnswer": "Alexstrasza",
+    "incorrectAnswers": ["Ysera", "Malygos", "Nozdormu"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What continent is Orgrimmar located on?",
+    "correctAnswer": "Kalimdor",
+    "incorrectAnswers": ["Eastern Kingdoms", "Northrend", "Pandaria"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What class uses Rage as their resource?",
+    "correctAnswer": "Warrior",
+    "incorrectAnswers": ["Rogue", "Paladin", "Hunter"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Rogue's primary resource?",
+    "correctAnswer": "Energy",
+    "incorrectAnswers": ["Mana", "Rage", "Runic Power"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who is the Warchief of the Horde at the start of vanilla WoW?",
+    "correctAnswer": "Thrall",
+    "incorrectAnswers": ["Garrosh Hellscream", "Vol'jin", "Sylvanas Windrunner"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What race are the inhabitants of Gnomeregan?",
+    "correctAnswer": "Gnomes",
+    "incorrectAnswers": ["Dwarves", "Goblins", "Mechagnomes"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the zone where new Night Elves start?",
+    "correctAnswer": "Teldrassil",
+    "incorrectAnswers": ["Elwynn Forest", "Mulgore", "Eversong Woods"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which class uses pets to fight alongside them?",
+    "correctAnswer": "Both Warlock and Hunter",
+    "incorrectAnswers": ["Warlock only", "Hunter only", "Mage"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What profession lets you create armour from metal?",
+    "correctAnswer": "Blacksmithing",
+    "incorrectAnswers": ["Leatherworking", "Tailoring", "Engineering"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many players are in a standard dungeon group?",
+    "correctAnswer": "5",
+    "incorrectAnswers": ["3", "10", "15"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the Undead starting zone?",
+    "correctAnswer": "Tirisfal Glades",
+    "incorrectAnswers": ["Silverpine Forest", "Plaguelands", "Ghostlands"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of armour can Warriors wear?",
+    "correctAnswer": "Plate",
+    "incorrectAnswers": ["Cloth", "Leather", "Mail"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Mage's primary stat?",
+    "correctAnswer": "Intellect",
+    "incorrectAnswers": ["Strength", "Agility", "Spirit"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where is the Auction House located in Stormwind?",
+    "correctAnswer": "The Trade District",
+    "incorrectAnswers": ["The Mage Quarter", "Old Town", "Cathedral Square"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the neutral goblin city in Stranglethorn Vale?",
+    "correctAnswer": "Booty Bay",
+    "incorrectAnswers": ["Gadgetzan", "Ratchet", "Everlook"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What class can only be played by Night Elves and Tauren in vanilla?",
+    "correctAnswer": "Druid",
+    "incorrectAnswers": ["Paladin", "Shaman", "Hunter"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the flight masters' transportation system?",
+    "correctAnswer": "Flight paths",
+    "incorrectAnswers": ["Portals", "Hearthstone", "Mage towers"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What item lets you teleport back to your inn?",
+    "correctAnswer": "Hearthstone",
+    "incorrectAnswers": ["Recall Stone", "Town Portal", "Return Scroll"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the main currency in WoW?",
+    "correctAnswer": "All three (copper, silver, gold)",
+    "incorrectAnswers": ["Silver", "Gold", "Copper"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which expansion introduced the Death Knight class?",
+    "correctAnswer": "Wrath of the Lich King",
+    "incorrectAnswers": ["The Burning Crusade", "Cataclysm", "Mists of Pandaria"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the world WoW takes place in?",
+    "correctAnswer": "Azeroth",
+    "incorrectAnswers": ["Middle-earth", "Tamriel", "Sanctuary"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who is the main villain of Wrath of the Lich King?",
+    "correctAnswer": "The Lich King",
+    "incorrectAnswers": ["Illidan", "Deathwing", "Garrosh"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What profession allows you to enchant weapons and armour?",
+    "correctAnswer": "Enchanting",
+    "incorrectAnswers": ["Alchemy", "Inscription", "Jewelcrafting"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the first raid released in vanilla WoW?",
+    "correctAnswer": "Molten Core",
+    "incorrectAnswers": ["Blackwing Lair", "Naxxramas", "Onyxia's Lair"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which class can turn into animals using shapeshifting?",
+    "correctAnswer": "Druid",
+    "incorrectAnswers": ["Shaman", "Hunter", "Warlock"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many races were available at WoW's launch?",
+    "correctAnswer": "8",
+    "incorrectAnswers": ["6", "10", "12"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What colour is the text for Epic quality items?",
+    "correctAnswer": "Purple",
+    "incorrectAnswers": ["Blue", "Green", "Orange"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What colour is the text for Legendary quality items?",
+    "correctAnswer": "Orange",
+    "incorrectAnswers": ["Purple", "Red", "Gold"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the continent where Stormwind is located?",
+    "correctAnswer": "Eastern Kingdoms",
+    "incorrectAnswers": ["Kalimdor", "Northrend", "Broken Isles"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which zone features the Crossroads, a well-known Horde quest hub?",
+    "correctAnswer": "The Barrens",
+    "incorrectAnswers": ["Durotar", "Mulgore", "Ashenvale"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the Paladin class mount?",
+    "correctAnswer": "Both Warhorse and Charger",
+    "incorrectAnswers": ["Warhorse only", "Charger only", "Elekk"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which expansion raised the level cap to 70?",
+    "correctAnswer": "The Burning Crusade",
+    "incorrectAnswers": ["Vanilla", "Wrath of the Lich King", "Cataclysm"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are the three talent specializations for a Warrior?",
+    "correctAnswer": "Arms, Fury, Protection",
+    "incorrectAnswers": ["Blood, Frost, Unholy", "Assassination, Combat, Subtlety", "Balance, Feral, Restoration"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the PvP battleground set in a snowy valley?",
+    "correctAnswer": "Alterac Valley",
+    "incorrectAnswers": ["Warsong Gulch", "Arathi Basin", "Eye of the Storm"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does 'PvP' stand for?",
+    "correctAnswer": "Player versus Player",
+    "incorrectAnswers": ["Player versus Peon", "Power versus Power", "Protect versus Plunder"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who is the king of Stormwind in vanilla WoW?",
+    "correctAnswer": "No king (missing)",
+    "incorrectAnswers": ["Varian Wrynn", "Anduin Wrynn", "Bolvar Fordragon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Warlock's main combat pet?",
+    "correctAnswer": "Imp",
+    "incorrectAnswers": ["Ghoul", "Water Elemental", "Wolf"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What gathering profession pairs with Blacksmithing?",
+    "correctAnswer": "Mining",
+    "incorrectAnswers": ["Herbalism", "Skinning", "Fishing"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which class wears leather armour and uses stealth?",
+    "correctAnswer": "Rogue",
+    "incorrectAnswers": ["Hunter", "Druid", "Monk"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the Burning Legion's leader?",
+    "correctAnswer": "Sargeras",
+    "incorrectAnswers": ["Kil'jaeden", "Archimonde", "Mannoroth"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which expansion introduced the continent of Pandaria?",
+    "correctAnswer": "Mists of Pandaria",
+    "incorrectAnswers": ["Cataclysm", "Warlords of Draenor", "Legion"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Illidan Stormrage's famous quote?",
+    "correctAnswer": "You are not prepared!",
+    "incorrectAnswers": ["Frostmourne hungers", "For the Horde!", "Lok'tar ogar!"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the final boss of the Black Temple raid?",
+    "correctAnswer": "Illidan Stormrage",
+    "incorrectAnswers": ["Kael'thas Sunstrider", "Lady Vashj", "Archimonde"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which class was added in the Mists of Pandaria expansion?",
+    "correctAnswer": "Monk",
+    "incorrectAnswers": ["Death Knight", "Demon Hunter", "Evoker"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the dragon who destroys the world in Cataclysm?",
+    "correctAnswer": "Deathwing",
+    "incorrectAnswers": ["Onyxia", "Nefarian", "Malygos"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which expansion introduced the Demon Hunter class?",
+    "correctAnswer": "Legion",
+    "incorrectAnswers": ["Warlords of Draenor", "Battle for Azeroth", "Shadowlands"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the auction house neutral city in Tanaris?",
+    "correctAnswer": "Gadgetzan",
+    "incorrectAnswers": ["Booty Bay", "Ratchet", "Everlook"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who killed Cairne Bloodhoof?",
+    "correctAnswer": "Garrosh Hellscream",
+    "incorrectAnswers": ["Thrall", "Sylvanas", "Vol'jin"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the Death Knight's resource system?",
+    "correctAnswer": "Runes and Runic Power",
+    "incorrectAnswers": ["Rage", "Energy", "Mana"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which zone features giant mushrooms and is located in Outland?",
+    "correctAnswer": "Zangarmarsh",
+    "incorrectAnswers": ["Nagrand", "Hellfire Peninsula", "Terokkar Forest"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many players could be in a vanilla raid group?",
+    "correctAnswer": "40",
+    "incorrectAnswers": ["10 or 25", "20", "25"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the famous orange legendary bow from vanilla?",
+    "correctAnswer": "Rhok'delar",
+    "incorrectAnswers": ["Thori'dal", "Black Bow of the Betrayer", "Sunfury Bow"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the Druid's tank form?",
+    "correctAnswer": "Bear Form",
+    "incorrectAnswers": ["Cat Form", "Moonkin Form", "Tree Form"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which race can be both Alliance and Horde?",
+    "correctAnswer": "Pandaren",
+    "incorrectAnswers": ["Elves", "Trolls", "Dwarves"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What zone is the entrance to Molten Core located in?",
+    "correctAnswer": "Blackrock Mountain",
+    "incorrectAnswers": ["Burning Steppes", "Searing Gorge", "Silithus"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who was the first Lich King?",
+    "correctAnswer": "Ner'zhul",
+    "incorrectAnswers": ["Arthas Menethil", "Bolvar Fordragon", "Kil'jaeden"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of Thrall's real (birth) name?",
+    "correctAnswer": "Go'el",
+    "incorrectAnswers": ["Durotan", "Grom", "Broxigar"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the Shaman's ability to self-resurrect?",
+    "correctAnswer": "Reincarnation",
+    "incorrectAnswers": ["Rebirth", "Soulstone", "Spirit Walk"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which raid features the fight against C'Thun?",
+    "correctAnswer": "Temple of Ahn'Qiraj",
+    "incorrectAnswers": ["Naxxramas", "Blackwing Lair", "Molten Core"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What profession lets you create gems for gear sockets?",
+    "correctAnswer": "Jewelcrafting",
+    "incorrectAnswers": ["Enchanting", "Inscription", "Alchemy"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who becomes Warchief after Garrosh Hellscream?",
+    "correctAnswer": "Vol'jin",
+    "incorrectAnswers": ["Thrall", "Sylvanas Windrunner", "Baine Bloodhoof"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What continent was added in Wrath of the Lich King?",
+    "correctAnswer": "Northrend",
+    "incorrectAnswers": ["Outland", "Pandaria", "Broken Isles"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Paladin's ability to make themselves immune to all damage?",
+    "correctAnswer": "Divine Shield",
+    "incorrectAnswers": ["Lay on Hands", "Hand of Protection", "Aura Mastery"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which dungeon is located beneath Stormwind?",
+    "correctAnswer": "The Stockade",
+    "incorrectAnswers": ["Deadmines", "Stormwind Vault", "The Catacombs"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which battleground features capture the flag gameplay?",
+    "correctAnswer": "Warsong Gulch",
+    "incorrectAnswers": ["Arathi Basin", "Alterac Valley", "Eye of the Storm"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What are the three Death Knight specializations?",
+    "correctAnswer": "Blood, Frost, Unholy",
+    "incorrectAnswers": ["Arms, Fury, Protection", "Frost, Fire, Arcane", "Shadow, Discipline, Holy"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which expansion destroyed and remade the original Kalimdor and Eastern Kingdoms zones?",
+    "correctAnswer": "Cataclysm",
+    "incorrectAnswers": ["Wrath of the Lich King", "Mists of Pandaria", "Warlords of Draenor"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is Jaina Proudmoore?",
+    "correctAnswer": "A Human Mage and leader of Theramore",
+    "incorrectAnswers": ["A Night Elf Druid", "A Blood Elf Paladin", "A Draenei Priest"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which dungeon is famous for being extremely long in vanilla, located in Blackrock Mountain?",
+    "correctAnswer": "Blackrock Depths",
+    "incorrectAnswers": ["Stratholme", "Scholomance", "Dire Maul"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Priest's damage-dealing specialization?",
+    "correctAnswer": "Shadow",
+    "incorrectAnswers": ["Discipline", "Holy", "Dark"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the legendary staff from Firelands?",
+    "correctAnswer": "Dragonwrath, Tarecgosa's Rest",
+    "incorrectAnswers": ["Atiesh", "Val'anyr", "Sulfuras, Hand of Ragnaros"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which WoW expansion is set primarily in an alternate timeline Draenor?",
+    "correctAnswer": "Warlords of Draenor",
+    "incorrectAnswers": ["The Burning Crusade", "Mists of Pandaria", "Legion"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the Forsaken's queen?",
+    "correctAnswer": "Sylvanas Windrunner",
+    "incorrectAnswers": ["Jaina Proudmoore", "Tyrande Whisperwind", "Moira Thaurissan"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many original classes were available at WoW's launch?",
+    "correctAnswer": "9",
+    "incorrectAnswers": ["7", "8", "10"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Old God is imprisoned beneath Ulduar?",
+    "correctAnswer": "Yogg-Saron",
+    "incorrectAnswers": ["C'Thun", "N'Zoth", "Y'Shaarj"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which faction do you gain reputation with to buy Netherwing Drakes?",
+    "correctAnswer": "Netherwing",
+    "incorrectAnswers": ["Sha'tari Skyguard", "Cenarion Expedition", "Ashtongue Deathsworn"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the maximum number of professions a character can learn?",
+    "correctAnswer": "2",
+    "incorrectAnswers": ["1", "3", "Unlimited"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What was Ragnaros's famous line when summoned in Molten Core?",
+    "correctAnswer": "TOO SOON! You have awakened me too soon!",
+    "incorrectAnswers": ["You are not prepared!", "Bow before your master!", "The shadow consumes all"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who killed Cairne Bloodhoof using a poisoned blade during Mak'gora?",
+    "correctAnswer": "Garrosh Hellscream",
+    "incorrectAnswers": ["Vol'jin", "Baine", "Thrall"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the Mage's crowd control spell that turns enemies into sheep?",
+    "correctAnswer": "Polymorph",
+    "incorrectAnswers": ["Hex", "Fear", "Entangling Roots"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Where is the Dark Portal located?",
+    "correctAnswer": "Blasted Lands",
+    "incorrectAnswers": ["Burning Steppes", "Swamp of Sorrows", "Deadwind Pass"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the legendary hammer dropped by Ragnaros?",
+    "correctAnswer": "Sulfuras, Hand of Ragnaros",
+    "incorrectAnswers": ["Doomhammer", "Thunderfury", "Ashkandi"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which titan keeper guards Ulduar?",
+    "correctAnswer": "All of Loken, Thorim, and Algalon",
+    "incorrectAnswers": ["Loken only", "Thorim only", "Algalon the Observer only"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the famous world boss in vanilla that spawned in the Blasted Lands?",
+    "correctAnswer": "Lord Kazzak",
+    "incorrectAnswers": ["Azuregos", "Emeriss", "Doom Lord Kazzak"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the flying mount quest chain in The Burning Crusade?",
+    "correctAnswer": "Netherwing Drakes",
+    "incorrectAnswers": ["Swift Flight Form", "Ashes of Al'ar", "The Skyguard"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the NPC who taught weapon skills in vanilla?",
+    "correctAnswer": "Weapon Master",
+    "incorrectAnswers": ["Combat Trainer", "Arms Dealer", "Battle Master"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which legendary weapon could Rogues obtain from Molten Core bindings?",
+    "correctAnswer": "Thunderfury",
+    "incorrectAnswers": ["Sulfuras", "Ashkandi", "Atiesh"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What was the name of the Horde's flying transportation between cities?",
+    "correctAnswer": "Zeppelins",
+    "incorrectAnswers": ["Gryphons", "Portals", "Wind riders"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the final boss of the Sunwell Plateau raid?",
+    "correctAnswer": "Kil'jaeden",
+    "incorrectAnswers": ["Kael'thas Sunstrider", "M'uru", "Brutallus"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What was the server-wide event needed to open the Gates of Ahn'Qiraj?",
+    "correctAnswer": "The War Effort and Scepter of the Shifting Sands",
+    "incorrectAnswers": ["The War Effort only", "The Scepter quest only", "The Qiraji Invasion"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Thunderfury's full name?",
+    "correctAnswer": "Thunderfury, Blessed Blade of the Windseeker",
+    "incorrectAnswers": ["Thunderfury, Blade of the Windseeker", "Thunderfury, Sword of the Windlord", "Thunderfury, Edge of the Storm"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What quest item starts the legendary Atiesh staff quest chain?",
+    "correctAnswer": "Splinter of Atiesh",
+    "incorrectAnswers": ["Frame of Atiesh", "Base of Atiesh", "Shard of Atiesh"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many bosses are in the original Naxxramas raid (level 60)?",
+    "correctAnswer": "15",
+    "incorrectAnswers": ["12", "13", "18"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Medivh's tower?",
+    "correctAnswer": "Karazhan",
+    "incorrectAnswers": ["Violet Citadel", "Sunwell", "Tempest Keep"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who was the original wielder of the Ashbringer?",
+    "correctAnswer": "Alexandros Mograine",
+    "incorrectAnswers": ["Tirion Fordring", "Uther the Lightbringer", "Turalyon"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Old God whispers to players in Visions of N'Zoth?",
+    "correctAnswer": "N'Zoth",
+    "incorrectAnswers": ["C'Thun", "Yogg-Saron", "Y'Shaarj"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many wings does Naxxramas have?",
+    "correctAnswer": "4",
+    "incorrectAnswers": ["3", "5", "6"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Onyxia's human disguise in Stormwind?",
+    "correctAnswer": "Katrana Prestor",
+    "incorrectAnswers": ["Lady Prestor", "Lady Katrana", "Lady Onyxia"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the hit cap percentage for melee DPS in vanilla WoW?",
+    "correctAnswer": "9%",
+    "incorrectAnswers": ["6%", "8%", "11%"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many Binding items are needed to create Thunderfury?",
+    "correctAnswer": "2",
+    "incorrectAnswers": ["1", "3", "4"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which is the correct order of WoW expansions?",
+    "correctAnswer": "BC, WotLK, Cata, MoP, WoD, Legion, BfA, SL",
+    "incorrectAnswers": ["BC, WotLK, MoP, Cata, WoD, Legion, BfA, SL", "BC, Cata, WotLK, MoP, WoD, Legion, BfA, SL", "BC, WotLK, Cata, WoD, MoP, Legion, BfA, SL"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What were the original PvP rank titles for Horde (highest rank)?",
+    "correctAnswer": "High Warlord",
+    "incorrectAnswers": ["Grand Marshal", "Warlord", "Field Marshal"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What were the original PvP rank titles for Alliance (highest rank)?",
+    "correctAnswer": "Grand Marshal",
+    "incorrectAnswers": ["High Warlord", "Commander", "Field Marshal"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who voiced Arthas Menethil in Wrath of the Lich King?",
+    "correctAnswer": "Patrick Seitz",
+    "incorrectAnswers": ["Chris Metzen", "Michael McConnohie", "Dave Fennoy"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the neutral faction city in Outland?",
+    "correctAnswer": "Shattrath City",
+    "incorrectAnswers": ["Dalaran", "Area 52", "Netherstorm"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many Druid forms existed in vanilla WoW?",
+    "correctAnswer": "5",
+    "incorrectAnswers": ["3", "4", "6"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Thrall's mother?",
+    "correctAnswer": "Draka",
+    "incorrectAnswers": ["Aggra", "Garona", "Geyah"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who trained Arthas as a Paladin?",
+    "correctAnswer": "Uther the Lightbringer",
+    "incorrectAnswers": ["Tirion Fordring", "Alexandros Mograine", "Turalyon"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What dragon aspect betrayed the others and became Deathwing?",
+    "correctAnswer": "Neltharion",
+    "incorrectAnswers": ["Malygos", "Nozdormu", "Galakrond"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which boss drops Ashes of Al'ar?",
+    "correctAnswer": "Kael'thas Sunstrider",
+    "incorrectAnswers": ["Illidan Stormrage", "Lady Vashj", "Archimonde"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the weapon Broxigar used to wound Sargeras?",
+    "correctAnswer": "Axe of Cenarius",
+    "incorrectAnswers": ["Gorehowl", "Shalamayne", "Doomhammer"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the reagent needed for Paladin blessings in vanilla WoW?",
+    "correctAnswer": "Symbol of Kings",
+    "incorrectAnswers": ["Holy Water", "Sacred Candle", "Light Essence"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Illidan's twin brother?",
+    "correctAnswer": "Malfurion Stormrage",
+    "incorrectAnswers": ["Furion", "Cenarius", "Xavius"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the name of the PvP honor system decay in vanilla?",
+    "correctAnswer": "Rank decay",
+    "incorrectAnswers": ["Rating decay", "Standing system", "Diminishing returns"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the bronze dragon who guides players in the Caverns of Time?",
+    "correctAnswer": "Chromie",
+    "incorrectAnswers": ["Nozdormu", "Anachronos", "Soridormi"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which tier set was obtained from Blackwing Lair?",
+    "correctAnswer": "Tier 2",
+    "incorrectAnswers": ["Tier 1", "Tier 2.5", "Tier 3"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What raid boss requires the famous 'many whelps' strategy?",
+    "correctAnswer": "Onyxia",
+    "incorrectAnswers": ["Nefarian", "Razorgore", "Chromaggus"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who created the Lich King's armour and Frostmourne?",
+    "correctAnswer": "Kil'jaeden",
+    "incorrectAnswers": ["Sargeras", "The Nathrezim (Dreadlords)", "Ner'zhul"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the debuff from the Vaelastrasz fight that kills you?",
+    "correctAnswer": "Burning Adrenaline",
+    "incorrectAnswers": ["Shadow Flame", "Fire Vulnerability", "Nefarian's Curse"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was unique about the Scarab Lord title?",
+    "correctAnswer": "Only one player per server could earn it",
+    "incorrectAnswers": ["It required killing C'Thun", "It was given to all AQ raiders", "It was a PvP rank"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which loot system was most commonly used in vanilla raiding?",
+    "correctAnswer": "DKP (Dragon Kill Points)",
+    "incorrectAnswers": ["Personal loot", "Need before greed", "Master loot"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the dragon egg room boss in Blackwing Lair?",
+    "correctAnswer": "Razorgore the Untamed",
+    "incorrectAnswers": ["Vaelastrasz", "Chromaggus", "Broodlord Lashlayer"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many classes could use totems in vanilla WoW?",
+    "correctAnswer": "1 (Shaman only)",
+    "incorrectAnswers": ["2", "3", "4"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What buff did Onyxia's Head give when turned in?",
+    "correctAnswer": "Rallying Cry of the Dragonslayer",
+    "incorrectAnswers": ["Spirit of Zandalar", "Warchief's Blessing", "Dire Maul Tribute"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the planned but never released underwater raid in vanilla?",
+    "correctAnswer": "Emerald Dream",
+    "incorrectAnswers": ["The Maelstrom", "Azshara's Palace", "Abyssal Maw"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What item is needed to extinguish the runes in Molten Core?",
+    "correctAnswer": "Aqual Quintessence (later Eternal)",
+    "incorrectAnswers": ["Hydraxian Waterlord's Blessing", "Dousing Rod", "Holy Water"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the level requirement to enter Molten Core?",
+    "correctAnswer": "58",
+    "incorrectAnswers": ["55", "60", "No requirement, just attunement"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which boss in AQ40 required nature resistance gear?",
+    "correctAnswer": "Princess Huhuran",
+    "incorrectAnswers": ["C'Thun", "The Twin Emperors", "Viscidus"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the total number of original vanilla dungeons at launch?",
+    "correctAnswer": "19",
+    "incorrectAnswers": ["14", "16", "22"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What instance featured 'Dire Maul North tribute runs'?",
+    "correctAnswer": "Skipping bosses for the king's buff and rewards",
+    "incorrectAnswers": ["Killing the king for loot", "Speed running for gold", "Farming librams"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which faction gained from killing mobs in Tyr's Hand and Hearthglen?",
+    "correctAnswer": "Argent Dawn",
+    "incorrectAnswers": ["Scarlet Crusade", "Brotherhood of the Light", "Knights of the Silver Hand"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the Corrupted Blood incident?",
+    "correctAnswer": "A plague from Hakkar in Zul'Gurub that spread uncontrollably",
+    "incorrectAnswers": ["A planned Scourge event", "A PvP exploit", "A server bug causing crashes"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the Tauren capital city?",
+    "correctAnswer": "Thunder Bluff",
+    "incorrectAnswers": ["Camp Taurajo", "Mulgore", "Bloodhoof Village"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the 40-man raid located in Silithus?",
+    "correctAnswer": "Temple of Ahn'Qiraj",
+    "incorrectAnswers": ["Ruins of Ahn'Qiraj", "Hive'Regal", "Ahn'Qiraj War"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What debuff did Vaelstrasz give the raid at the start of the fight?",
+    "correctAnswer": "Essence of the Red",
+    "incorrectAnswers": ["Burning Adrenaline", "Flame Buffet", "Fire Vulnerability"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the maximum number of debuff slots on a boss in early vanilla WoW?",
+    "correctAnswer": "8",
+    "incorrectAnswers": ["16", "32", "Unlimited"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the secret room discovered behind the AQ gates?",
+    "correctAnswer": "The Scarab Wall",
+    "incorrectAnswers": ["The Hidden Chamber", "C'Thun's Lair", "The Qiraji Sanctum"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What mount drops from the last boss of Stratholme on a timed run?",
+    "correctAnswer": "Deathcharger's Reins (Baron's mount)",
+    "incorrectAnswers": ["Ashes of Al'ar", "Invincible", "Rivendare's Deathcharger"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What class quest in vanilla required you to kite a demon across an entire zone?",
+    "correctAnswer": "Hunter epic quest (Rhok'delar)",
+    "incorrectAnswers": ["Warlock epic mount quest", "Paladin charger quest", "Priest Benediction quest"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the name of the infamous Leeroy Jenkins raid?",
+    "correctAnswer": "Upper Blackrock Spire",
+    "incorrectAnswers": ["Molten Core", "Blackwing Lair", "Stratholme"],
+    "difficulty": "hard"
+  }
+]

@@ -638,13 +638,24 @@
     .main-content {
       display: grid;
       grid-template-columns: 1fr 380px;
+      grid-template-rows: 1fr;
       gap: 30px;
       align-items: start;
+    }
+
+    .sidebar-column {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
     }
 
     @media (max-width: 1024px) {
       .main-content {
         grid-template-columns: 1fr;
+      }
+      .sidebar-column {
+        height: auto !important;
       }
     }
 
@@ -846,6 +857,19 @@
     .lyrics-indicator.hidden {
       display: none;
     }
+
+    .watch-toggle-btn {
+      position: absolute; top: 12px; right: 12px; z-index: 5;
+      width: 36px; height: 36px; border: none; border-radius: 8px;
+      background: rgba(0,0,0,0.5); color: var(--text-secondary);
+      cursor: pointer; display: none; align-items: center; justify-content: center;
+      transition: background 0.2s, color 0.2s, opacity 0.2s;
+      opacity: 0;
+    }
+    .album-art-container:hover .watch-toggle-btn { opacity: 1; }
+    .watch-toggle-btn:hover { background: rgba(0,0,0,0.7); color: var(--text-primary); }
+    .watch-toggle-btn.watch-active { background: var(--accent); color: var(--text-primary); opacity: 1; }
+    .watch-toggle-btn.watch-visible { display: flex; }
 
     .lyrics-container {
       position: absolute;
@@ -1382,6 +1406,358 @@
       background: var(--bg-hover);
     }
 
+    /* Audio Mixer Panel */
+    .mixer-panel {
+      margin-top: 20px;
+      padding: 20px 24px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .mixer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .mixer-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+    }
+
+    .mixer-dj-badge {
+      background: var(--accent);
+      color: #000;
+      padding: 2px 10px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .mixer-channels {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 20px;
+    }
+
+    .mixer-channel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mixer-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-secondary);
+    }
+
+    .mixer-fader-track {
+      width: 44px;
+      height: 140px;
+      background: var(--bg-primary);
+      border-radius: 8px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .mixer-fader-track::before {
+      content: '';
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: 50%;
+      width: 2px;
+      transform: translateX(-50%);
+      background: var(--border);
+      border-radius: 1px;
+    }
+
+    .mixer-fader {
+      width: 140px;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      border-radius: 3px;
+      cursor: pointer;
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+
+    .mixer-fader::-webkit-slider-runnable-track {
+      height: 4px;
+      background: var(--surface-light);
+      border-radius: 2px;
+    }
+
+    .mixer-fader::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 14px;
+      background: linear-gradient(180deg, #e0e0e0 0%, #b0b0b0 40%, #d0d0d0 50%, #a0a0a0 100%);
+      border-radius: 3px;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+      margin-top: -5px;
+      transition: box-shadow 0.15s;
+    }
+
+    .mixer-fader::-webkit-slider-thumb:hover {
+      box-shadow: 0 1px 6px rgba(29,185,84,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+
+    .mixer-fader::-moz-range-track {
+      height: 4px;
+      background: var(--surface-light);
+      border-radius: 2px;
+      border: none;
+    }
+
+    .mixer-fader::-moz-range-thumb {
+      width: 24px;
+      height: 14px;
+      background: linear-gradient(180deg, #e0e0e0 0%, #b0b0b0 40%, #d0d0d0 50%, #a0a0a0 100%);
+      border-radius: 3px;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+
+    .mixer-value {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      min-width: 48px;
+      text-align: center;
+    }
+
+    .mixer-presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .mixer-preset-btn {
+      background: var(--surface-light);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 7px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .mixer-preset-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    .mixer-preset-btn.active {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+
+    .mixer-panel.disabled .mixer-fader,
+    .mixer-panel.disabled .mixer-preset-btn,
+    .mixer-panel.disabled .mixer-effect-btn,
+    .mixer-panel.disabled .mixer-sub-slider {
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    .mixer-panel.disabled .mixer-channels {
+      position: relative;
+    }
+
+    .mixer-locked-msg {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 12px;
+      display: none;
+    }
+
+    .mixer-panel.disabled .mixer-locked-msg {
+      display: block;
+    }
+
+    .mixer-toggle-btn.active svg {
+      color: var(--accent);
+    }
+
+    /* Mixer Effects Section */
+    .mixer-effects {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: center;
+      padding-top: 16px;
+      margin-top: 16px;
+      margin-bottom: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .mixer-effect-pedal {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mixer-effect-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: var(--bg-primary);
+      border: 2px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.2s;
+      position: relative;
+      font-family: inherit;
+    }
+
+    .mixer-effect-btn:hover {
+      border-color: var(--text-muted);
+      background: var(--bg-hover);
+    }
+
+    .mixer-effect-btn .effect-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      transition: color 0.2s;
+    }
+
+    .mixer-effect-btn .effect-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .mixer-effect-btn.active .effect-icon {
+      color: var(--accent);
+    }
+
+    .mixer-effect-led {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #333;
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      transition: all 0.2s;
+    }
+
+    .mixer-effect-btn.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(29, 185, 84, 0.25);
+    }
+
+    .mixer-effect-btn.active .mixer-effect-led {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    .mixer-effect-name {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .mixer-sub-control {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 280px;
+      margin: 0 auto;
+    }
+
+    .mixer-effect-pedal.expanded .mixer-sub-control {
+      display: flex;
+    }
+
+    .mixer-sub-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .mixer-sub-slider {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--surface-light);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    .mixer-sub-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+
+    .mixer-sub-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+
+    .mixer-sub-value {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      min-width: 48px;
+      text-align: right;
+    }
+
     /* Queue Section */
     .queue-section {
       background: var(--bg-secondary);
@@ -1389,6 +1765,8 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      flex: 2;
+      min-height: 0;
     }
 
     .queue-tabs {
@@ -1479,7 +1857,6 @@
       overflow-y: auto;
       padding: 12px;
       min-height: 0;
-      max-height: 450px;
     }
 
     .queue-list::-webkit-scrollbar {
@@ -1687,6 +2064,82 @@
     .queue-item-remove:hover {
       color: #ff4444;
       transform: scale(1.2);
+    }
+
+    .queue-item-save {
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      min-height: 18px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 8px;
+      margin-left: 4px;
+      transition: color 0.2s, transform 0.2s;
+      user-select: none;
+      opacity: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .queue-item-save svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .queue-item:hover .queue-item-save { opacity: 1; pointer-events: auto; }
+    .queue-item-save:hover { color: var(--accent); transform: scale(1.2); }
+
+    .track-save-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.2s, transform 0.2s;
+      vertical-align: middle;
+      margin-left: 8px;
+      position: relative;
+    }
+    .track-save-btn svg { width: 18px; height: 18px; }
+    .track-save-btn:hover { color: var(--accent); transform: scale(1.15); }
+
+    .playlist-picker {
+      position: fixed;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 0;
+      min-width: 200px;
+      max-width: 260px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 9999;
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .playlist-picker.visible { display: block; }
+    .playlist-picker-item {
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.15s;
+    }
+    .playlist-picker-item:hover { background: var(--bg-hover); }
+    .playlist-picker-item.create-new {
+      color: var(--accent);
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+      padding-top: 10px;
+    }
+    .playlist-picker-empty {
+      padding: 12px 16px;
+      color: var(--text-muted);
+      font-size: 13px;
     }
 
     /* Drag handle */
@@ -1988,22 +2441,182 @@
     }
 
     .idle-icon {
-      width: 80px;
-      height: 80px;
-      margin-bottom: 24px;
-      opacity: 0.2;
-      color: var(--accent);
-      animation: idlePulse 3s ease-in-out infinite;
+      width: 140px;
+      height: 140px;
+      margin-bottom: 32px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    @keyframes idlePulse {
-      0%, 100% { opacity: 0.2; transform: scale(1); }
-      50% { opacity: 0.35; transform: scale(1.05); }
+    /* Core disc — slow spin with conic gradient */
+    .idle-icon::before {
+      content: '';
+      position: absolute;
+      inset: 16px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, var(--accent), #0d4b2a, var(--accent), #064a2e, var(--accent));
+      animation: idleDiscSpin 8s linear infinite;
+      opacity: 0.55;
     }
 
+    /* Centre dot */
+    .idle-icon::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--bg-primary);
+      border: 2px solid rgba(29, 185, 84, 0.4);
+      z-index: 4;
+    }
+
+    @keyframes idleDiscSpin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Outer orbiting ring */
+    .idle-orbit-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1.5px solid transparent;
+      border-top-color: var(--accent);
+      border-right-color: rgba(29, 185, 84, 0.3);
+      animation: idleOrbit1 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      will-change: transform;
+    }
+
+    .idle-orbit-ring::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      margin-left: -3px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(29, 185, 84, 0.4);
+    }
+
+    @keyframes idleOrbit1 {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Second ring — counter-rotate, slightly smaller */
+    .idle-orbit-ring-2 {
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      border: 1px solid transparent;
+      border-bottom-color: rgba(29, 185, 84, 0.5);
+      border-left-color: rgba(29, 185, 84, 0.15);
+      animation: idleOrbit2 5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      will-change: transform;
+    }
+
+    .idle-orbit-ring-2::before {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 50%;
+      width: 4px;
+      height: 4px;
+      margin-left: -2px;
+      border-radius: 50%;
+      background: rgba(29, 185, 84, 0.8);
+      box-shadow: 0 0 8px rgba(29, 185, 84, 0.5);
+    }
+
+    @keyframes idleOrbit2 {
+      to { transform: rotate(-360deg); }
+    }
+
+    /* Pulsing glow behind the whole thing */
+    .idle-glow {
+      position: absolute;
+      inset: -20px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(29, 185, 84, 0.12) 0%, transparent 70%);
+      animation: idleGlow 4s ease-in-out infinite;
+      will-change: transform, opacity;
+    }
+
+    @keyframes idleGlow {
+      0%, 100% { transform: scale(0.85); opacity: 0.4; }
+      50% { transform: scale(1.1); opacity: 1; }
+    }
+
+    /* Headphones icon in the centre */
     .idle-icon svg {
-      width: 100%;
-      height: 100%;
+      width: 36px;
+      height: 36px;
+      position: relative;
+      z-index: 3;
+      opacity: 0.6;
+      color: var(--accent);
+      animation: idleIconBreath 3s ease-in-out infinite;
+      will-change: transform, opacity;
+    }
+
+    @keyframes idleIconBreath {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.1); }
+    }
+
+    /* Floating particles around the disc */
+    .idle-particles {
+      position: absolute;
+      inset: -10px;
+      pointer-events: none;
+    }
+
+    .idle-particle {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--accent);
+      will-change: transform, opacity;
+    }
+
+    .idle-particle:nth-child(1) {
+      top: 10%; left: 50%;
+      animation: idleFloat1 6s ease-in-out infinite;
+    }
+    .idle-particle:nth-child(2) {
+      top: 80%; left: 15%;
+      animation: idleFloat2 7s ease-in-out infinite 1s;
+    }
+    .idle-particle:nth-child(3) {
+      top: 50%; left: 90%;
+      animation: idleFloat3 5s ease-in-out infinite 0.5s;
+    }
+    .idle-particle:nth-child(4) {
+      top: 85%; left: 75%;
+      animation: idleFloat1 8s ease-in-out infinite 2s;
+    }
+
+    @keyframes idleFloat1 {
+      0%, 100% { transform: translate(0, 0) scale(1); opacity: 0; }
+      20% { opacity: 0.7; }
+      50% { transform: translate(-12px, -20px) scale(1.5); opacity: 0.5; }
+      80% { opacity: 0.3; }
+    }
+    @keyframes idleFloat2 {
+      0%, 100% { transform: translate(0, 0) scale(1); opacity: 0; }
+      20% { opacity: 0.6; }
+      50% { transform: translate(15px, -15px) scale(1.8); opacity: 0.4; }
+      80% { opacity: 0.2; }
+    }
+    @keyframes idleFloat3 {
+      0%, 100% { transform: translate(0, 0) scale(1); opacity: 0; }
+      25% { opacity: 0.8; }
+      50% { transform: translate(-10px, 18px) scale(1.3); opacity: 0.5; }
+      75% { opacity: 0.3; }
     }
 
     .idle-text {
@@ -2200,6 +2813,266 @@
       50% { opacity: 0.5; transform: scale(1.2); }
       100% { opacity: 1; transform: scale(1); }
     }
+
+    /* Playlists Section */
+    .playlists-section {
+      background: var(--bg-secondary);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex: 1;
+      min-height: 300px;
+    }
+    .playlists-section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .playlists-section-header svg {
+      width: 16px;
+      height: 16px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .playlists-section-header .queue-count {
+      margin-left: auto;
+    }
+
+    /* Playlists tab controls */
+    .playlists-controls {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .playlists-create-btn, .playlists-save-current-btn {
+      flex: 1;
+      padding: 8px 12px;
+      background: var(--surface-light);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .playlists-create-btn:hover, .playlists-save-current-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+    .playlists-create-btn svg, .playlists-save-current-btn svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    /* Playlist list items */
+    .pl-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+    .pl-item:hover {
+      background: var(--bg-hover);
+    }
+    .pl-item-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .pl-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .pl-item-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pl-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .pl-item-actions {
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .pl-item:hover .pl-item-actions {
+      opacity: 1;
+    }
+    .pl-item-action {
+      background: var(--surface-light);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .pl-item-action:hover {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+    .pl-item-action svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Expanded playlist view */
+    .pl-expanded .pl-back-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 8px 12px;
+      margin-bottom: 4px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .pl-expanded .pl-back-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+    .pl-expanded .pl-back-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+    .pl-expanded-header {
+      padding: 0 12px 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .pl-expanded-header-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .pl-song-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    .pl-song-item:hover {
+      background: var(--bg-hover);
+    }
+    .pl-song-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      background: var(--bg-tertiary);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .pl-song-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .pl-song-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .pl-song-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pl-song-duration {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .pl-song-add {
+      background: var(--surface-light);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .pl-song-item:hover .pl-song-add {
+      opacity: 1;
+    }
+    .pl-song-add:hover {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+    .pl-song-add svg {
+      width: 14px;
+      height: 14px;
+    }
+    .pl-empty {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 40px 20px;
+    }
+    .pl-empty svg {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+    .pl-manage-link {
+      display: block;
+      text-align: center;
+      padding: 10px;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-decoration: none;
+      border-top: 1px solid var(--border);
+      transition: color 0.2s;
+    }
+    .pl-manage-link:hover {
+      color: var(--accent);
+    }
+
   </style>
 </head>
 <body>
@@ -2263,6 +3136,9 @@
     <symbol id="icon-trash" viewBox="0 0 24 24">
       <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
     </symbol>
+    <symbol id="icon-bookmark" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+    </symbol>
     <symbol id="icon-headphones" viewBox="0 0 24 24">
       <path fill="currentColor" d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/>
     </symbol>
@@ -2292,6 +3168,12 @@
     </symbol>
     <symbol id="icon-pesten" viewBox="0 0 24 24">
       <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+    </symbol>
+    <symbol id="icon-playlist" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+    </symbol>
+    <symbol id="icon-theater" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M19 4H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H5V6h14v12z"/>
     </symbol>
   </svg>
 
@@ -2325,20 +3207,46 @@
           </div>
           <div class="user-dropdown">
             <a href="/stats" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;"><use href="#icon-stats"/></svg>
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               Listening Stats
             </a>
+            <a href="/recap" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Weekly Recap
+            </a>
             <a href="/pictionary" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;"><use href="#icon-pictionary"/></svg>
-              Pictionary Game
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+              Pictionary
             </a>
             <a href="/osrs" class="user-dropdown-item">
               <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               Runescape Tracker
             </a>
-            <a href="/logout" class="user-dropdown-item logout">
-              🚪 Logout
+            <a href="/twitch" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/><path d="M10 6v6"/><path d="M14 6v6"/></svg>
+              Twitch Alerts
             </a>
+            <a href="/playlists" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-3-7 3V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              My Playlists
+            </a>
+            <a href="/trivia" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Trivia
+            </a>
+            <a href="/f1" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+              F1 Predictions
+            </a>
+            <a href="/birthdays" class="user-dropdown-item">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+              Birthdays
+            </a>
+            <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+              Bot Settings
+            </a>
+            <a href="/logout" class="user-dropdown-item logout">Logout</a>
           </div>
         </div>
       </div>
@@ -2361,37 +3269,61 @@
         </div>
       </section>
 
-      <aside class="queue-section">
-        <div class="queue-tabs">
-          <button class="queue-tab active" data-tab="queue" onclick="switchTab('queue')">
-            <svg><use href="#icon-queue"/></svg> Queue
-            <span class="queue-count" id="queueCount">0</span>
-            <span class="queue-duration" id="queueDuration"></span>
-          </button>
-          <button class="queue-tab" data-tab="history" onclick="switchTab('history')">
-            <svg><use href="#icon-history"/></svg> Recently Played
-            <span class="queue-count" id="historyCount">0</span>
-          </button>
-        </div>
-        <div class="queue-list" id="queueList">
-          <!-- Queue items will be inserted here -->
-        </div>
-        <button class="clear-queue-btn" id="clearQueueBtn"><svg><use href="#icon-trash"/></svg> Clear Queue</button>
-        <div class="history-controls" id="historyControls" style="display: none;">
-          <div class="history-search">
-            <svg><use href="#icon-search"/></svg>
-            <input type="text" id="historySearch" placeholder="Search history..." oninput="filterHistory()">
+      <div class="sidebar-column">
+        <aside class="queue-section">
+          <div class="queue-tabs">
+            <button class="queue-tab active" data-tab="queue" onclick="switchTab('queue')">
+              <svg><use href="#icon-queue"/></svg> Queue
+              <span class="queue-count" id="queueCount">0</span>
+              <span class="queue-duration" id="queueDuration"></span>
+            </button>
+            <button class="queue-tab" data-tab="history" onclick="switchTab('history')">
+              <svg><use href="#icon-history"/></svg> Recently Played
+              <span class="queue-count" id="historyCount">0</span>
+            </button>
           </div>
-          <label class="history-unique-toggle">
-            <input type="checkbox" id="historyUniqueToggle" onchange="filterHistory()">
-            <span class="toggle-switch"></span>
-            <span>Unique</span>
-          </label>
-        </div>
-        <div class="queue-list" id="historyList" style="display: none;">
-          <!-- Recently played items will be inserted here -->
-        </div>
-      </aside>
+          <div class="queue-list" id="queueList">
+            <!-- Queue items will be inserted here -->
+          </div>
+          <button class="clear-queue-btn" id="clearQueueBtn"><svg><use href="#icon-trash"/></svg> Clear Queue</button>
+          <div class="history-controls" id="historyControls" style="display: none;">
+            <div class="history-search">
+              <svg><use href="#icon-search"/></svg>
+              <input type="text" id="historySearch" placeholder="Search history..." oninput="filterHistory()">
+            </div>
+            <label class="history-unique-toggle">
+              <input type="checkbox" id="historyUniqueToggle" onchange="filterHistory()">
+              <span class="toggle-switch"></span>
+              <span>Unique</span>
+            </label>
+          </div>
+          <div class="queue-list" id="historyList" style="display: none;">
+            <!-- Recently played items will be inserted here -->
+          </div>
+        </aside>
+
+        <section class="playlists-section">
+          <div class="playlists-section-header">
+            <svg><use href="#icon-playlist"/></svg>
+            Playlists
+            <span class="queue-count" id="playlistsCount">0</span>
+          </div>
+          <div class="playlists-controls" id="playlistsControls">
+            <button class="playlists-create-btn" onclick="createPlaylistFromTab()">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              New Playlist
+            </button>
+            <button class="playlists-save-current-btn" onclick="saveCurrentSongToPlaylist(this)">
+              <svg><use href="#icon-bookmark"/></svg>
+              Save Current
+            </button>
+          </div>
+          <div class="queue-list" id="playlistsList">
+            <!-- Playlists content rendered here -->
+          </div>
+          <a href="/playlists" class="pl-manage-link">Manage playlists &rarr;</a>
+        </section>
+      </div>
     </main>
 
     <!-- Listeners Section -->
@@ -2422,6 +3354,7 @@
 
   <div class="toast-container" id="toastContainer"></div>
 
+  <script src="/watch-together.js"></script>
   <script>
     // WebSocket connection
     let ws;
@@ -2455,16 +3388,18 @@
       if (!state.currentSong || !state.isPlaying) return;
       if (state.isPaused) return;
       
-      playbackStartTime = Date.now() - (pausedAt * 1000);
-      console.log('Progress tracking started at pausedAt:', pausedAt);
-      
+      const speed = state.mixerFilters?.speed || 1.0;
+      playbackStartTime = Date.now() - (pausedAt / speed * 1000);
+      console.log('Progress tracking started at pausedAt:', pausedAt, 'speed:', speed);
+
       progressInterval = setInterval(() => {
         if (!state.currentSong || !state.isPlaying || state.isPaused) {
           stopProgressTracking();
           return;
         }
-        
-        currentElapsed = (Date.now() - playbackStartTime) / 1000;
+
+        const speed = state.mixerFilters?.speed || 1.0;
+        currentElapsed = (Date.now() - playbackStartTime) / 1000 * speed;
         updateProgressBar();
       }, 250);
     }
@@ -3213,6 +4148,8 @@
           } else {
             document.getElementById('userAvatar').textContent = displayName.charAt(0).toUpperCase();
           }
+          if (user.hasControlPanel) { const al = document.getElementById('adminLink'); if (al) al.style.display = ''; }
+          setTimeout(applyMixerPermissions, 100);
         }
       } catch (error) {
         console.error('Error loading user info:', error);
@@ -3244,6 +4181,11 @@
         const message = JSON.parse(event.data);
         console.log('Received:', message);
         
+        if (message.type === 'error') {
+          showToast(message.message, 'error');
+          return;
+        }
+
         if (message.type === 'state') {
           const prevSong = state.currentSong?.url;
           const isInitialLoad = prevSong === undefined || prevSong === null;
@@ -3268,7 +4210,8 @@
           }
 
           updateUI();
-          
+          updateMixerFromState(state.mixerFilters);
+
           // Handle progress tracking
           const newSong = state.currentSong?.url;
           const isNowPlaying = state.isPlaying && !state.isPaused;
@@ -3297,14 +4240,24 @@
 
             // Pre-fetch lyrics for new song
             prefetchLyrics();
+
+            // Watch Together: load new video on song change
+            if (window.WatchTogether) {
+              const vidMatch = (state.currentSong?.url || '').match(/(?:v=|youtu\.be\/|\/vi\/)([a-zA-Z0-9_-]{11})/);
+              const newVideoId = vidMatch ? vidMatch[1] : null;
+              WatchTogether.loadVideo(newVideoId);
+              const wBtn = document.getElementById('watchToggleBtn');
+              if (wBtn) wBtn.classList.toggle('watch-visible', !!newVideoId);
+            }
             
             // Initialize progress from server's songStartTime
             if (state.songStartTime && isNowPlaying) {
-              const elapsed = (Date.now() - state.songStartTime) / 1000;
+              const speed = state.mixerFilters?.speed || 1.0;
+              const elapsed = (Date.now() - state.songStartTime) / 1000 * speed;
               currentElapsed = elapsed;
               pausedAt = elapsed;
               playbackStartTime = state.songStartTime;
-              console.log('Initialized progress from server:', elapsed, 's');
+              console.log('Initialized progress from server:', elapsed, 's at speed:', speed);
             }
             
             // Fetch new radio songs when song changes or on initial load with radio enabled
@@ -3324,18 +4277,20 @@
           
           // Handle seek position update from server
           if (message.data.seekPosition !== null && message.data.seekPosition !== undefined) {
+            const speed = state.mixerFilters?.speed || 1.0;
             pausedAt = message.data.seekPosition;
             currentElapsed = message.data.seekPosition;
             if (isNowPlaying) {
-              playbackStartTime = Date.now() - (pausedAt * 1000);
+              playbackStartTime = Date.now() - (pausedAt / speed * 1000);
             }
           } else if (state.songStartTime && isNowPlaying && !playbackStartTime) {
             // On initial page load or reconnect, sync with server's start time
-            const elapsed = (Date.now() - state.songStartTime) / 1000;
+            const speed = state.mixerFilters?.speed || 1.0;
+            const elapsed = (Date.now() - state.songStartTime) / 1000 * speed;
             currentElapsed = elapsed;
             pausedAt = elapsed;
             playbackStartTime = state.songStartTime;
-            console.log('Synced progress with server on connection:', elapsed, 's');
+            console.log('Synced progress with server on connection:', elapsed, 's at speed:', speed);
           }
           
           // Start/stop progress tracking based on play state
@@ -3346,9 +4301,15 @@
           } else if (!isNowPlaying && progressInterval) {
             // Save current position when paused
             if (playbackStartTime) {
-              pausedAt = (Date.now() - playbackStartTime) / 1000;
+              const speed = state.mixerFilters?.speed || 1.0;
+              pausedAt = (Date.now() - playbackStartTime) / 1000 * speed;
             }
             stopProgressTracking();
+          }
+
+          // Watch Together: sync playback state with current position
+          if (window.WatchTogether) {
+            WatchTogether.syncState(state.position || currentElapsed || 0, state.isPlaying, state.isPaused);
           }
         } else if (message.type === 'listeners') {
           // Update listeners list
@@ -4235,6 +5196,236 @@
       sendCommand('volume:' + numValue);
     }
 
+    // --- Audio Mixer ---
+    let mixerVisible = false;
+
+    function toggleMixerPanel() {
+      mixerVisible = !mixerVisible;
+      const panel = document.getElementById('mixerPanel');
+      const btn = document.querySelector('.mixer-toggle-btn');
+      if (panel) panel.style.display = mixerVisible ? 'block' : 'none';
+      if (btn) btn.classList.toggle('active', mixerVisible);
+    }
+
+    function updateMixerDisplay(param, value) {
+      if (param === 'bass') {
+        const el = document.getElementById('mixerBassValue');
+        if (el) el.textContent = value + ' dB';
+      } else if (param === 'mid') {
+        const el = document.getElementById('mixerMidValue');
+        if (el) el.textContent = value + ' dB';
+      } else if (param === 'treble') {
+        const el = document.getElementById('mixerTrebleValue');
+        if (el) el.textContent = value + ' dB';
+      } else if (param === 'speed') {
+        const el = document.getElementById('mixerSpeedValue');
+        if (el) el.textContent = (value / 100).toFixed(2) + 'x';
+      } else if (param === '8drate') {
+        const el = document.getElementById('mixer8DRateValue');
+        if (el) el.textContent = (value / 100).toFixed(2) + ' Hz';
+      } else if (param === 'reverb') {
+        const el = document.getElementById('mixerReverbValue');
+        if (el) el.textContent = value + '%';
+      }
+      updateMixerActivePreset();
+    }
+
+    function toggleMixerEffect(effect) {
+      if (effect === 'karaoke') {
+        const btn = document.querySelector('#pedalKaraoke .mixer-effect-btn');
+        const active = btn && btn.classList.contains('active');
+        sendCommand('mixer-karaoke:' + (!active));
+      } else if (effect === '8d') {
+        const btn = document.querySelector('#pedal8D .mixer-effect-btn');
+        const active = btn && btn.classList.contains('active');
+        sendCommand('mixer-8d:' + (!active));
+      } else if (effect === 'reverb') {
+        const slider = document.getElementById('mixerReverbAmount');
+        const currentVal = slider ? parseInt(slider.value) : 0;
+        if (currentVal > 0) {
+          sendCommand('mixer-reverb:0');
+        } else {
+          sendCommand('mixer-reverb:40');
+        }
+      } else if (effect === 'compressor') {
+        const btn = document.querySelector('#pedalCompressor .mixer-effect-btn');
+        const active = btn && btn.classList.contains('active');
+        sendCommand('mixer-compressor:' + (!active));
+      } else if (effect === 'flanger') {
+        const btn = document.querySelector('#pedalFlanger .mixer-effect-btn');
+        const active = btn && btn.classList.contains('active');
+        sendCommand('mixer-flanger:' + (!active));
+      }
+    }
+
+    const mixerPresetDefaults = { bass: 0, mid: 0, treble: 0, speed: 100, karaoke: false, eightD: false, eightDRate: 15, reverb: 0, compressor: false, flanger: false };
+
+    function applyMixerPreset(preset) {
+      const presets = {
+        normal:    { ...mixerPresetDefaults },
+        bassboost: { ...mixerPresetDefaults, bass: 10 },
+        nightcore: { ...mixerPresetDefaults, treble: 3, speed: 125 },
+        slowed:    { ...mixerPresetDefaults, bass: 3, treble: -2, speed: 85 },
+        karaoke:   { ...mixerPresetDefaults, karaoke: true },
+        eightd:    { ...mixerPresetDefaults, eightD: true, reverb: 20 },
+        nightmode: { ...mixerPresetDefaults, compressor: true }
+      };
+      const p = presets[preset];
+      if (!p) return;
+
+      // Update faders
+      const bassEl = document.getElementById('mixerBass');
+      const midEl = document.getElementById('mixerMid');
+      const trebleEl = document.getElementById('mixerTreble');
+      const speedEl = document.getElementById('mixerSpeed');
+      if (bassEl) bassEl.value = p.bass;
+      if (midEl) midEl.value = p.mid;
+      if (trebleEl) trebleEl.value = p.treble;
+      if (speedEl) speedEl.value = p.speed;
+
+      updateMixerDisplay('bass', p.bass);
+      updateMixerDisplay('mid', p.mid);
+      updateMixerDisplay('treble', p.treble);
+      updateMixerDisplay('speed', p.speed);
+
+      // Update effect pedal states
+      setEffectPedalState('pedalKaraoke', p.karaoke);
+      setEffectPedalState('pedal8D', p.eightD);
+      setEffectPedalState('pedalCompressor', p.compressor);
+      setEffectPedalState('pedalFlanger', p.flanger);
+
+      // Update reverb pedal + slider
+      const reverbBtn = document.querySelector('#pedalReverb .mixer-effect-btn');
+      if (reverbBtn) reverbBtn.classList.toggle('active', p.reverb > 0);
+      const reverbPedal = document.getElementById('pedalReverb');
+      if (reverbPedal) reverbPedal.classList.toggle('expanded', p.reverb > 0);
+      const reverbSlider = document.getElementById('mixerReverbAmount');
+      if (reverbSlider) reverbSlider.value = p.reverb;
+      updateMixerDisplay('reverb', p.reverb);
+
+      // Update 8D sub-slider
+      const eightDPedal = document.getElementById('pedal8D');
+      if (eightDPedal) eightDPedal.classList.toggle('expanded', p.eightD);
+      const rateSlider = document.getElementById('mixer8DRate');
+      if (rateSlider) rateSlider.value = p.eightDRate;
+      updateMixerDisplay('8drate', p.eightDRate);
+
+      sendCommand('mixer-preset:' + preset);
+    }
+
+    function setEffectPedalState(pedalId, active) {
+      const btn = document.querySelector('#' + pedalId + ' .mixer-effect-btn');
+      if (btn) btn.classList.toggle('active', active);
+    }
+
+    function updateMixerActivePreset() {
+      const bass = parseInt(document.getElementById('mixerBass')?.value || 0);
+      const mid = parseInt(document.getElementById('mixerMid')?.value || 0);
+      const treble = parseInt(document.getElementById('mixerTreble')?.value || 0);
+      const speed = parseInt(document.getElementById('mixerSpeed')?.value || 100);
+      const karaokeActive = document.querySelector('#pedalKaraoke .mixer-effect-btn')?.classList.contains('active') || false;
+      const eightDActive = document.querySelector('#pedal8D .mixer-effect-btn')?.classList.contains('active') || false;
+      const reverb = parseInt(document.getElementById('mixerReverbAmount')?.value || 0);
+      const compressorActive = document.querySelector('#pedalCompressor .mixer-effect-btn')?.classList.contains('active') || false;
+      const flangerActive = document.querySelector('#pedalFlanger .mixer-effect-btn')?.classList.contains('active') || false;
+
+      const presets = {
+        normal:    { bass: 0, mid: 0, treble: 0, speed: 100, karaoke: false, eightD: false, reverb: 0, compressor: false, flanger: false },
+        bassboost: { bass: 10, mid: 0, treble: 0, speed: 100, karaoke: false, eightD: false, reverb: 0, compressor: false, flanger: false },
+        nightcore: { bass: 0, mid: 0, treble: 3, speed: 125, karaoke: false, eightD: false, reverb: 0, compressor: false, flanger: false },
+        slowed:    { bass: 3, mid: 0, treble: -2, speed: 85, karaoke: false, eightD: false, reverb: 0, compressor: false, flanger: false },
+        karaoke:   { bass: 0, mid: 0, treble: 0, speed: 100, karaoke: true, eightD: false, reverb: 0, compressor: false, flanger: false },
+        eightd:    { bass: 0, mid: 0, treble: 0, speed: 100, karaoke: false, eightD: true, reverb: 20, compressor: false, flanger: false },
+        nightmode: { bass: 0, mid: 0, treble: 0, speed: 100, karaoke: false, eightD: false, reverb: 0, compressor: true, flanger: false }
+      };
+
+      document.querySelectorAll('.mixer-preset-btn').forEach(btn => {
+        const p = presets[btn.dataset.preset];
+        const match = p && p.bass === bass && p.mid === mid && p.treble === treble && p.speed === speed
+          && p.karaoke === karaokeActive && p.eightD === eightDActive && p.reverb === reverb
+          && p.compressor === compressorActive && p.flanger === flangerActive;
+        btn.classList.toggle('active', match);
+      });
+    }
+
+    function updateMixerFromState(mixerFilters) {
+      if (!mixerFilters) return;
+
+      // Faders
+      const bassEl = document.getElementById('mixerBass');
+      const midEl = document.getElementById('mixerMid');
+      const trebleEl = document.getElementById('mixerTreble');
+      const speedEl = document.getElementById('mixerSpeed');
+
+      if (bassEl && document.activeElement !== bassEl) {
+        bassEl.value = mixerFilters.bass;
+        updateMixerDisplay('bass', mixerFilters.bass);
+      }
+      if (midEl && document.activeElement !== midEl) {
+        midEl.value = mixerFilters.mid || 0;
+        updateMixerDisplay('mid', mixerFilters.mid || 0);
+      }
+      if (trebleEl && document.activeElement !== trebleEl) {
+        trebleEl.value = mixerFilters.treble;
+        updateMixerDisplay('treble', mixerFilters.treble);
+      }
+      if (speedEl && document.activeElement !== speedEl) {
+        const speedVal = Math.round(mixerFilters.speed * 100);
+        speedEl.value = speedVal;
+        updateMixerDisplay('speed', speedVal);
+      }
+
+      // Effect pedal toggle states
+      setEffectPedalState('pedalKaraoke', !!mixerFilters.karaoke);
+      setEffectPedalState('pedal8D', !!mixerFilters.eightD);
+      setEffectPedalState('pedalCompressor', !!mixerFilters.compressor);
+      setEffectPedalState('pedalFlanger', !!mixerFilters.flanger);
+
+      // 8D sub-control
+      const eightDPedal = document.getElementById('pedal8D');
+      if (eightDPedal) eightDPedal.classList.toggle('expanded', !!mixerFilters.eightD);
+      const rateSlider = document.getElementById('mixer8DRate');
+      if (rateSlider && document.activeElement !== rateSlider) {
+        const rateVal = Math.round((mixerFilters.eightDRate || 0.15) * 100);
+        rateSlider.value = rateVal;
+        updateMixerDisplay('8drate', rateVal);
+      }
+
+      // Reverb pedal + sub-control
+      const reverbVal = mixerFilters.reverb || 0;
+      const reverbBtn = document.querySelector('#pedalReverb .mixer-effect-btn');
+      if (reverbBtn) reverbBtn.classList.toggle('active', reverbVal > 0);
+      const reverbPedal = document.getElementById('pedalReverb');
+      if (reverbPedal) reverbPedal.classList.toggle('expanded', reverbVal > 0);
+      const reverbSlider = document.getElementById('mixerReverbAmount');
+      if (reverbSlider && document.activeElement !== reverbSlider) {
+        reverbSlider.value = reverbVal;
+        updateMixerDisplay('reverb', reverbVal);
+      }
+
+      updateMixerActivePreset();
+    }
+
+    function applyMixerPermissions() {
+      const panel = document.getElementById('mixerPanel');
+      if (!panel) return;
+
+      const isDJ = loggedInUser && loggedInUser.hasDJRole;
+
+      // Use HTML disabled attribute for reliable interaction blocking
+      panel.querySelectorAll('.mixer-fader, .mixer-preset-btn, .mixer-effect-btn, .mixer-sub-slider').forEach(el => {
+        el.disabled = !isDJ;
+      });
+
+      if (isDJ) {
+        panel.classList.remove('disabled');
+        const badge = document.getElementById('mixerDJBadge');
+        if (badge) badge.style.display = 'inline-block';
+      } else {
+        panel.classList.add('disabled');
+      }
+    }
+
     function skipToSong(index) {
       if (index > 0) { // Can't skip to current song (index 0)
         sendCommand('skipto:' + index);
@@ -4377,13 +5568,25 @@
         
         // Create the static player structure with current song data
         playerContent.innerHTML = `
-          <div class="album-art-container" onclick="toggleLyrics(event)">
+          <div class="album-art-container" id="artContainer" onclick="toggleLyrics(event)">
             <div class="album-art loading ${state.isPlaying && !state.isPaused ? 'playing' : ''}">
               ${song.thumbnail
                 ? `<img id="albumArtImg" src="${song.thumbnail}" alt="Album Art" onload="this.classList.add('loaded'); this.parentElement.classList.remove('loading');" onerror="handleThumbnailError(this)">`
                 : '<div class="placeholder">🎵</div>'}
             </div>
             <div class="lyrics-indicator${lyricsAvailable ? '' : ' hidden'}">🎤 Lyrics</div>
+            <button class="watch-toggle-btn${/(?:v=|youtu\.be\/|\/vi\/)([a-zA-Z0-9_-]{11})/.test(song.url || '') ? ' watch-visible' : ''}${window.WatchTogether && WatchTogether.isActive() ? ' watch-active' : ''}" id="watchToggleBtn" title="Watch Together" onclick="event.stopPropagation(); toggleWatchTogether(this);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                <line x1="7" y1="2" x2="7" y2="22"></line>
+                <line x1="17" y1="2" x2="17" y2="22"></line>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <line x1="2" y1="7" x2="7" y2="7"></line>
+                <line x1="2" y1="17" x2="7" y2="17"></line>
+                <line x1="17" y1="7" x2="22" y2="7"></line>
+                <line x1="17" y1="17" x2="22" y2="17"></line>
+              </svg>
+            </button>
             <div class="lyrics-container" id="lyricsContainer">
               <div class="lyrics-header">
                 <span class="lyrics-header-title">Lyrics</span>
@@ -4447,6 +5650,12 @@
                   <div class="sleep-timer-content"></div>
                 </div>
               </div>
+              <button class="control-btn mini mixer-toggle-btn" onclick="toggleMixerPanel()" title="Audio Mixer">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+              </button>
+              <button class="control-btn mini" id="theaterBtn" onclick="if (window.WatchTogether) WatchTogether.toggleTheater();" title="Theater Mode" style="display: none">
+                <svg><use href="#icon-theater"/></svg>
+              </button>
             </div>
           </div>
 
@@ -4460,14 +5669,122 @@
               onkeydown="if(event.key==='Enter') this.blur()">
             <span style="font-size: 12px; color: var(--text-muted)">%</span>
           </div>
+
+          <div class="mixer-panel" id="mixerPanel" style="display: none;">
+            <div class="mixer-header">
+              <span class="mixer-title">Audio Mixer</span>
+              <span class="mixer-dj-badge" id="mixerDJBadge" style="display: none;">DJ</span>
+            </div>
+            <div class="mixer-channels">
+              <div class="mixer-channel">
+                <label class="mixer-label">Bass</label>
+                <div class="mixer-fader-track">
+                  <input type="range" class="mixer-fader" id="mixerBass" min="-20" max="20" value="0" step="1"
+                    oninput="updateMixerDisplay('bass', this.value)"
+                    onchange="sendCommand('mixer-bass:' + this.value)">
+                </div>
+                <span class="mixer-value" id="mixerBassValue">0 dB</span>
+              </div>
+              <div class="mixer-channel">
+                <label class="mixer-label">Mid</label>
+                <div class="mixer-fader-track">
+                  <input type="range" class="mixer-fader" id="mixerMid" min="-20" max="20" value="0" step="1"
+                    oninput="updateMixerDisplay('mid', this.value)"
+                    onchange="sendCommand('mixer-mid:' + this.value)">
+                </div>
+                <span class="mixer-value" id="mixerMidValue">0 dB</span>
+              </div>
+              <div class="mixer-channel">
+                <label class="mixer-label">Treble</label>
+                <div class="mixer-fader-track">
+                  <input type="range" class="mixer-fader" id="mixerTreble" min="-20" max="20" value="0" step="1"
+                    oninput="updateMixerDisplay('treble', this.value)"
+                    onchange="sendCommand('mixer-treble:' + this.value)">
+                </div>
+                <span class="mixer-value" id="mixerTrebleValue">0 dB</span>
+              </div>
+              <div class="mixer-channel">
+                <label class="mixer-label">Speed</label>
+                <div class="mixer-fader-track">
+                  <input type="range" class="mixer-fader" id="mixerSpeed" min="50" max="200" value="100" step="5"
+                    oninput="updateMixerDisplay('speed', this.value)"
+                    onchange="sendCommand('mixer-speed:' + (this.value / 100))">
+                </div>
+                <span class="mixer-value" id="mixerSpeedValue">1.00x</span>
+              </div>
+            </div>
+            <div class="mixer-effects">
+              <div class="mixer-effect-pedal" id="pedalKaraoke">
+                <button class="mixer-effect-btn" onclick="toggleMixerEffect('karaoke')" title="Karaoke - reduce vocals">
+                  <span class="mixer-effect-led"></span>
+                  <span class="effect-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+                </button>
+                <span class="mixer-effect-name">Karaoke</span>
+              </div>
+              <div class="mixer-effect-pedal" id="pedal8D">
+                <button class="mixer-effect-btn" onclick="toggleMixerEffect('8d')" title="8D Audio - rotating stereo">
+                  <span class="mixer-effect-led"></span>
+                  <span class="effect-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/></svg></span>
+                </button>
+                <span class="mixer-effect-name">8D</span>
+                <div class="mixer-sub-control">
+                  <span class="mixer-sub-label">Rate</span>
+                  <input type="range" class="mixer-sub-slider" id="mixer8DRate" min="5" max="50" value="15" step="1"
+                    oninput="updateMixerDisplay('8drate', this.value)"
+                    onchange="sendCommand('mixer-8drate:' + (this.value / 100))">
+                  <span class="mixer-sub-value" id="mixer8DRateValue">0.15 Hz</span>
+                </div>
+              </div>
+              <div class="mixer-effect-pedal" id="pedalReverb">
+                <button class="mixer-effect-btn" onclick="toggleMixerEffect('reverb')" title="Reverb - echo effect">
+                  <span class="mixer-effect-led"></span>
+                  <span class="effect-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-6h6v6"/><line x1="7" y1="10" x2="7" y2="20"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="17" y1="10" x2="17" y2="20"/></svg></span>
+                </button>
+                <span class="mixer-effect-name">Reverb</span>
+                <div class="mixer-sub-control">
+                  <span class="mixer-sub-label">Amount</span>
+                  <input type="range" class="mixer-sub-slider" id="mixerReverbAmount" min="0" max="100" value="0" step="5"
+                    oninput="updateMixerDisplay('reverb', this.value)"
+                    onchange="sendCommand('mixer-reverb:' + this.value)">
+                  <span class="mixer-sub-value" id="mixerReverbValue">0%</span>
+                </div>
+              </div>
+              <div class="mixer-effect-pedal" id="pedalCompressor">
+                <button class="mixer-effect-btn" onclick="toggleMixerEffect('compressor')" title="Night Mode - compress dynamics">
+                  <span class="mixer-effect-led"></span>
+                  <span class="effect-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+                </button>
+                <span class="mixer-effect-name">Night</span>
+              </div>
+              <div class="mixer-effect-pedal" id="pedalFlanger">
+                <button class="mixer-effect-btn" onclick="toggleMixerEffect('flanger')" title="Flanger - sweeping effect">
+                  <span class="mixer-effect-led"></span>
+                  <span class="effect-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c-2 0-4-1-4-3s2-3 4-3 5 1.5 5 4-2.5 5-5 5-6-2-6-5 3-6 6-6"/></svg></span>
+                </button>
+                <span class="mixer-effect-name">Flanger</span>
+              </div>
+            </div>
+            <div class="mixer-presets">
+              <button class="mixer-preset-btn active" data-preset="normal" onclick="applyMixerPreset('normal')">Normal</button>
+              <button class="mixer-preset-btn" data-preset="bassboost" onclick="applyMixerPreset('bassboost')">Bass Boost</button>
+              <button class="mixer-preset-btn" data-preset="nightcore" onclick="applyMixerPreset('nightcore')">Nightcore</button>
+              <button class="mixer-preset-btn" data-preset="slowed" onclick="applyMixerPreset('slowed')">Slowed</button>
+              <button class="mixer-preset-btn" data-preset="karaoke" onclick="applyMixerPreset('karaoke')">Karaoke</button>
+              <button class="mixer-preset-btn" data-preset="eightd" onclick="applyMixerPreset('eightd')">8D</button>
+              <button class="mixer-preset-btn" data-preset="nightmode" onclick="applyMixerPreset('nightmode')">Night Mode</button>
+            </div>
+            <div class="mixer-locked-msg">Requires "Website DJ Extraordinaire" role</div>
+          </div>
         `;
 
         if (state.isCached) cachedAnimationShown = true;
         
         // Setup progress bar drag events after creating structure
         setTimeout(setupProgressBarEvents, 0);
+        setTimeout(applyMixerPermissions, 0);
+        if (state.mixerFilters) updateMixerFromState(state.mixerFilters);
       }
-      
+
       // If player structure exists and song changed, only update song-specific elements
       if (playerStructureCreated && songChanged) {
         const song = state.currentSong;
@@ -4577,9 +5894,16 @@
               playerStructureCreated = false;
               lastRenderedSongUrl = null;
               playerContent.classList.remove('song-transition');
+              // Static HTML template — no user-supplied content
               playerContent.innerHTML = `
                 <div class="idle-state">
-                  <div class="idle-icon"><svg><use href="#icon-headphones"/></svg></div>
+                  <div class="idle-icon">
+                    <div class="idle-glow"></div>
+                    <div class="idle-orbit-ring"></div>
+                    <div class="idle-orbit-ring-2"></div>
+                    <div class="idle-particles"><span class="idle-particle"></span><span class="idle-particle"></span><span class="idle-particle"></span><span class="idle-particle"></span></div>
+                    <svg><use href="#icon-headphones"/></svg>
+                  </div>
                   <div class="idle-text">Ready to Play</div>
                   <div class="idle-subtext">Search for a song, paste a link, or use /play in Discord</div>
                   <div class="idle-hint" onclick="document.getElementById('searchInput').focus()">
@@ -4595,9 +5919,16 @@
       } else if (!state.currentSong && !playerStructureCreated) {
         // Show idle state immediately if structure was never created
         if (!playerContent.querySelector('.idle-state')) {
+          // Static HTML template — no user-supplied content
           playerContent.innerHTML = `
             <div class="idle-state">
-              <div class="idle-icon"><svg><use href="#icon-headphones"/></svg></div>
+              <div class="idle-icon">
+                <div class="idle-glow"></div>
+                <div class="idle-orbit-ring"></div>
+                <div class="idle-orbit-ring-2"></div>
+                <div class="idle-particles"><span class="idle-particle"></span><span class="idle-particle"></span><span class="idle-particle"></span><span class="idle-particle"></span></div>
+                <svg><use href="#icon-headphones"/></svg>
+              </div>
               <div class="idle-text">Nothing Playing</div>
               <div class="idle-subtext">Search for songs above or use /play in Discord</div>
             </div>
@@ -4651,6 +5982,7 @@
               <div class="queue-item-meta">${escapeHtml(song.requestedBy || 'Unknown')}</div>
             </div>
             <div class="queue-item-duration">${formatDuration(song.duration)}</div>
+            <div class="queue-item-save" data-save-queue="${index}" title="Save to playlist"><svg><use href="#icon-bookmark"/></svg></div>
             <div class="queue-item-remove" onclick="removeSong(event, ${index + 1})" title="Remove from queue"><svg><use href="#icon-close"/></svg></div>
           </div>
         `).join('');
@@ -5168,6 +6500,457 @@
       
       // Remove visual feedback
       this.classList.remove('drag-over', 'drag-over-bottom');
+    }
+
+    // --- Playlists tab ---
+    let playlistsTabData = [];
+    let expandedPlaylistId = null;
+    let expandedPlaylistData = null;
+
+    async function loadPlaylistsTab() {
+      const container = document.getElementById('playlistsList');
+      if (!container) return;
+      try {
+        const res = await fetch('/api/playlists');
+        playlistsTabData = await res.json();
+        document.getElementById('playlistsCount').textContent = playlistsTabData.length;
+        if (expandedPlaylistId) {
+          await expandPlaylist(expandedPlaylistId);
+        } else {
+          renderPlaylistList(container);
+        }
+      } catch (err) {
+        container.textContent = 'Failed to load playlists';
+      }
+    }
+
+    function renderPlaylistList(container) {
+      container.textContent = '';
+      if (playlistsTabData.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'pl-empty';
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '#icon-playlist');
+        icon.appendChild(use);
+        empty.appendChild(icon);
+        const text = document.createElement('div');
+        text.textContent = 'No playlists yet';
+        empty.appendChild(text);
+        container.appendChild(empty);
+        return;
+      }
+      playlistsTabData.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'pl-item';
+        item.addEventListener('click', () => expandPlaylist(p.id));
+
+        const header = document.createElement('div');
+        header.className = 'pl-item-header';
+
+        const info = document.createElement('div');
+        info.className = 'pl-item-info';
+        const name = document.createElement('div');
+        name.className = 'pl-item-name';
+        name.textContent = p.name;
+        const meta = document.createElement('div');
+        meta.className = 'pl-item-meta';
+        meta.textContent = p.songCount + ' song' + (p.songCount !== 1 ? 's' : '') + (p.createdBy ? ' \u00b7 ' + p.createdBy : '');
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'pl-item-actions';
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'pl-item-action';
+        playBtn.title = 'Play All';
+        playBtn.innerHTML = '<svg><use href="#icon-play"/></svg>';
+        playBtn.addEventListener('click', (e) => { e.stopPropagation(); playlistPlayAll(p.id); });
+
+        const shuffleBtn = document.createElement('button');
+        shuffleBtn.className = 'pl-item-action';
+        shuffleBtn.title = 'Shuffle';
+        shuffleBtn.innerHTML = '<svg><use href="#icon-shuffle"/></svg>';
+        shuffleBtn.addEventListener('click', (e) => { e.stopPropagation(); playlistShuffle(p.id); });
+
+        actions.appendChild(playBtn);
+        actions.appendChild(shuffleBtn);
+        header.appendChild(info);
+        header.appendChild(actions);
+        item.appendChild(header);
+        container.appendChild(item);
+      });
+    }
+
+    async function expandPlaylist(id) {
+      expandedPlaylistId = id;
+      const container = document.getElementById('playlistsList');
+      if (!container) return;
+      container.textContent = 'Loading...';
+      try {
+        const res = await fetch('/api/playlists/' + encodeURIComponent(id));
+        expandedPlaylistData = await res.json();
+        if (expandedPlaylistData.error) {
+          expandedPlaylistId = null;
+          expandedPlaylistData = null;
+          renderPlaylistList(container);
+          showToast(expandedPlaylistData.error, 'error');
+          return;
+        }
+        renderExpandedPlaylist(container);
+      } catch (err) {
+        container.textContent = 'Failed to load playlist';
+      }
+    }
+
+    function renderExpandedPlaylist(container) {
+      const p = expandedPlaylistData;
+      if (!p) return;
+      const songs = p.songs || [];
+      container.textContent = '';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'pl-expanded';
+
+      // Back button
+      const backBtn = document.createElement('button');
+      backBtn.className = 'pl-back-btn';
+      backBtn.innerHTML = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>';
+      const backText = document.createTextNode(' Back');
+      backBtn.appendChild(backText);
+      backBtn.addEventListener('click', collapsePlaylist);
+      wrapper.appendChild(backBtn);
+
+      // Header
+      const hdr = document.createElement('div');
+      hdr.className = 'pl-expanded-header';
+      const hdrName = document.createElement('span');
+      hdrName.textContent = p.name + ' ';
+      const hdrCount = document.createElement('span');
+      hdrCount.style.cssText = 'color:var(--text-muted);font-size:12px;font-weight:400';
+      hdrCount.textContent = '(' + songs.length + ')';
+      hdrName.appendChild(hdrCount);
+      const hdrActions = document.createElement('div');
+      hdrActions.className = 'pl-expanded-header-actions';
+      const hPlayBtn = document.createElement('button');
+      hPlayBtn.className = 'pl-item-action';
+      hPlayBtn.title = 'Play All';
+      hPlayBtn.innerHTML = '<svg><use href="#icon-play"/></svg>';
+      hPlayBtn.addEventListener('click', () => playlistPlayAll(p.id));
+      const hShuffleBtn = document.createElement('button');
+      hShuffleBtn.className = 'pl-item-action';
+      hShuffleBtn.title = 'Shuffle';
+      hShuffleBtn.innerHTML = '<svg><use href="#icon-shuffle"/></svg>';
+      hShuffleBtn.addEventListener('click', () => playlistShuffle(p.id));
+      hdrActions.appendChild(hPlayBtn);
+      hdrActions.appendChild(hShuffleBtn);
+      hdr.appendChild(hdrName);
+      hdr.appendChild(hdrActions);
+      wrapper.appendChild(hdr);
+
+      if (songs.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'pl-empty';
+        empty.textContent = 'No songs in this playlist';
+        wrapper.appendChild(empty);
+      } else {
+        songs.forEach((s, i) => {
+          const row = document.createElement('div');
+          row.className = 'pl-song-item';
+
+          const thumb = document.createElement('div');
+          thumb.className = 'pl-song-thumb';
+          if (s.thumbnail) {
+            const img = document.createElement('img');
+            img.src = s.thumbnail;
+            img.alt = '';
+            img.loading = 'lazy';
+            thumb.appendChild(img);
+          } else {
+            thumb.innerHTML = '<svg style="width:20px;height:20px;margin:10px;color:var(--text-muted)"><use href="#icon-music"/></svg>';
+          }
+
+          const info = document.createElement('div');
+          info.className = 'pl-song-info';
+          const title = document.createElement('div');
+          title.className = 'pl-song-title';
+          title.textContent = s.title;
+          title.title = s.title;
+          const dur = document.createElement('div');
+          dur.className = 'pl-song-duration';
+          dur.textContent = s.duration ? formatDuration(s.duration) : '';
+          info.appendChild(title);
+          info.appendChild(dur);
+
+          const addBtn = document.createElement('button');
+          addBtn.className = 'pl-song-add';
+          addBtn.title = 'Add to Queue';
+          addBtn.innerHTML = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
+          addBtn.addEventListener('click', () => addPlaylistSongToQueue(i));
+
+          row.appendChild(thumb);
+          row.appendChild(info);
+          row.appendChild(addBtn);
+          wrapper.appendChild(row);
+        });
+      }
+
+      container.appendChild(wrapper);
+    }
+
+    function collapsePlaylist() {
+      expandedPlaylistId = null;
+      expandedPlaylistData = null;
+      const container = document.getElementById('playlistsList');
+      renderPlaylistList(container);
+    }
+
+    async function playlistPlayAll(id) {
+      try {
+        const res = await fetch('/api/playlists/' + encodeURIComponent(id) + '/play', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Queued ' + data.queued + ' song' + (data.queued !== 1 ? 's' : ''));
+        }
+      } catch (err) {
+        showToast('Failed to play playlist', 'error');
+      }
+    }
+
+    async function playlistShuffle(id) {
+      try {
+        const res = await fetch('/api/playlists/' + encodeURIComponent(id) + '/shuffle', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Shuffled ' + data.queued + ' song' + (data.queued !== 1 ? 's' : '') + ' into queue');
+        }
+      } catch (err) {
+        showToast('Failed to shuffle playlist', 'error');
+      }
+    }
+
+    async function addPlaylistSongToQueue(index) {
+      if (!expandedPlaylistData || !expandedPlaylistData.songs[index]) return;
+      const song = expandedPlaylistData.songs[index];
+      try {
+        const res = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: song.url,
+            title: song.title,
+            duration: song.duration,
+            thumbnail: song.thumbnail,
+            guildId: state.guildId
+          })
+        });
+        const data = await res.json();
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Added to queue');
+        }
+      } catch (err) {
+        showToast('Failed to add song', 'error');
+      }
+    }
+
+    async function createPlaylistFromTab() {
+      const name = prompt('Playlist name:');
+      if (!name || !name.trim()) return;
+      try {
+        const res = await fetch('/api/playlists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim() })
+        });
+        const data = await res.json();
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Playlist created!');
+          loadPlaylistsTab();
+        }
+      } catch (err) {
+        showToast('Failed to create playlist', 'error');
+      }
+    }
+
+    function saveCurrentSongToPlaylist(btnEl) {
+      if (!state.currentSong) {
+        showToast('No song is playing', 'error');
+        return;
+      }
+      openPlaylistPicker(btnEl, state.currentSong);
+    }
+
+    // Load playlists panel on page load
+    loadPlaylistsTab();
+
+    // --- Playlist picker (event delegation) ---
+    let playlistPickerSong = null;
+    const playlistPicker = document.createElement('div');
+    playlistPicker.className = 'playlist-picker';
+    playlistPicker.id = 'playlistPicker';
+    document.body.appendChild(playlistPicker);
+
+    // Close picker when clicking outside
+    document.addEventListener('click', (e) => {
+      const saveBtn = e.target.closest('[data-save-queue], [data-save-current]');
+      if (!playlistPicker.contains(e.target) && !saveBtn) {
+        playlistPicker.classList.remove('visible');
+      }
+    });
+
+    // Handle save button clicks via event delegation
+    document.addEventListener('click', (e) => {
+      const queueSave = e.target.closest('[data-save-queue]');
+      const currentSave = e.target.closest('[data-save-current]');
+      if (queueSave) {
+        e.stopPropagation();
+        const idx = parseInt(queueSave.dataset.saveQueue);
+        const song = state.queue[idx];
+        if (song) openPlaylistPicker(queueSave, song);
+      } else if (currentSave) {
+        e.stopPropagation();
+        if (state.currentSong) openPlaylistPicker(currentSave, state.currentSong);
+      }
+    });
+
+    async function openPlaylistPicker(targetEl, song) {
+      playlistPickerSong = song;
+      try {
+        const res = await fetch('/api/playlists');
+        const playlists = await res.json();
+        playlistPicker.textContent = '';
+        if (playlists.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'playlist-picker-empty';
+          empty.textContent = 'No playlists yet';
+          playlistPicker.appendChild(empty);
+        } else {
+          playlists.forEach(p => {
+            const item = document.createElement('div');
+            item.className = 'playlist-picker-item';
+            item.textContent = p.name;
+            const count = document.createElement('span');
+            count.style.cssText = 'color:var(--text-muted);font-size:11px;margin-left:6px;';
+            count.textContent = `(${p.songCount})`;
+            item.appendChild(count);
+            item.addEventListener('click', () => saveToPlaylist(p.id));
+            playlistPicker.appendChild(item);
+          });
+        }
+        const createItem = document.createElement('div');
+        createItem.className = 'playlist-picker-item create-new';
+        createItem.textContent = '+ Create New Playlist';
+        createItem.addEventListener('click', createPlaylistFromPicker);
+        playlistPicker.appendChild(createItem);
+        const rect = targetEl.getBoundingClientRect();
+        playlistPicker.style.left = Math.min(rect.left, window.innerWidth - 270) + 'px';
+        playlistPicker.classList.add('visible');
+        const pickerHeight = playlistPicker.offsetHeight;
+        if (rect.bottom + 4 + pickerHeight > window.innerHeight) {
+          playlistPicker.style.top = Math.max(4, rect.top - pickerHeight - 4) + 'px';
+        } else {
+          playlistPicker.style.top = (rect.bottom + 4) + 'px';
+        }
+      } catch (err) {
+        console.error('Failed to load playlists:', err);
+      }
+    }
+
+    async function saveToPlaylist(playlistId) {
+      playlistPicker.classList.remove('visible');
+      if (!playlistPickerSong) return;
+      try {
+        const res = await fetch(`/api/playlists/${encodeURIComponent(playlistId)}/songs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: playlistPickerSong.url,
+            title: playlistPickerSong.title,
+            thumbnail: playlistPickerSong.thumbnail,
+            duration: playlistPickerSong.duration
+          })
+        });
+        const data = await res.json();
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else {
+          showToast('Saved to playlist!');
+          loadPlaylistsTab();
+        }
+      } catch (err) {
+        showToast('Failed to save', 'error');
+      }
+    }
+
+    async function createPlaylistFromPicker() {
+      playlistPicker.classList.remove('visible');
+      const name = prompt('Playlist name:');
+      if (!name || !name.trim()) return;
+      try {
+        const res = await fetch('/api/playlists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim() })
+        });
+        const data = await res.json();
+        if (data.error) {
+          showToast(data.error, 'error');
+        } else if (playlistPickerSong) {
+          await saveToPlaylist(data.playlistId);
+        } else {
+          showToast('Playlist created!');
+        }
+        loadPlaylistsTab();
+      } catch (err) {
+        showToast('Failed to create playlist', 'error');
+      }
+    }
+
+    function showToast(msg, type = 'success') {
+      const toast = document.createElement('div');
+      toast.textContent = msg;
+      toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:8px;font-size:13px;z-index:10000;color:#fff;background:' + (type === 'error' ? '#ff4444' : 'var(--accent)') + ';box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:opacity 0.3s;';
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+
+    // Sync sidebar height to player
+    function syncSidebarHeight() {
+      const player = document.querySelector('.now-playing');
+      const sidebar = document.querySelector('.sidebar-column');
+      if (player && sidebar && window.innerWidth > 1024) {
+        sidebar.style.height = player.offsetHeight + 'px';
+      } else if (sidebar) {
+        sidebar.style.height = '';
+      }
+    }
+    const sidebarObserver = new ResizeObserver(syncSidebarHeight);
+    sidebarObserver.observe(document.querySelector('.now-playing'));
+    window.addEventListener('resize', syncSidebarHeight);
+
+    // Watch Together toggle handler
+    function toggleWatchTogether(btn) {
+      if (window.WatchTogether) {
+        WatchTogether.toggle();
+        const isOn = WatchTogether.isActive();
+        btn.classList.toggle('watch-active', isOn);
+        const tb = document.getElementById('theaterBtn');
+        if (tb) tb.style.display = isOn ? '' : 'none';
+      }
+    }
+
+    // Initialize Watch Together
+    if (window.WatchTogether) {
+      WatchTogether.init('artContainer');
     }
 
     // Initialize

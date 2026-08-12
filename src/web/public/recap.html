@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly Recap - JerryBot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #050507;
+      --bg-secondary: #0c0c10;
+      --bg-tertiary: #131318;
+      --surface: #18181d;
+      --surface-hover: #1f1f26;
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+      --accent-glow: rgba(29, 185, 84, 0.4);
+      --accent-subtle: rgba(29, 185, 84, 0.08);
+      --text-primary: #ededf0;
+      --text-secondary: #a0a0ad;
+      --text-muted: #5c5c6e;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.1);
+      --bg-hover: rgba(255, 255, 255, 0.04);
+      --danger: #f04848;
+      --danger-glow: rgba(240, 72, 72, 0.3);
+      --success: #00e676;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(29, 185, 84, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(20, 130, 60, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 0%, rgba(29, 185, 84, 0.03) 0%, transparent 40%);
+      animation: bgShift 20s ease-in-out infinite alternate;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    @keyframes bgShift {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-2%, 1%) scale(1.02); }
+      100% { transform: translate(1%, -1%) scale(1); }
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .back-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .back-link:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .recap-icon {
+      color: var(--accent);
+      filter: drop-shadow(0 0 8px var(--accent-glow));
+      animation: iconPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes iconPulse {
+      0%, 100% { filter: drop-shadow(0 0 6px rgba(29, 185, 84, 0.3)); }
+      50% { filter: drop-shadow(0 0 14px rgba(29, 185, 84, 0.5)); }
+    }
+
+    /* ===== USER DROPDOWN ===== */
+    .user-profile {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 5px 10px 5px 5px;
+      border-radius: 50px;
+      transition: all 0.25s;
+      border: 1px solid transparent;
+    }
+    .user-profile:hover { background: var(--bg-hover); border-color: var(--border); }
+    .user-profile.open::before { content: ''; position: fixed; inset: 0; z-index: 1999; }
+    .user-avatar { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); transition: border-color 0.2s; }
+    .user-profile:hover .user-avatar { border-color: var(--accent); }
+    .user-name { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border-hover);
+      border-radius: 14px;
+      padding: 6px;
+      min-width: 180px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px) scale(0.97);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 2000;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.03) inset;
+      backdrop-filter: blur(20px);
+    }
+    .user-profile.open .user-dropdown { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+    .user-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .user-dropdown-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .user-dropdown-item.logout { color: var(--danger); }
+    .user-dropdown-item.logout:hover { background: rgba(240, 72, 72, 0.08); }
+
+    /* ===== MAIN CONTAINER ===== */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* ===== WEEK NAVIGATOR ===== */
+    .week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .week-nav-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .week-nav-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); border-color: var(--border-hover); }
+    .week-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .week-nav-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      min-width: 200px;
+      text-align: center;
+    }
+
+    .week-nav-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      text-align: center;
+    }
+
+    /* ===== HERO ===== */
+    .hero {
+      position: relative;
+      padding: 40px 36px;
+      border-radius: 20px;
+      margin-bottom: 32px;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(29, 185, 84, 0.12) 0%, rgba(20, 130, 60, 0.06) 50%, rgba(29, 185, 84, 0.03) 100%);
+      border: 1px solid rgba(29, 185, 84, 0.15);
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 70% 30%, rgba(29, 185, 84, 0.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      top: -100px;
+      right: -60px;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(29, 185, 84, 0.08) 0%, transparent 70%);
+      animation: heroOrb 8s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    @keyframes heroOrb {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(-30px, 20px); }
+    }
+    .hero-content { position: relative; z-index: 1; }
+    .hero-title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fff 0%, #7eddaa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-subtitle { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+    .hero-stats {
+      display: flex;
+      gap: 28px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .hero-stat { display: flex; flex-direction: column; gap: 2px; }
+    .hero-stat-value { font-size: 24px; font-weight: 700; color: var(--text-primary); }
+    .hero-stat-value.accent { color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); }
+    .hero-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+
+    /* ===== SECTIONS ===== */
+    .section { margin-bottom: 28px; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+    }
+    .section-badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1px solid rgba(29, 185, 84, 0.15);
+    }
+
+    /* ===== TOP SONGS ===== */
+    .song-list { display: flex; flex-direction: column; gap: 10px; }
+    .song-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      transition: all 0.3s;
+      animation: cardSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .song-item { cursor: pointer; }
+    .song-item:hover { border-color: var(--border-hover); background: var(--bg-tertiary); transform: translateY(-1px); }
+    .song-rank {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-muted);
+      min-width: 24px;
+      text-align: center;
+    }
+    .song-item:first-child .song-rank { color: var(--accent); }
+    .song-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--surface);
+    }
+    .song-info { flex: 1; min-width: 0; }
+    .song-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .song-plays { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    @keyframes cardSlideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== TOP DJS ===== */
+    .dj-list { display: flex; flex-direction: column; gap: 8px; }
+    .dj-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: all 0.3s;
+    }
+    .dj-item:hover { border-color: var(--border-hover); background: var(--bg-tertiary); }
+    .dj-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .dj-count { font-size: 12px; font-weight: 600; color: var(--accent); }
+
+    /* ===== GAMES ===== */
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+    }
+    .game-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      transition: all 0.3s;
+    }
+    .game-card:hover { border-color: var(--border-hover); background: var(--bg-tertiary); transform: translateY(-1px); }
+    .game-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .game-player {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 12px;
+    }
+    .game-player-name { color: var(--text-secondary); }
+    .game-player-stats { color: var(--text-muted); font-weight: 600; }
+
+    /* ===== ACTIVITY CHARTS ===== */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .chart-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 120px;
+      padding-bottom: 20px;
+      position: relative;
+    }
+    .bar-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      position: relative;
+    }
+    .bar {
+      width: 100%;
+      min-height: 3px;
+      background: var(--accent);
+      border-radius: 3px 3px 0 0;
+      opacity: 0.7;
+      transition: opacity 0.2s, height 0.3s;
+      position: relative;
+    }
+    .bar:hover { opacity: 1; }
+    .bar-label {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-weight: 600;
+      white-space: nowrap;
+      position: absolute;
+      bottom: -18px;
+    }
+    .bar-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border-hover);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      z-index: 10;
+    }
+    .bar:hover .bar-tooltip { display: block; }
+
+    /* ===== FUN FACTS ===== */
+    .fun-facts-list { display: flex; flex-direction: column; gap: 8px; }
+    .fun-fact {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      transition: all 0.3s;
+    }
+    .fun-fact:hover { border-color: var(--border-hover); background: var(--bg-tertiary); }
+    .fun-fact-icon { flex-shrink: 0; margin-top: 1px; }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state { text-align: center; padding: 80px 20px; }
+    .empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-state-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--text-primary); }
+    .empty-state-desc { font-size: 14px; color: var(--text-muted); }
+
+    /* ===== LOADING ===== */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== GENERATE BTN ===== */
+    .generate-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+    }
+    .generate-btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 9999;
+      pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast-success { background: var(--accent); color: #000; }
+    .toast-error { background: #e74c3c; color: #fff; }
+    .toast-info { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
+
+    /* Two-column layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+    }
+    @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-left">
+        <a href="/" class="back-link">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
+          Back to Player
+        </a>
+      <div class="page-title">
+        <svg class="recap-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Weekly Recap
+      </div>
+    </div>
+    <div class="user-profile" id="userProfile">
+      <img class="user-avatar" id="userAvatar" src="" alt="">
+      <span class="user-name" id="userName"></span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      <div class="user-dropdown">
+        <a href="/" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Music Player
+        </a>
+        <a href="/stats" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Listening Stats
+        </a>
+        <a href="/pictionary" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+          Pictionary
+        </a>
+        <a href="/osrs" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Runescape Tracker
+        </a>
+        <a href="/twitch" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/><path d="M10 6v6"/><path d="M14 6v6"/></svg>
+          Twitch Alerts
+        </a>
+        <a href="/playlists" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-3-7 3V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          My Playlists
+        </a>
+        <a href="/trivia" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Trivia
+        </a>
+        <a href="/f1" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          F1 Predictions
+        </a>
+        <a href="/birthdays" class="user-dropdown-item">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+          Birthdays
+        </a>
+        <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
+          <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          Bot Settings
+        </a>
+        <a href="/logout" class="user-dropdown-item logout">Logout</a>
+      </div>
+    </div>
+    </div>
+
+    <div class="week-nav">
+      <button class="week-nav-btn" id="prevWeek" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div>
+        <div class="week-nav-label" id="weekLabel">Loading...</div>
+        <div class="week-nav-sub" id="weekSub"></div>
+      </div>
+      <button class="week-nav-btn" id="nextWeek" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+      <button class="generate-btn" id="generateBtn" title="Generate recap for current week so far">Generate Now</button>
+    </div>
+
+    <div id="content">
+      <div class="loading"><div class="spinner"></div> Loading recaps...</div>
+    </div>
+  </div>
+
+  <script>
+    let recapList = [];
+    let currentIndex = -1;
+    let currentRecap = null;
+    let generatedRecap = null;
+
+    const contentEl = document.getElementById('content');
+
+    // Helpers
+    function esc(s) {
+      if (!s) return '';
+      const d = document.createElement('span');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function fmtDate(d) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function fmtDuration(s) {
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    function fmtHour(h) {
+      if (h === 0) return '12a';
+      if (h < 12) return h + 'a';
+      if (h === 12) return '12p';
+      return (h - 12) + 'p';
+    }
+
+    function fmtMinutes(mins) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    function createEl(tag, attrs, children) {
+      const el = document.createElement(tag);
+      if (attrs) {
+        for (const [k, v] of Object.entries(attrs)) {
+          if (k === 'class') el.className = v;
+          else if (k === 'style') el.setAttribute('style', v);
+          else if (k === 'src' || k === 'href' || k === 'alt' || k === 'title' || k === 'loading' || k === 'disabled') el.setAttribute(k, v);
+          else el[k] = v;
+        }
+      }
+      if (children) {
+        if (typeof children === 'string') el.textContent = children;
+        else if (Array.isArray(children)) children.forEach(c => { if (c) el.appendChild(c); });
+        else el.appendChild(children);
+      }
+      return el;
+    }
+
+    function createTextEl(tag, className, text) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      el.textContent = text;
+      return el;
+    }
+
+    // User dropdown
+    const userProfile = document.getElementById('userProfile');
+    userProfile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userProfile.classList.toggle('open');
+    });
+    document.addEventListener('click', () => userProfile.classList.remove('open'));
+
+    fetch('/api/me').then(r => r.json()).then(u => {
+      document.getElementById('userName').textContent = u.displayName || u.username;
+      document.getElementById('userAvatar').src = u.avatar
+        ? 'https://cdn.discordapp.com/avatars/' + u.id + '/' + u.avatar + '.png?size=64'
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+      if (u.hasControlPanel) { const al = document.getElementById('adminLink'); if (al) al.style.display = ''; }
+    }).catch(() => {});
+
+    // Navigation
+    document.getElementById('prevWeek').addEventListener('click', async () => {
+      if (currentIndex === -1) {
+        if (recapList.length > 0) { currentIndex = 0; await loadRecap(recapList[0].id); }
+      } else if (currentIndex < recapList.length - 1) {
+        currentIndex++;
+        await loadRecap(recapList[currentIndex].id);
+      }
+      updateNav();
+    });
+
+    document.getElementById('nextWeek').addEventListener('click', async () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        await loadRecap(recapList[currentIndex].id);
+      } else if (currentIndex === 0) {
+        currentIndex = -1;
+        if (generatedRecap) {
+          currentRecap = generatedRecap;
+          renderRecap(currentRecap);
+        } else {
+          await generateRecap();
+        }
+      }
+      updateNav();
+    });
+
+    document.getElementById('generateBtn').addEventListener('click', generateRecap);
+
+    function updateNav() {
+      const prevBtn = document.getElementById('prevWeek');
+      const nextBtn = document.getElementById('nextWeek');
+      const label = document.getElementById('weekLabel');
+      const sub = document.getElementById('weekSub');
+
+      if (currentIndex === -1) {
+        label.textContent = 'Current Week (Live)';
+        sub.textContent = '';
+        prevBtn.disabled = recapList.length === 0;
+        nextBtn.disabled = true;
+      } else {
+        const r = recapList[currentIndex];
+        label.textContent = fmtDate(new Date(r.weekStart)) + ' \u2014 ' + fmtDate(new Date(r.weekEnd));
+        sub.textContent = r.isEmpty ? 'Quiet week' : '';
+        prevBtn.disabled = currentIndex >= recapList.length - 1;
+        nextBtn.disabled = false;
+      }
+    }
+
+    async function loadRecapList() {
+      try {
+        const res = await fetch('/api/recap/list');
+        recapList = await res.json();
+        recapList.sort((a, b) => b.weekEnd - a.weekEnd);
+      } catch (e) {
+        recapList = [];
+      }
+
+      // Always start with a live recap for the current week
+      currentIndex = -1;
+      await generateRecap();
+      updateNav();
+    }
+
+    async function loadRecap(id) {
+      showLoading('Loading recap...');
+      try {
+        const res = await fetch('/api/recap/' + encodeURIComponent(id));
+        currentRecap = await res.json();
+        renderRecap(currentRecap);
+      } catch (e) {
+        showError('Failed to load recap');
+      }
+    }
+
+    async function generateRecap() {
+      const btn = document.getElementById('generateBtn');
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+      showLoading('Generating recap...');
+      try {
+        const res = await fetch('/api/recap/generate');
+        generatedRecap = await res.json();
+        currentRecap = generatedRecap;
+        currentIndex = -1;
+        renderRecap(currentRecap);
+        updateNav();
+      } catch (e) {
+        showError('Failed to generate recap');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Generate Now';
+    }
+
+    function showLoading(msg) {
+      contentEl.replaceChildren();
+      const div = createEl('div', { class: 'loading' });
+      div.appendChild(createEl('div', { class: 'spinner' }));
+      div.appendChild(document.createTextNode(' ' + msg));
+      contentEl.appendChild(div);
+    }
+
+    function showError(msg) {
+      contentEl.replaceChildren();
+      const div = createEl('div', { class: 'empty-state' });
+      div.appendChild(createTextEl('div', 'empty-state-icon', '\u26A0\uFE0F'));
+      div.appendChild(createTextEl('div', 'empty-state-title', msg));
+      contentEl.appendChild(div);
+    }
+
+    function showEmpty() {
+      contentEl.replaceChildren();
+      const div = createEl('div', { class: 'empty-state' });
+      div.appendChild(createTextEl('div', 'empty-state-icon', '\uD83D\uDCCA'));
+      div.appendChild(createTextEl('div', 'empty-state-title', 'No Recaps Yet'));
+      div.appendChild(createTextEl('div', 'empty-state-desc', 'Click "Generate Now" to create a recap for this week so far, or wait for the scheduled auto-recap.'));
+      contentEl.appendChild(div);
+    }
+
+    function renderRecap(recap) {
+      contentEl.replaceChildren();
+      if (!recap) { showEmpty(); return; }
+
+      // Hero
+      const hero = createEl('div', { class: 'hero' });
+      const heroContent = createEl('div', { class: 'hero-content' });
+      heroContent.appendChild(createTextEl('div', 'hero-title', 'Weekly Recap'));
+      heroContent.appendChild(createTextEl('div', 'hero-subtitle',
+        fmtDate(new Date(recap.weekStart)) + ' \u2014 ' + fmtDate(new Date(recap.weekEnd))));
+
+      if (recap.isEmpty) {
+        hero.appendChild(heroContent);
+        contentEl.appendChild(hero);
+        const empty = createEl('div', { class: 'empty-state' });
+        empty.appendChild(createTextEl('div', 'empty-state-icon', '\uD83D\uDE34'));
+        empty.appendChild(createTextEl('div', 'empty-state-title', 'Quiet Week'));
+        empty.appendChild(createTextEl('div', 'empty-state-desc', 'No activity this week. See you next time!'));
+        contentEl.appendChild(empty);
+        return;
+      }
+
+      const m = recap.music;
+      const g = recap.games;
+      const a = recap.activity;
+
+      // Hero stats
+      const dc = recap.discord || { topChatters: [], topVoice: [], totalMessages: 0, totalVoiceMinutes: 0 };
+
+      const heroStats = createEl('div', { class: 'hero-stats' });
+      const stats = [
+        [String(m.totalSongsPlayed), 'Songs Played', true],
+        [fmtDuration(m.totalDuration), 'Listening Time', false],
+        [String(m.uniqueSongs), 'Unique Tracks', false],
+        [String(g.totalGamesPlayed), 'Games Played', false],
+        [String(dc.totalMessages), 'Messages', false],
+        [fmtMinutes(dc.totalVoiceMinutes), 'Voice Time', false]
+      ];
+      stats.forEach(([val, label, accent]) => {
+        const stat = createEl('div', { class: 'hero-stat' });
+        stat.appendChild(createTextEl('div', 'hero-stat-value' + (accent ? ' accent' : ''), val));
+        stat.appendChild(createTextEl('div', 'hero-stat-label', label));
+        heroStats.appendChild(stat);
+      });
+      heroContent.appendChild(heroStats);
+      hero.appendChild(heroContent);
+      contentEl.appendChild(hero);
+
+      // Two-column: Top Songs + Top DJs
+      if (m.topSongs.length > 0 || m.topDJs.length > 0) {
+        const twoCol = createEl('div', { class: 'two-col' });
+
+        if (m.topSongs.length > 0) {
+          const sec = createEl('div', { class: 'section' });
+          const hdr = createEl('div', { class: 'section-header' });
+          hdr.appendChild(createTextEl('div', 'section-title', 'Top Songs'));
+          hdr.appendChild(createTextEl('div', 'section-badge', m.topSongs.length + ' tracks'));
+          sec.appendChild(hdr);
+
+          const list = createEl('div', { class: 'song-list' });
+          m.topSongs.forEach((s, i) => {
+            const item = createEl('div', { class: 'song-item', style: 'animation-delay: ' + (i * 0.05) + 's' });
+            item.dataset.url = s.url || '';
+            item.dataset.title = s.title || '';
+            item.dataset.thumbnail = s.thumbnail || '';
+            item.dataset.duration = String(s.duration || 0);
+            item.addEventListener('click', function() { addSongToQueue(this); });
+            item.appendChild(createTextEl('div', 'song-rank', String(i + 1)));
+            if (s.thumbnail) {
+              item.appendChild(createEl('img', { class: 'song-thumb', src: s.thumbnail, alt: '', loading: 'lazy' }));
+            } else {
+              item.appendChild(createEl('div', { class: 'song-thumb' }));
+            }
+            const info = createEl('div', { class: 'song-info' });
+            info.appendChild(createTextEl('div', 'song-title', s.title));
+            info.appendChild(createTextEl('div', 'song-plays', s.count + ' play' + (s.count !== 1 ? 's' : '')));
+            item.appendChild(info);
+            list.appendChild(item);
+          });
+          sec.appendChild(list);
+          twoCol.appendChild(sec);
+        }
+
+        if (m.topDJs.length > 0) {
+          const sec = createEl('div', { class: 'section' });
+          const hdr = createEl('div', { class: 'section-header' });
+          hdr.appendChild(createTextEl('div', 'section-title', 'Top DJs'));
+          sec.appendChild(hdr);
+
+          const list = createEl('div', { class: 'dj-list' });
+          m.topDJs.forEach(dj => {
+            const item = createEl('div', { class: 'dj-item' });
+            item.appendChild(createTextEl('span', 'dj-name', dj.name));
+            item.appendChild(createTextEl('span', 'dj-count', dj.count + ' songs'));
+            list.appendChild(item);
+          });
+          sec.appendChild(list);
+          twoCol.appendChild(sec);
+        }
+
+        contentEl.appendChild(twoCol);
+      }
+
+      // Games
+      const gameNames = ['pesten', 'hitster', 'pictionary'];
+      const gameIcons = { pesten: '\uD83C\uDCCF', hitster: '\uD83C\uDFB5', pictionary: '\uD83C\uDFA8' };
+      const activeGames = gameNames.filter(n => g[n] && g[n].players.length > 0);
+      if (activeGames.length > 0) {
+        const sec = createEl('div', { class: 'section' });
+        const hdr = createEl('div', { class: 'section-header' });
+        hdr.appendChild(createTextEl('div', 'section-title', 'Games'));
+        hdr.appendChild(createTextEl('div', 'section-badge', g.totalGamesPlayed + ' total'));
+        sec.appendChild(hdr);
+
+        const grid = createEl('div', { class: 'games-grid' });
+        activeGames.forEach(name => {
+          const game = g[name];
+          const card = createEl('div', { class: 'game-card' });
+          card.appendChild(createTextEl('div', 'game-card-title', gameIcons[name] + ' ' + name.charAt(0).toUpperCase() + name.slice(1)));
+          game.players.forEach(p => {
+            const row = createEl('div', { class: 'game-player' });
+            row.appendChild(createTextEl('span', 'game-player-name', p.displayName));
+            row.appendChild(createTextEl('span', 'game-player-stats', p.gamesWon + 'W / ' + p.gamesPlayed + 'P'));
+            card.appendChild(row);
+          });
+          grid.appendChild(card);
+        });
+        sec.appendChild(grid);
+        contentEl.appendChild(sec);
+      }
+
+      // Discord Activity: Top Chatters + Top Voice
+      if (dc.topChatters.length > 0 || dc.topVoice.length > 0) {
+        const dcTwoCol = createEl('div', { class: 'two-col' });
+
+        if (dc.topChatters.length > 0) {
+          const sec = createEl('div', { class: 'section' });
+          const hdr = createEl('div', { class: 'section-header' });
+          hdr.appendChild(createTextEl('div', 'section-title', 'Top Chatters'));
+          hdr.appendChild(createTextEl('div', 'section-badge', dc.totalMessages + ' messages'));
+          sec.appendChild(hdr);
+
+          const list = createEl('div', { class: 'dj-list' });
+          dc.topChatters.forEach(c => {
+            const item = createEl('div', { class: 'dj-item' });
+            item.appendChild(createTextEl('span', 'dj-name', c.name));
+            item.appendChild(createTextEl('span', 'dj-count', c.count + ' msgs'));
+            list.appendChild(item);
+          });
+          sec.appendChild(list);
+          dcTwoCol.appendChild(sec);
+        }
+
+        if (dc.topVoice.length > 0) {
+          const sec = createEl('div', { class: 'section' });
+          const hdr = createEl('div', { class: 'section-header' });
+          hdr.appendChild(createTextEl('div', 'section-title', 'Top Voice'));
+          hdr.appendChild(createTextEl('div', 'section-badge', fmtMinutes(dc.totalVoiceMinutes) + ' total'));
+          sec.appendChild(hdr);
+
+          const list = createEl('div', { class: 'dj-list' });
+          dc.topVoice.forEach(v => {
+            const item = createEl('div', { class: 'dj-item' });
+            item.appendChild(createTextEl('span', 'dj-name', v.name));
+            item.appendChild(createTextEl('span', 'dj-count', fmtMinutes(v.minutes)));
+            list.appendChild(item);
+          });
+          sec.appendChild(list);
+          dcTwoCol.appendChild(sec);
+        }
+
+        contentEl.appendChild(dcTwoCol);
+      }
+
+      // Activity Charts
+      if (m.totalSongsPlayed > 0) {
+        const maxDay = Math.max(...a.dayCounts.map(d => d.count), 1);
+        const maxHour = Math.max(...a.hourCounts.map(h => h.count), 1);
+
+        const sec = createEl('div', { class: 'section' });
+        const hdr = createEl('div', { class: 'section-header' });
+        hdr.appendChild(createTextEl('div', 'section-title', 'Activity'));
+        sec.appendChild(hdr);
+
+        const grid = createEl('div', { class: 'charts-grid' });
+
+        // Day chart
+        const dayCard = createEl('div', { class: 'chart-card' });
+        dayCard.appendChild(createTextEl('div', 'chart-title', 'Songs by Day'));
+        const dayChart = createEl('div', { class: 'bar-chart' });
+        a.dayCounts.forEach(d => {
+          const group = createEl('div', { class: 'bar-group' });
+          const bar = createEl('div', { class: 'bar', style: 'height: ' + Math.max(3, (d.count / maxDay) * 80) + 'px' });
+          bar.appendChild(createTextEl('div', 'bar-tooltip', String(d.count)));
+          group.appendChild(bar);
+          group.appendChild(createTextEl('div', 'bar-label', d.day.slice(0, 3)));
+          dayChart.appendChild(group);
+        });
+        dayCard.appendChild(dayChart);
+        grid.appendChild(dayCard);
+
+        // Hour chart
+        const hourCard = createEl('div', { class: 'chart-card' });
+        hourCard.appendChild(createTextEl('div', 'chart-title', 'Songs by Hour'));
+        const hourChart = createEl('div', { class: 'bar-chart' });
+        a.hourCounts.forEach(h => {
+          const group = createEl('div', { class: 'bar-group' });
+          const bar = createEl('div', { class: 'bar', style: 'height: ' + Math.max(3, (h.count / maxHour) * 80) + 'px' });
+          bar.appendChild(createTextEl('div', 'bar-tooltip', String(h.count)));
+          group.appendChild(bar);
+          group.appendChild(createTextEl('div', 'bar-label', h.hour % 6 === 0 ? fmtHour(h.hour) : ''));
+          hourChart.appendChild(group);
+        });
+        hourCard.appendChild(hourChart);
+        grid.appendChild(hourCard);
+
+        sec.appendChild(grid);
+        contentEl.appendChild(sec);
+      }
+
+      // Fun Facts
+      if (recap.funStats && recap.funStats.length > 0) {
+        const sec = createEl('div', { class: 'section' });
+        const hdr = createEl('div', { class: 'section-header' });
+        hdr.appendChild(createTextEl('div', 'section-title', 'Fun Facts'));
+        sec.appendChild(hdr);
+
+        const list = createEl('div', { class: 'fun-facts-list' });
+        recap.funStats.forEach(f => {
+          const item = createEl('div', { class: 'fun-fact' });
+          item.appendChild(createTextEl('span', 'fun-fact-icon', '\u2728'));
+          item.appendChild(createTextEl('span', null, f));
+          list.appendChild(item);
+        });
+        sec.appendChild(list);
+        contentEl.appendChild(sec);
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-' + type;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    async function addSongToQueue(el) {
+      const url = el.dataset.url;
+      const title = el.dataset.title;
+      const thumbnail = el.dataset.thumbnail;
+      const duration = parseInt(el.dataset.duration) || 0;
+
+      if (!url) {
+        showToast('Cannot add song: URL not available', 'error');
+        return;
+      }
+
+      el.style.opacity = '0.5';
+      el.style.pointerEvents = 'none';
+      showToast('Adding "' + title + '"...', 'info');
+
+      try {
+        const res = await fetch('/api/queue/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, title, thumbnail, duration })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast('Added "' + title + '" to queue', 'success');
+        } else {
+          showToast(data.error || 'Failed to add song', 'error');
+        }
+      } catch (e) {
+        showToast('Failed to add song to queue', 'error');
+      } finally {
+        el.style.opacity = '1';
+        el.style.pointerEvents = 'auto';
+      }
+    }
+
+    // Init
+    loadRecapList();
+  </script>
+</body>
+</html>

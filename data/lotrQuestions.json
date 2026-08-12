@@ -1,0 +1,886 @@
+[
+  {
+    "question": "Who wrote The Lord of the Rings?",
+    "correctAnswer": "J.R.R. Tolkien",
+    "incorrectAnswers": ["C.S. Lewis", "George R.R. Martin", "Terry Pratchett"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the homeland of the Hobbits?",
+    "correctAnswer": "The Shire",
+    "incorrectAnswers": ["Rivendell", "Gondor", "Rohan"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many members set out in the Fellowship of the Ring?",
+    "correctAnswer": "9",
+    "incorrectAnswers": ["7", "8", "10"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What race is Legolas?",
+    "correctAnswer": "Elf",
+    "incorrectAnswers": ["Dwarf", "Hobbit", "Man"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which actor portrays Gandalf in the films?",
+    "correctAnswer": "Ian McKellen",
+    "incorrectAnswers": ["Christopher Lee", "Patrick Stewart", "Michael Gambon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is Bilbo's home called?",
+    "correctAnswer": "Bag End",
+    "incorrectAnswers": ["Brandy Hall", "Hobbiton Manor", "The Burrow"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What colour does Frodo's sword Sting glow when Orcs are nearby?",
+    "correctAnswer": "Blue",
+    "incorrectAnswers": ["Red", "Green", "White"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of bread do Sam and Frodo eat on their journey?",
+    "correctAnswer": "Lembas bread",
+    "incorrectAnswers": ["Cram", "Waybread of Bree", "Dwarf biscuits"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which character says \"One does not simply walk into Mordor\"?",
+    "correctAnswer": "Boromir",
+    "incorrectAnswers": ["Aragorn", "Gandalf", "Elrond"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who directed the Lord of the Rings film trilogy?",
+    "correctAnswer": "Peter Jackson",
+    "incorrectAnswers": ["Steven Spielberg", "Ridley Scott", "James Cameron"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of Gandalf's horse?",
+    "correctAnswer": "Shadowfax",
+    "incorrectAnswers": ["Brego", "Hasufel", "Asfaloth"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where must the One Ring be destroyed?",
+    "correctAnswer": "Mount Doom",
+    "incorrectAnswers": ["Isengard", "Barad-dûr", "Rivendell"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does Gollum call the One Ring?",
+    "correctAnswer": "My precious",
+    "incorrectAnswers": ["My darling", "My treasure", "My love"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many films are in the Lord of the Rings trilogy?",
+    "correctAnswer": "3",
+    "incorrectAnswers": ["2", "4", "5"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who is the main antagonist of Lord of the Rings?",
+    "correctAnswer": "Sauron",
+    "incorrectAnswers": ["Saruman", "The Witch-king", "Morgoth"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where do Frodo and the hobbits first meet Aragorn?",
+    "correctAnswer": "Bree",
+    "incorrectAnswers": ["Rivendell", "The Green Dragon", "Weathertop"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What race is Gimli?",
+    "correctAnswer": "Dwarf",
+    "incorrectAnswers": ["Elf", "Hobbit", "Man"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who is Frodo's closest companion on the journey to Mordor?",
+    "correctAnswer": "Samwise Gamgee",
+    "incorrectAnswers": ["Merry", "Pippin", "Gandalf"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which country was the Lord of the Rings trilogy filmed in?",
+    "correctAnswer": "New Zealand",
+    "incorrectAnswers": ["Australia", "Scotland", "Iceland"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is Aragorn's nickname used by the Rangers?",
+    "correctAnswer": "Strider",
+    "incorrectAnswers": ["Longshank", "Dúnadan", "Wingfoot"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which actor plays Aragorn?",
+    "correctAnswer": "Viggo Mortensen",
+    "incorrectAnswers": ["Orlando Bloom", "Sean Bean", "Karl Urban"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What colour is Gandalf's cloak when he first appears?",
+    "correctAnswer": "Grey",
+    "incorrectAnswers": ["White", "Brown", "Blue"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "After his return, Gandalf is known as Gandalf the ___?",
+    "correctAnswer": "White",
+    "incorrectAnswers": ["Grey", "Wise", "Great"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "The Fellowship sets out from which location?",
+    "correctAnswer": "Rivendell",
+    "incorrectAnswers": ["The Shire", "Lothlórien", "Minas Tirith"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who gives Frodo the One Ring?",
+    "correctAnswer": "Bilbo",
+    "incorrectAnswers": ["Gandalf", "Galadriel", "Elrond"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of Saruman's fortress?",
+    "correctAnswer": "Isengard",
+    "incorrectAnswers": ["Minas Morgul", "Barad-dûr", "Helm's Deep"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do Merry and Pippin steal from Gandalf at the party?",
+    "correctAnswer": "Fireworks",
+    "incorrectAnswers": ["A pipe", "A map", "A hat"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What weapon does Legolas primarily use?",
+    "correctAnswer": "Bow and arrows",
+    "incorrectAnswers": ["Sword", "Axe", "Spear"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which actor plays Frodo?",
+    "correctAnswer": "Elijah Wood",
+    "incorrectAnswers": ["Daniel Radcliffe", "Tobey Maguire", "Dominic Monaghan"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which actor plays Samwise Gamgee?",
+    "correctAnswer": "Sean Astin",
+    "incorrectAnswers": ["Billy Boyd", "Dominic Monaghan", "Andy Serkis"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the pub in Hobbiton?",
+    "correctAnswer": "The Green Dragon",
+    "incorrectAnswers": ["The Prancing Pony", "The Golden Perch", "The Ivy Bush"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many rings were given to the Elven-kings?",
+    "correctAnswer": "Three",
+    "incorrectAnswers": ["One", "Seven", "Nine"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many rings were given to the Dwarf-lords?",
+    "correctAnswer": "Seven",
+    "incorrectAnswers": ["Three", "Five", "Nine"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What happens to Gandalf in the Mines of Moria?",
+    "correctAnswer": "He falls fighting the Balrog",
+    "incorrectAnswers": ["He is captured by orcs", "He is wounded by an arrow", "He teleports away"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How old does Bilbo turn at the start of Fellowship of the Ring?",
+    "correctAnswer": "111",
+    "incorrectAnswers": ["99", "100", "120"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which actor plays Saruman?",
+    "correctAnswer": "Christopher Lee",
+    "incorrectAnswers": ["Hugo Weaving", "John Rhys-Davies", "Bernard Hill"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What kind of creature is Treebeard?",
+    "correctAnswer": "An Ent",
+    "incorrectAnswers": ["A troll", "A giant", "A Huorn"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are the Nazgûl also known as?",
+    "correctAnswer": "Ringwraiths",
+    "incorrectAnswers": ["Dark Lords", "Shadow Knights", "Death Kings"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who does Aragorn marry at the end of the trilogy?",
+    "correctAnswer": "Arwen",
+    "incorrectAnswers": ["Éowyn", "Galadriel", "Rosie Cotton"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is Samwise Gamgee's job?",
+    "correctAnswer": "Gardener",
+    "incorrectAnswers": ["Cook", "Farmer", "Blacksmith"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which hobbit accidentally alerts the goblins in Moria?",
+    "correctAnswer": "Pippin",
+    "incorrectAnswers": ["Frodo", "Merry", "Sam"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the inn where the hobbits meet Aragorn?",
+    "correctAnswer": "The Prancing Pony",
+    "incorrectAnswers": ["The Green Dragon", "The Forsaken Inn", "The Golden Perch"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who catches Sam eavesdropping at Bag End?",
+    "correctAnswer": "Gandalf",
+    "incorrectAnswers": ["Bilbo", "Frodo", "Merry"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What kind of creature is the Balrog?",
+    "correctAnswer": "A demon of fire and shadow",
+    "incorrectAnswers": ["A dragon", "A troll", "A dark elf"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who kills the Witch-king of Angmar?",
+    "correctAnswer": "Éowyn",
+    "incorrectAnswers": ["Aragorn", "Gandalf", "Faramir"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who does Sam marry at the end of the trilogy?",
+    "correctAnswer": "Rosie Cotton",
+    "incorrectAnswers": ["Éowyn", "Lobelia Sackville-Baggins", "Diamond of Long Cleeve"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Dark Lord's fortress called?",
+    "correctAnswer": "Barad-dûr",
+    "incorrectAnswers": ["Isengard", "Minas Morgul", "Cirith Ungol"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many rings were given to mortal Men?",
+    "correctAnswer": "Nine",
+    "incorrectAnswers": ["Three", "Seven", "Twelve"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which character says \"My friends, you bow to no one\"?",
+    "correctAnswer": "Aragorn",
+    "incorrectAnswers": ["Gandalf", "Éomer", "Faramir"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who plays Gollum through motion capture?",
+    "correctAnswer": "Andy Serkis",
+    "incorrectAnswers": ["Doug Jones", "Benedict Cumberbatch", "Toby Kebbell"],
+    "difficulty": "easy"
+  },
+
+  {
+    "question": "What was Gollum's original name before the Ring corrupted him?",
+    "correctAnswer": "Sméagol",
+    "incorrectAnswers": ["Déagol", "Grima", "Snaga"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Elvish word that opens the gates of Moria?",
+    "correctAnswer": "Mellon",
+    "incorrectAnswers": ["Edro", "Annon", "Naur"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the giant spider that attacks Frodo?",
+    "correctAnswer": "Shelob",
+    "incorrectAnswers": ["Ungoliant", "Arachne", "Torech"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of Aragorn's reforged sword?",
+    "correctAnswer": "Andúril",
+    "incorrectAnswers": ["Glamdring", "Orcrist", "Narsil"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which kingdom answers Gondor's call for aid?",
+    "correctAnswer": "Rohan",
+    "incorrectAnswers": ["Lothlórien", "Dale", "Erebor"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who cut the One Ring from Sauron's finger?",
+    "correctAnswer": "Isildur",
+    "incorrectAnswers": ["Elendil", "Gil-galad", "Aragorn"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What fake name does Frodo use when traveling?",
+    "correctAnswer": "Mr. Underhill",
+    "incorrectAnswers": ["Mr. Greenhill", "Mr. Overhill", "Mr. Bracegirdle"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many Academy Awards did The Return of the King win?",
+    "correctAnswer": "11",
+    "incorrectAnswers": ["7", "9", "13"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What gift does Galadriel give to Frodo?",
+    "correctAnswer": "The Phial of Galadriel",
+    "incorrectAnswers": ["A cloak of invisibility", "An Elven dagger", "A ring of power"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is Boromir's brother?",
+    "correctAnswer": "Faramir",
+    "incorrectAnswers": ["Théodred", "Éomer", "Imrahil"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of Sam's pony?",
+    "correctAnswer": "Bill",
+    "incorrectAnswers": ["Fatty", "Brego", "Strider"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who heals Frodo after the Morgul-blade wound in Rivendell?",
+    "correctAnswer": "Elrond",
+    "incorrectAnswers": ["Gandalf", "Aragorn", "Galadriel"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "In which forest do Merry and Pippin meet Treebeard?",
+    "correctAnswer": "Fangorn Forest",
+    "incorrectAnswers": ["Mirkwood", "The Old Forest", "Lothlórien"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What inscription is on the Doors of Durin?",
+    "correctAnswer": "Speak Friend and Enter",
+    "incorrectAnswers": ["Abandon all hope", "One Ring to rule them all", "The way is shut"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What nickname does Wormtongue call Gandalf?",
+    "correctAnswer": "Stormcrow",
+    "incorrectAnswers": ["Grey Fool", "Wanderer", "Troublemaker"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Under what alias does Éowyn ride to battle?",
+    "correctAnswer": "Dernhelm",
+    "incorrectAnswers": ["Elfhild", "Morwen", "Idris"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What metal is Frodo's chain shirt made from?",
+    "correctAnswer": "Mithril",
+    "incorrectAnswers": ["Steel", "Silver", "Adamant"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who steals the Palantír from Gandalf?",
+    "correctAnswer": "Pippin",
+    "incorrectAnswers": ["Merry", "Frodo", "Aragorn"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "At which location does the Fellowship break apart?",
+    "correctAnswer": "Amon Hen",
+    "incorrectAnswers": ["Lothlórien", "Rauros Falls", "Fangorn"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the ferry the hobbits use to escape the Nazgûl?",
+    "correctAnswer": "Bucklebury Ferry",
+    "incorrectAnswers": ["Brandywine Ferry", "Sarn Ford", "Haysend Crossing"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How was Boromir killed?",
+    "correctAnswer": "Shot with orc arrows",
+    "incorrectAnswers": ["Stabbed by a sword", "Fell from a cliff", "Poisoned"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who does Gandalf borrow the horse Shadowfax from?",
+    "correctAnswer": "Théoden",
+    "incorrectAnswers": ["Denethor", "Éomer", "Aragorn"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which three people does Aragorn heal using the athelas plant?",
+    "correctAnswer": "Faramir, Éowyn, Merry",
+    "incorrectAnswers": ["Frodo, Sam, Pippin", "Gandalf, Legolas, Gimli", "Théoden, Éomer, Háma"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who composed the film scores for the trilogy?",
+    "correctAnswer": "Howard Shore",
+    "incorrectAnswers": ["John Williams", "Hans Zimmer", "James Newton Howard"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What did the Ents lose long ago?",
+    "correctAnswer": "The Entwives",
+    "incorrectAnswers": ["Their songs", "Their forest", "Their king"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who was originally cast as Aragorn before Viggo Mortensen?",
+    "correctAnswer": "Stuart Townsend",
+    "incorrectAnswers": ["Russell Crowe", "Daniel Day-Lewis", "Liam Neeson"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "After his crowning, Aragorn takes which royal name?",
+    "correctAnswer": "King Elessar",
+    "incorrectAnswers": ["King Thorongil", "King Telcontar", "King Elendil II"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "In what month were all three LOTR films released?",
+    "correctAnswer": "December",
+    "incorrectAnswers": ["November", "June", "May"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which member of the Fellowship initially refuses to enter Lothlórien?",
+    "correctAnswer": "Boromir",
+    "incorrectAnswers": ["Gimli", "Legolas", "Merry"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What creature race is Sméagol originally?",
+    "correctAnswer": "A river folk Hobbit",
+    "incorrectAnswers": ["A woodland Elf", "A wild Man", "A cave Dwarf"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which member of the Fellowship does Elrond initially object to including?",
+    "correctAnswer": "Pippin",
+    "incorrectAnswers": ["Gimli", "Boromir", "Sam"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What are the large elephant-like battle creatures called?",
+    "correctAnswer": "Mûmakil",
+    "incorrectAnswers": ["Wargs", "Fell beasts", "Caragors"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who killed Sméagol's friend Déagol?",
+    "correctAnswer": "Sméagol himself",
+    "incorrectAnswers": ["An orc", "A river serpent", "A hobbit elder"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many days were spent filming the entire trilogy?",
+    "correctAnswer": "438",
+    "incorrectAnswers": ["274", "365", "512"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What completes the Ring inscription: \"One Ring to rule them all, One Ring to find them, One Ring to bring them all, and in the darkness ___\"?",
+    "correctAnswer": "Bind them",
+    "incorrectAnswers": ["End them", "Keep them", "Blind them"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the Lord of Lothlórien alongside Galadriel?",
+    "correctAnswer": "Celeborn",
+    "incorrectAnswers": ["Elrond", "Thranduil", "Gil-galad"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How does Gandalf escape from the top of Isengard?",
+    "correctAnswer": "A Great Eagle rescues him",
+    "incorrectAnswers": ["He fights his way out", "He uses a secret passage", "He teleports"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of Théoden's son who dies before the war?",
+    "correctAnswer": "Théodred",
+    "incorrectAnswers": ["Éomer", "Háma", "Gríma"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who refuses to destroy the Ring at the Crack of Doom?",
+    "correctAnswer": "Frodo",
+    "incorrectAnswers": ["Sam", "Gandalf", "Gollum"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "The Battle of Pelennor Fields was fought to defend which city?",
+    "correctAnswer": "Minas Tirith",
+    "incorrectAnswers": ["Osgiliath", "Edoras", "Helm's Deep"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What language forms the inscription on the One Ring?",
+    "correctAnswer": "Black Speech",
+    "incorrectAnswers": ["Quenya", "Sindarin", "Westron"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which character from The Hobbit appears at the Council of Elrond?",
+    "correctAnswer": "Glóin",
+    "incorrectAnswers": ["Balin", "Bofur", "Thorin"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who tells Frodo about Boromir's death?",
+    "correctAnswer": "Faramir",
+    "incorrectAnswers": ["Gandalf", "Aragorn", "Legolas"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What two items does Bilbo give Frodo in Rivendell?",
+    "correctAnswer": "Sting and a mithril shirt",
+    "incorrectAnswers": ["A cloak and dagger", "A map and key", "The Ring and Sting"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who becomes King of Rohan after Théoden dies?",
+    "correctAnswer": "Éomer",
+    "incorrectAnswers": ["Éowyn", "Gamling", "Erkenbrand"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Where does Frodo go at the very end of the story?",
+    "correctAnswer": "Valinor / The Undying Lands",
+    "incorrectAnswers": ["Back to the Shire", "Rivendell", "Lothlórien"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Gandalf's warning to Aragorn about when to look to the east?",
+    "correctAnswer": "At dawn on the fifth day",
+    "incorrectAnswers": ["At midnight on the third day", "At sunset on the seventh day", "At noon on the second day"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What sword was broken when Sauron was first defeated, later reforged as Andúril?",
+    "correctAnswer": "Narsil",
+    "incorrectAnswers": ["Glamdring", "Orcrist", "Gurthang"],
+    "difficulty": "medium"
+  },
+
+  {
+    "question": "What is the Elvish (Sindarin) name the Elves use for Gandalf?",
+    "correctAnswer": "Mithrandir",
+    "incorrectAnswers": ["Olórin", "Curunír", "Aiwendil"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What age of Middle-earth is The Lord of the Rings set in?",
+    "correctAnswer": "The Third Age",
+    "incorrectAnswers": ["The First Age", "The Second Age", "The Fourth Age"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What name do the Elves use for Hobbits?",
+    "correctAnswer": "Periannath",
+    "incorrectAnswers": ["Naugrim", "Edain", "Drúedain"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Sindarin name meaning \"hope\" was Aragorn known by as a child?",
+    "correctAnswer": "Estel",
+    "incorrectAnswers": ["Thorongil", "Elessar", "Telcontar"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who is Elanor the Fair?",
+    "correctAnswer": "Daughter of Samwise and Rosie",
+    "incorrectAnswers": ["An Elf queen of Lothlórien", "Arwen's sister", "A Maia of Valinor"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What race did Sauron originally belong to?",
+    "correctAnswer": "Maiar",
+    "incorrectAnswers": ["Elf", "Valar", "Númenórean"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many Rings of Power were forged in total?",
+    "correctAnswer": "20",
+    "incorrectAnswers": ["9", "16", "19"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is Gandalf's original name in Valinor, before he came to Middle-earth?",
+    "correctAnswer": "Olórin",
+    "incorrectAnswers": ["Mithrandir", "Curunír", "Pallando"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who is the last pair to sail from Middle-earth to the Undying Lands?",
+    "correctAnswer": "Legolas and Gimli",
+    "incorrectAnswers": ["Bilbo and Frodo", "Gandalf and Elrond", "Celeborn and Galadriel"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was Saruman's name among the Maiar?",
+    "correctAnswer": "Curunír",
+    "incorrectAnswers": ["Olórin", "Aiwendil", "Pallando"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the Balrog that Gandalf fights?",
+    "correctAnswer": "Durin's Bane",
+    "incorrectAnswers": ["Gothmog", "Lungorthin", "Glaurung"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "In what year was The Fellowship of the Ring first published?",
+    "correctAnswer": "1954",
+    "incorrectAnswers": ["1937", "1949", "1961"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who demanded that weapons be surrendered before seeing King Théoden?",
+    "correctAnswer": "Háma",
+    "incorrectAnswers": ["Gamling", "Éomer", "Gríma"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the seeing-stones used for long-distance communication?",
+    "correctAnswer": "Palantíri",
+    "incorrectAnswers": ["Silmarils", "Elessar stones", "Elendilmir"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Quenya word for \"friend\"?",
+    "correctAnswer": "Meldo",
+    "incorrectAnswers": ["Mellon", "Nildo", "Seron"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which hobbit is attacked by a Black Rider in Bree?",
+    "correctAnswer": "Merry",
+    "incorrectAnswers": ["Frodo", "Pippin", "Sam"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What does Aragorn use to heal the wounded at Minas Tirith?",
+    "correctAnswer": "Athelas / Kingsfoil",
+    "incorrectAnswers": ["Miruvor", "Lembas", "Elven medicine"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who is known as \"Sharkey\" in the Scouring of the Shire?",
+    "correctAnswer": "Saruman",
+    "incorrectAnswers": ["Gríma", "Lotho", "Ted Sandyman"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Where does Old Man Willow live?",
+    "correctAnswer": "The Old Forest",
+    "incorrectAnswers": ["Fangorn Forest", "Mirkwood", "Lothlórien"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the tower at the pass of Cirith Ungol?",
+    "correctAnswer": "The Tower of Cirith Ungol",
+    "incorrectAnswers": ["Minas Morgul", "The Tower of the Moon", "Durthang"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who was Bilbo's mother, known for being unusually adventurous?",
+    "correctAnswer": "Belladonna Took",
+    "incorrectAnswers": ["Primula Brandybuck", "Lobelia Sackville-Baggins", "Rosa Baggins"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Aragorn was also known as Thorongil when he served which kingdom in his youth?",
+    "correctAnswer": "Gondor",
+    "incorrectAnswers": ["Rohan", "Dale", "Arnor"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "In which year was the animated Lord of the Rings film by Ralph Bakshi released?",
+    "correctAnswer": "1978",
+    "incorrectAnswers": ["1972", "1981", "1985"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Galadriel's ring of power?",
+    "correctAnswer": "Nenya",
+    "incorrectAnswers": ["Narya", "Vilya", "Elessar"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which of the three Elven rings does Gandalf bear?",
+    "correctAnswer": "Narya, Ring of Fire",
+    "incorrectAnswers": ["Nenya, Ring of Water", "Vilya, Ring of Air", "None"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who bears Vilya, the mightiest of the three Elven rings?",
+    "correctAnswer": "Elrond",
+    "incorrectAnswers": ["Galadriel", "Gandalf", "Círdan"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What marks the beginning of the Third Age?",
+    "correctAnswer": "The victory of the Last Alliance",
+    "incorrectAnswers": ["The forging of the One Ring", "Sauron's first defeat by the Elves", "The founding of the Shire"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How old is Aragorn at the time of the War of the Ring?",
+    "correctAnswer": "87",
+    "incorrectAnswers": ["60", "72", "103"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Elvish name for Rivendell?",
+    "correctAnswer": "Imladris",
+    "incorrectAnswers": ["Caras Galadhon", "Mithlond", "Edhellond"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Farmer Maggot's three dogs?",
+    "correctAnswer": "Grip, Fang, and Wolf",
+    "incorrectAnswers": ["Bark, Growl, and Snap", "Rover, Roper, and Nipper", "Tooth, Claw, and Fang"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who is the Steward of Gondor during the War of the Ring?",
+    "correctAnswer": "Denethor II",
+    "incorrectAnswers": ["Faramir", "Boromir I", "Ecthelion II"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the sword Gandalf carries?",
+    "correctAnswer": "Glamdring",
+    "incorrectAnswers": ["Orcrist", "Narsil", "Andúril"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which Wizard is known as Radagast, and what is his domain?",
+    "correctAnswer": "Birds and beasts",
+    "incorrectAnswers": ["Sea and storms", "Fire and courage", "Stars and knowledge"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the original name of Minas Tirith before it was renamed?",
+    "correctAnswer": "Minas Anor",
+    "incorrectAnswers": ["Minas Ithil", "Osgiliath", "Annúminas"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of Elrond's twin brother who chose mortality?",
+    "correctAnswer": "Elros",
+    "incorrectAnswers": ["Elladan", "Elrohir", "Eärendil"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many wizards (Istari) were sent to Middle-earth?",
+    "correctAnswer": "5",
+    "incorrectAnswers": ["3", "4", "7"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Quenya name for the Undying Lands?",
+    "correctAnswer": "Aman",
+    "incorrectAnswers": ["Valinor", "Eldamar", "Eressëa"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who forged the One Ring?",
+    "correctAnswer": "Sauron",
+    "incorrectAnswers": ["Celebrimbor", "Morgoth", "Aulë"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What relation is Frodo to Bilbo, precisely?",
+    "correctAnswer": "First cousin once removed",
+    "incorrectAnswers": ["Nephew", "Second cousin", "Adopted son"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What creature type is Ungoliant, Shelob's ancestor?",
+    "correctAnswer": "A primordial spirit of darkness",
+    "incorrectAnswers": ["A Maia", "A dragon", "An Ent gone dark"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which Elvish haven is located at the Grey Havens?",
+    "correctAnswer": "Mithlond",
+    "incorrectAnswers": ["Edhellond", "Forlond", "Harlond"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was Minas Morgul originally called before Sauron's forces captured it?",
+    "correctAnswer": "Minas Ithil",
+    "incorrectAnswers": ["Minas Tirith", "Minas Anor", "Osgiliath"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who was the Witch-king before becoming a Nazgûl?",
+    "correctAnswer": "A King of Men",
+    "incorrectAnswers": ["A Dwarven Lord", "An Elf warrior", "A Maia"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What happened to Celebrimbor, the maker of the three Elven Rings?",
+    "correctAnswer": "He was killed by Sauron",
+    "incorrectAnswers": ["He sailed to Valinor", "He became a Ringwraith", "He faded away"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many total Academy Award nominations did the Lord of the Rings trilogy receive?",
+    "correctAnswer": "30",
+    "incorrectAnswers": ["20", "25", "35"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the path between the Undying Lands and Middle-earth that only Elves can travel?",
+    "correctAnswer": "The Straight Road",
+    "incorrectAnswers": ["The Sundering Seas", "Belegaer", "The Helcaraxë"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What species of tree do the Elves of Lothlórien live in?",
+    "correctAnswer": "Mallorn",
+    "incorrectAnswers": ["Oak", "Birch", "Lebethron"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who says \"Even the smallest person can change the course of the future\"?",
+    "correctAnswer": "Galadriel",
+    "incorrectAnswers": ["Gandalf", "Elrond", "Aragorn"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What did Tom Bombadil do when Frodo offered him the One Ring?",
+    "correctAnswer": "He put it on and nothing happened",
+    "incorrectAnswers": ["He refused to touch it", "He put it on and became invisible", "He threw it away in disgust"],
+    "difficulty": "hard"
+  }
+]

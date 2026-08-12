@@ -1,12 +1,20 @@
 // Activity Logger - Sends music bot activity to a Discord channel
 
-const LOG_CHANNEL_ID = '1462410580185845893';
+let logChannelId = '1462410580185845893';
 
 let discordClient = null;
 let lastLoggedSong = null; // Track last logged song to avoid duplicates
 
 export function setDiscordClient(client) {
   discordClient = client;
+}
+
+export function getLogChannelId() {
+  return logChannelId;
+}
+
+export function setLogChannelId(channelId) {
+  logChannelId = channelId;
 }
 
 async function sendLogMessage(content) {
@@ -16,7 +24,7 @@ async function sendLogMessage(content) {
   }
 
   try {
-    const channel = await discordClient.channels.fetch(LOG_CHANNEL_ID);
+    const channel = await discordClient.channels.fetch(logChannelId);
     if (channel) {
       await channel.send(content);
     }

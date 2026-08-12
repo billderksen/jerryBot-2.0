@@ -1,0 +1,902 @@
+[
+  {
+    "question": "What is the first Pokemon in the National Pokedex?",
+    "correctAnswer": "Bulbasaur",
+    "incorrectAnswers": ["Pikachu", "Charmander", "Mew"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of Pokemon is Pikachu?",
+    "correctAnswer": "Electric",
+    "incorrectAnswers": ["Normal", "Fire", "Fairy"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of Ash's first Pokemon?",
+    "correctAnswer": "Pikachu",
+    "incorrectAnswers": ["Charmander", "Squirtle", "Eevee"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are the three original starter Pokemon in Red and Blue?",
+    "correctAnswer": "Bulbasaur, Charmander, Squirtle",
+    "incorrectAnswers": ["Pikachu, Eevee, Jigglypuff", "Chikorita, Cyndaquil, Totodile", "Treecko, Torchic, Mudkip"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is Ash's last name?",
+    "correctAnswer": "Ketchum",
+    "incorrectAnswers": ["Oak", "Stone", "Willow"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What colour is a standard Poke Ball?",
+    "correctAnswer": "Red and white",
+    "incorrectAnswers": ["Blue and white", "Yellow and black", "Green and white"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many original Pokemon were introduced in Generation 1?",
+    "correctAnswer": "151",
+    "incorrectAnswers": ["100", "120", "200"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the fire-type legendary bird?",
+    "correctAnswer": "Moltres",
+    "incorrectAnswers": ["Articuno", "Zapdos", "Ho-Oh"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does Pikachu evolve into?",
+    "correctAnswer": "Raichu",
+    "incorrectAnswers": ["Pichu", "Jolteon", "Electabuzz"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the final evolution of Charmander?",
+    "correctAnswer": "Charizard",
+    "incorrectAnswers": ["Charmeleon", "Dragonite", "Salamence"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the mascot of the Pokemon franchise?",
+    "correctAnswer": "Pikachu",
+    "incorrectAnswers": ["Eevee", "Jigglypuff", "Mewtwo"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which Pokemon is known for putting people to sleep with its song?",
+    "correctAnswer": "Jigglypuff",
+    "incorrectAnswers": ["Snorlax", "Hypno", "Drowzee"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of Pokemon is Squirtle?",
+    "correctAnswer": "Water",
+    "incorrectAnswers": ["Ice", "Normal", "Ground"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the maximum level a Pokemon can reach?",
+    "correctAnswer": "100",
+    "incorrectAnswers": ["50", "80", "99"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Who is the Professor in the Kanto region?",
+    "correctAnswer": "Professor Oak",
+    "incorrectAnswers": ["Professor Elm", "Professor Birch", "Professor Willow"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the region in the original Pokemon games?",
+    "correctAnswer": "Kanto",
+    "incorrectAnswers": ["Johto", "Hoenn", "Sinnoh"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many Pokemon can you carry in your party at once?",
+    "correctAnswer": "6",
+    "incorrectAnswers": ["4", "5", "8"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does a Pokemon Center do?",
+    "correctAnswer": "Heals your Pokemon",
+    "incorrectAnswers": ["Sells items", "Trains Pokemon", "Breeds Pokemon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type is Mewtwo?",
+    "correctAnswer": "Psychic",
+    "incorrectAnswers": ["Normal", "Ghost", "Dark"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What stone evolves Pikachu into Raichu?",
+    "correctAnswer": "Thunder Stone",
+    "incorrectAnswers": ["Fire Stone", "Water Stone", "Moon Stone"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of Team Rocket's talking Pokemon?",
+    "correctAnswer": "Meowth",
+    "incorrectAnswers": ["Psyduck", "Wobuffet", "Persian"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which Pokemon is known as the 'Sleeping Pokemon'?",
+    "correctAnswer": "Snorlax",
+    "incorrectAnswers": ["Drowzee", "Abra", "Slaking"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type is super effective against Water?",
+    "correctAnswer": "Grass",
+    "incorrectAnswers": ["Fire", "Ground", "Ice"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What evolves from Magikarp?",
+    "correctAnswer": "Gyarados",
+    "incorrectAnswers": ["Wailord", "Milotic", "Lapras"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many gym badges do you need to challenge the Elite Four?",
+    "correctAnswer": "8",
+    "incorrectAnswers": ["4", "6", "10"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the evil organization in Kanto?",
+    "correctAnswer": "Team Rocket",
+    "incorrectAnswers": ["Team Magma", "Team Aqua", "Team Galactic"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which Pokemon can learn the move Transform?",
+    "correctAnswer": "Both Ditto and Mew",
+    "incorrectAnswers": ["Eevee", "Ditto only", "Mew only"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of Pokemon is Gengar?",
+    "correctAnswer": "Ghost/Poison",
+    "incorrectAnswers": ["Dark/Poison", "Ghost/Dark", "Psychic/Ghost"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the pre-evolved form of Dragonite?",
+    "correctAnswer": "Dragonair",
+    "incorrectAnswers": ["Dratini", "Bagon", "Gible"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What item guarantees catching any wild Pokemon?",
+    "correctAnswer": "Master Ball",
+    "incorrectAnswers": ["Ultra Ball", "Great Ball", "Timer Ball"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type is Eevee?",
+    "correctAnswer": "Normal",
+    "incorrectAnswers": ["Fairy", "Psychic", "It has no type"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Nurse in every Pokemon Center called?",
+    "correctAnswer": "Nurse Joy",
+    "incorrectAnswers": ["Nurse Jenny", "Nurse Brock", "Nurse Elm"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which legendary bird is associated with ice?",
+    "correctAnswer": "Articuno",
+    "incorrectAnswers": ["Moltres", "Zapdos", "Lugia"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the region in Pokemon Gold and Silver?",
+    "correctAnswer": "Johto",
+    "incorrectAnswers": ["Kanto", "Hoenn", "Unova"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of Pokemon is Geodude?",
+    "correctAnswer": "Rock/Ground",
+    "incorrectAnswers": ["Ground", "Steel", "Rock"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the currency in Pokemon?",
+    "correctAnswer": "PokeDollars",
+    "incorrectAnswers": ["Gold coins", "Poke Coins", "Berries"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does TM stand for?",
+    "correctAnswer": "Technical Machine",
+    "incorrectAnswers": ["Total Move", "Transfer Module", "Trained Move"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which Pokemon evolves from Caterpie's second form?",
+    "correctAnswer": "Butterfree",
+    "incorrectAnswers": ["Beedrill", "Dustox", "Venomoth"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the item that wakes up a sleeping Snorlax?",
+    "correctAnswer": "Poke Flute",
+    "incorrectAnswers": ["Awakening", "Full Heal", "Whistle"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type is strong against Psychic?",
+    "correctAnswer": "Dark",
+    "incorrectAnswers": ["Fighting", "Poison", "Ghost"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does Eevee evolve into with a Water Stone?",
+    "correctAnswer": "Vaporeon",
+    "incorrectAnswers": ["Glaceon", "Suicune", "Milotic"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many types of Pokemon are there in the current games?",
+    "correctAnswer": "18",
+    "incorrectAnswers": ["15", "16", "17"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which Pokemon is number 25 in the Pokedex?",
+    "correctAnswer": "Pikachu",
+    "incorrectAnswers": ["Pichu", "Raichu", "Jolteon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are Ash's traveling companions in the original series?",
+    "correctAnswer": "Misty and Brock",
+    "incorrectAnswers": ["May and Max", "Dawn and Brock", "Serena and Clemont"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of Pokemon is Lapras?",
+    "correctAnswer": "Water/Ice",
+    "incorrectAnswers": ["Water", "Ice", "Water/Dragon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the electric-type gym leader in Kanto called?",
+    "correctAnswer": "Lt. Surge",
+    "incorrectAnswers": ["Brock", "Misty", "Erika"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What legendary Pokemon was created by scientists?",
+    "correctAnswer": "Mewtwo",
+    "incorrectAnswers": ["Mew", "Deoxys", "Genesect"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type is the move Flamethrower?",
+    "correctAnswer": "Fire",
+    "incorrectAnswers": ["Normal", "Dragon", "Special"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What Pokemon is known as the 'Seed Pokemon'?",
+    "correctAnswer": "Bulbasaur",
+    "incorrectAnswers": ["Oddish", "Sunkern", "Chikorita"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What are gym badges used for?",
+    "correctAnswer": "Proving strength and gaining access to the Pokemon League",
+    "incorrectAnswers": ["Decorations", "Catching legendary Pokemon", "Evolving Pokemon"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type combination is Charizard?",
+    "correctAnswer": "Fire/Flying",
+    "incorrectAnswers": ["Fire/Dragon", "Fire/Normal", "Fire"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the region in Pokemon Ruby and Sapphire?",
+    "correctAnswer": "Hoenn",
+    "incorrectAnswers": ["Sinnoh", "Kanto", "Kalos"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many Eevee evolutions exist?",
+    "correctAnswer": "8",
+    "incorrectAnswers": ["6", "7", "9"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What was the first Pokemon game ever released?",
+    "correctAnswer": "Pokemon Green",
+    "incorrectAnswers": ["Pokemon Red", "Pokemon Blue", "Pokemon Yellow"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon has the highest base stat total among non-legendaries (base form)?",
+    "correctAnswer": "Slaking",
+    "incorrectAnswers": ["Dragonite", "Tyranitar", "Garchomp"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "In what generation was the Fairy type introduced?",
+    "correctAnswer": "Generation VI",
+    "incorrectAnswers": ["Generation IV", "Generation V", "Generation VII"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the signature move of Palkia?",
+    "correctAnswer": "Spacial Rend",
+    "incorrectAnswers": ["Roar of Time", "Shadow Force", "Judgment"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the champion of the Galar region?",
+    "correctAnswer": "Leon",
+    "incorrectAnswers": ["Cynthia", "Steven", "Diantha"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What does HM stand for?",
+    "correctAnswer": "Hidden Machine",
+    "incorrectAnswers": ["Hidden Move", "Heavy Move", "Hero Machine"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the legendary Pokemon trio of Generation 2?",
+    "correctAnswer": "Raikou, Entei, Suicune",
+    "incorrectAnswers": ["Articuno, Zapdos, Moltres", "Regirock, Regice, Registeel", "Uxie, Mesprit, Azelf"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon has the ability 'Wonder Guard'?",
+    "correctAnswer": "Shedinja",
+    "incorrectAnswers": ["Spiritomb", "Sableye", "Ninjask"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What item evolves Feebas into Milotic?",
+    "correctAnswer": "Prism Scale",
+    "incorrectAnswers": ["Water Stone", "Deep Sea Scale", "Beauty Scarf"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type is Gyarados?",
+    "correctAnswer": "Water/Flying",
+    "incorrectAnswers": ["Water/Dragon", "Water", "Water/Dark"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the rival's name in Pokemon Red and Blue?",
+    "correctAnswer": "Blue",
+    "incorrectAnswers": ["Gary", "Silver", "Green"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon can Mega Evolve into two different forms?",
+    "correctAnswer": "Both Mewtwo and Charizard",
+    "incorrectAnswers": ["Mewtwo only", "Charizard only", "Garchomp"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which legendary Pokemon is known as 'The Guardian of the Sea'?",
+    "correctAnswer": "Lugia",
+    "incorrectAnswers": ["Kyogre", "Manaphy", "Suicune"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Lucario's type combination?",
+    "correctAnswer": "Fighting/Steel",
+    "incorrectAnswers": ["Steel/Psychic", "Fighting", "Steel/Dark"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the emerald legendary Pokemon?",
+    "correctAnswer": "Rayquaza",
+    "incorrectAnswers": ["Groudon", "Kyogre", "Deoxys"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What status condition does Will-O-Wisp cause?",
+    "correctAnswer": "Burn",
+    "incorrectAnswers": ["Paralysis", "Poison", "Sleep"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon is the 'Aura Pokemon'?",
+    "correctAnswer": "Lucario",
+    "incorrectAnswers": ["Riolu", "Zoroark", "Greninja"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Mewtwo's signature move?",
+    "correctAnswer": "Psystrike",
+    "incorrectAnswers": ["Psychic", "Shadow Ball", "Hyper Beam"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "In which games were Double Battles first introduced?",
+    "correctAnswer": "Ruby and Sapphire",
+    "incorrectAnswers": ["Gold and Silver", "Diamond and Pearl", "Black and White"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type combination is Garchomp?",
+    "correctAnswer": "Dragon/Ground",
+    "incorrectAnswers": ["Dragon/Flying", "Dragon/Rock", "Dragon/Dark"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the region in Pokemon Sun and Moon?",
+    "correctAnswer": "Alola",
+    "incorrectAnswers": ["Galar", "Kalos", "Paldea"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What colour is a shiny Charizard?",
+    "correctAnswer": "Black",
+    "incorrectAnswers": ["Red", "Blue", "Green"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon evolves when traded while holding a King's Rock?",
+    "correctAnswer": "Poliwhirl",
+    "incorrectAnswers": ["Machoke", "Kadabra", "Haunter"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Dragonite's type?",
+    "correctAnswer": "Dragon/Flying",
+    "incorrectAnswers": ["Dragon", "Dragon/Water", "Dragon/Fire"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which evil team operates in the Hoenn region?",
+    "correctAnswer": "Team Magma and Team Aqua",
+    "incorrectAnswers": ["Team Rocket", "Team Galactic", "Team Plasma"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What ability lets Greninja change form in battle?",
+    "correctAnswer": "Battle Bond",
+    "incorrectAnswers": ["Protean", "Torrent", "Transform"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many forms does Deoxys have?",
+    "correctAnswer": "4",
+    "incorrectAnswers": ["2", "3", "5"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the heaviest Pokemon?",
+    "correctAnswer": "Cosmoem",
+    "incorrectAnswers": ["Snorlax", "Wailord", "Groudon"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What year was the first Pokemon game released in Japan?",
+    "correctAnswer": "1996",
+    "incorrectAnswers": ["1994", "1998", "2000"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What are the Swords of Justice legendary trio?",
+    "correctAnswer": "Cobalion, Terrakion, Virizion",
+    "incorrectAnswers": ["Tornadus, Thundurus, Landorus", "Reshiram, Zekrom, Kyurem", "Xerneas, Yveltal, Zygarde"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What item evolves Sneasel into Weavile?",
+    "correctAnswer": "Razor Claw",
+    "incorrectAnswers": ["Metal Coat", "Razor Fang", "Reaper Cloth"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type combination is Metagross?",
+    "correctAnswer": "Steel/Psychic",
+    "incorrectAnswers": ["Steel/Rock", "Steel/Fighting", "Steel/Ground"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What ability does Slaking have that prevents it from attacking every turn?",
+    "correctAnswer": "Truant",
+    "incorrectAnswers": ["Slow Start", "Stall", "Defeatist"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many Mega Evolutions were introduced in Generation VI?",
+    "correctAnswer": "46",
+    "incorrectAnswers": ["28", "36", "52"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What move has the signature ability to always put the target to sleep?",
+    "correctAnswer": "Spore",
+    "incorrectAnswers": ["Hypnosis", "Sleep Powder", "Yawn"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type combination is Toxapex?",
+    "correctAnswer": "Water/Poison",
+    "incorrectAnswers": ["Poison/Dark", "Water/Dark", "Poison/Steel"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is Greninja's hidden ability?",
+    "correctAnswer": "Protean",
+    "incorrectAnswers": ["Torrent", "Battle Bond", "Swift Swim"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon is known as the 'Deep Black Pokemon'?",
+    "correctAnswer": "Zekrom",
+    "incorrectAnswers": ["Darkrai", "Yveltal", "Necrozma"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the first Pokemon in the Sinnoh Pokedex?",
+    "correctAnswer": "Turtwig",
+    "incorrectAnswers": ["Piplup", "Chimchar", "Starly"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What move does Rayquaza need to know to Mega Evolve?",
+    "correctAnswer": "Dragon Ascent",
+    "incorrectAnswers": ["Hyper Beam", "Outrage", "Draco Meteor"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the maximum number of EVs a single stat can have?",
+    "correctAnswer": "252",
+    "incorrectAnswers": ["200", "255", "510"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Pokemon has the highest base Speed stat (non-legendary)?",
+    "correctAnswer": "Ninjask",
+    "incorrectAnswers": ["Electrode", "Accelgor", "Jolteon"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What type combination is Spiritomb?",
+    "correctAnswer": "Ghost/Dark",
+    "incorrectAnswers": ["Ghost/Psychic", "Dark/Psychic", "Ghost/Normal"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Pokemon has exactly 1 HP when it evolves from Nincada alongside Ninjask?",
+    "correctAnswer": "Shedinja",
+    "incorrectAnswers": ["Golisopod", "Parasect", "Ditto"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the base stat total of Arceus?",
+    "correctAnswer": "720",
+    "incorrectAnswers": ["680", "700", "780"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who is the Champion of the Sinnoh region?",
+    "correctAnswer": "Cynthia",
+    "incorrectAnswers": ["Steven", "Lance", "Iris"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Grass-type starter from the Hoenn region?",
+    "correctAnswer": "Treecko",
+    "incorrectAnswers": ["Chikorita", "Turtwig", "Snivy"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What was the first Pokemon ever designed?",
+    "correctAnswer": "Rhydon",
+    "incorrectAnswers": ["Pikachu", "Mew", "Arceus"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the base Speed stat of Arceus?",
+    "correctAnswer": "120",
+    "incorrectAnswers": ["100", "110", "130"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What ability does Zygarde have that lets it transform into Complete Forme?",
+    "correctAnswer": "Power Construct",
+    "incorrectAnswers": ["Aura Break", "Battle Bond", "Shields Down"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is Eternatus's type combination?",
+    "correctAnswer": "Poison/Dragon",
+    "incorrectAnswers": ["Dragon/Dark", "Dragon/Ghost", "Poison/Dark"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the highest base stat total of any Pokemon (Mega Evolved)?",
+    "correctAnswer": "Both Mega Mewtwo and Mega Rayquaza are tied at 780",
+    "incorrectAnswers": ["Mega Mewtwo X (780)", "Mega Rayquaza (780)", "Primal Groudon (770)"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is Shuckle known for having the highest of?",
+    "correctAnswer": "Defence and Special Defence",
+    "incorrectAnswers": ["HP", "Speed", "Attack"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon is UB-01 Symbiont?",
+    "correctAnswer": "Nihilego",
+    "incorrectAnswers": ["Buzzwole", "Pheromosa", "Xurkitree"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many arms does Machamp have?",
+    "correctAnswer": "4",
+    "incorrectAnswers": ["2", "6", "8"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the maximum power of the move Stored Power?",
+    "correctAnswer": "860",
+    "incorrectAnswers": ["420", "620", "960"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon has the longest cry in the games?",
+    "correctAnswer": "Kricketune",
+    "incorrectAnswers": ["Jynx", "Staryu", "Electrode"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the evolution method for Gligar to evolve into Gliscor?",
+    "correctAnswer": "Level up holding Razor Fang at night",
+    "incorrectAnswers": ["Level up at night", "Trade holding Razor Claw", "Use a Dusk Stone"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What ability does Regigigas have that halves its Attack and Speed for 5 turns?",
+    "correctAnswer": "Slow Start",
+    "incorrectAnswers": ["Truant", "Defeatist", "Stall"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many legs does Giratina have in its Origin Forme?",
+    "correctAnswer": "0",
+    "incorrectAnswers": ["2", "4", "6"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the ability of Eternatus?",
+    "correctAnswer": "Pressure",
+    "incorrectAnswers": ["Beast Boost", "Dark Aura", "Neutralizing Gas"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which Pokemon can learn every TM move?",
+    "correctAnswer": "Mew",
+    "incorrectAnswers": ["Ditto", "Arceus", "Smeargle"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the signature move of Aegislash?",
+    "correctAnswer": "King's Shield",
+    "incorrectAnswers": ["Sacred Sword", "Shadow Sneak", "Iron Head"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is Cosmoem's weight?",
+    "correctAnswer": "999.9 kg",
+    "incorrectAnswers": ["0.1 kg", "99.9 kg", "9999 kg"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon changes form when it uses the move Relic Song?",
+    "correctAnswer": "Meloetta",
+    "incorrectAnswers": ["Keldeo", "Rotom", "Shaymin"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What fossil revives into Aerodactyl?",
+    "correctAnswer": "Old Amber",
+    "incorrectAnswers": ["Helix Fossil", "Dome Fossil", "Root Fossil"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is Tapu Koko's type combination?",
+    "correctAnswer": "Electric/Fairy",
+    "incorrectAnswers": ["Electric/Fighting", "Fairy/Flying", "Electric/Psychic"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the total base stat of Regigigas?",
+    "correctAnswer": "670",
+    "incorrectAnswers": ["580", "600", "720"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon has the ability Multiscale?",
+    "correctAnswer": "Both Dragonite and Lugia",
+    "incorrectAnswers": ["Salamence", "Dragonite only", "Lugia only"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What move always goes first and raises Attack/Speed but lowers Defence?",
+    "correctAnswer": "Shell Smash",
+    "incorrectAnswers": ["Extreme Speed", "Quick Attack", "Dragon Dance"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many regions can you visit in Pokemon Gold and Silver?",
+    "correctAnswer": "2",
+    "incorrectAnswers": ["1", "3", "4"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the only Pokemon that can learn Dragon Ascent?",
+    "correctAnswer": "Rayquaza",
+    "incorrectAnswers": ["Salamence", "Garchomp", "Dragonite"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon has the ability 'Protean' that changes its type to match the move it uses?",
+    "correctAnswer": "Greninja",
+    "incorrectAnswers": ["Kecleon", "Zoroark", "Ditto"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Gigantamax form of Duraludon compared to?",
+    "correctAnswer": "A skyscraper",
+    "incorrectAnswers": ["A tower", "A castle", "A cannon"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the main legendary Pokemon of Pokemon X?",
+    "correctAnswer": "Xerneas",
+    "incorrectAnswers": ["Yveltal", "Zygarde", "Diancie"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What type combination is Alolan Ninetales?",
+    "correctAnswer": "Ice/Fairy",
+    "incorrectAnswers": ["Fire/Fairy", "Ice/Psychic", "Ice"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon can produce an egg with any other Pokemon?",
+    "correctAnswer": "Ditto",
+    "incorrectAnswers": ["Manaphy", "Both Ditto and Manaphy", "Only same species"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the signature ability of Wishiwashi that lets it form a school?",
+    "correctAnswer": "Schooling",
+    "incorrectAnswers": ["Swarm", "Power Construct", "Battle Bond"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the base stat total of Mega Rayquaza?",
+    "correctAnswer": "780",
+    "incorrectAnswers": ["700", "720", "760"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "In competitive Pokemon, what is the maximum total EVs a Pokemon can have?",
+    "correctAnswer": "510",
+    "incorrectAnswers": ["252", "508", "600"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What type does the move 'Freeze-Dry' deal super effective damage against despite being Ice-type?",
+    "correctAnswer": "Water",
+    "incorrectAnswers": ["Fire", "Ground", "Grass"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon changes type based on the weather when it has the ability Forecast?",
+    "correctAnswer": "Castform",
+    "incorrectAnswers": ["Rotom", "Arceus", "Cherrim"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was Ash's first rival?",
+    "correctAnswer": "Gary",
+    "incorrectAnswers": ["Blue", "Paul", "Trip"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the move that always results in the user fainting?",
+    "correctAnswer": "All of Self-Destruct, Explosion, and Memento",
+    "incorrectAnswers": ["Self-Destruct only", "Explosion only", "Memento only"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Dragon-type move lowers the user's Special Attack by two stages?",
+    "correctAnswer": "Draco Meteor",
+    "incorrectAnswers": ["Dragon Pulse", "Dragon Claw", "Outrage"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What item changes Giratina into its Origin Forme?",
+    "correctAnswer": "Griseous Orb",
+    "incorrectAnswers": ["Lustrous Orb", "Adamant Orb", "Platinum Orb"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Pokemon is known for having the highest base HP stat?",
+    "correctAnswer": "Blissey",
+    "incorrectAnswers": ["Snorlax", "Wailord", "Chansey"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What type combination is Mimikyu?",
+    "correctAnswer": "Ghost/Fairy",
+    "incorrectAnswers": ["Ghost/Normal", "Fairy/Dark", "Ghost/Dark"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What move bypasses the ability Substitute?",
+    "correctAnswer": "Hyper Voice",
+    "incorrectAnswers": ["Shadow Ball", "Thunderbolt", "Earthquake"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What makes Sableye and Spiritomb vulnerable since Gen VI?",
+    "correctAnswer": "Fairy type was added",
+    "incorrectAnswers": ["Scrappy ability", "Mold Breaker ability", "New moves were added"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the 'Paradox Pokemon' concept introduced in?",
+    "correctAnswer": "Generation IX",
+    "incorrectAnswers": ["Generation VII", "Generation VIII", "Generation VI"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Ice-type Eeveelution called?",
+    "correctAnswer": "Glaceon",
+    "incorrectAnswers": ["Froslass", "Avalugg", "Cryogonal"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What move does Smeargle use to copy any other move?",
+    "correctAnswer": "Sketch",
+    "incorrectAnswers": ["Mimic", "Transform", "Copy"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What type combination is Hisuian Zoroark?",
+    "correctAnswer": "Normal/Ghost",
+    "incorrectAnswers": ["Dark/Ghost", "Dark/Fairy", "Ghost/Fairy"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which Pokemon has the ability 'Imposter' that automatically transforms it?",
+    "correctAnswer": "Ditto",
+    "incorrectAnswers": ["Mew", "Smeargle", "Zoroark"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which Eeveelution does NOT exist?",
+    "correctAnswer": "There is no Steel Eeveelution",
+    "incorrectAnswers": ["Ironeon", "Steeleon", "Magneon"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the total number of Pokemon across all generations as of Generation IX?",
+    "correctAnswer": "Around 1000",
+    "incorrectAnswers": ["Around 800", "Around 900", "Around 1100"],
+    "difficulty": "hard"
+  }
+]

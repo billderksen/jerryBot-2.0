@@ -2,31 +2,72 @@ import axios from 'axios';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Configurable runtime settings
+let defaultModel = 'openai/gpt-4o';
+let systemPrompt = 'You are a concise assistant for a Discord bot. Keep answers brief and under 1800 characters so they fit in one reply. Use tight bullet points when helpful. Only go long if the user explicitly asks for a long or detailed answer.';
+let maxTokens = 800;
+
+/**
+ * Get current chat configuration
+ * @returns {{model: string, systemPrompt: string, maxTokens: number}}
+ */
+export function getChatConfig() {
+  return { model: defaultModel, systemPrompt, maxTokens };
+}
+
+/**
+ * Set the default model
+ * @param {string} model - Model identifier
+ */
+export function setChatModel(model) {
+  defaultModel = model;
+}
+
+/**
+ * Set the system prompt
+ * @param {string} prompt - System prompt text
+ */
+export function setChatSystemPrompt(prompt) {
+  systemPrompt = prompt;
+}
+
+/**
+ * Set max tokens
+ * @param {number} tokens - Maximum tokens for response
+ */
+export function setChatMaxTokens(tokens) {
+  maxTokens = tokens;
+}
+
 /**
  * Send a chat message to OpenRouter API
  * @param {string} message - The user's message
  * @param {string} apiKey - OpenRouter API key
- * @param {string} model - Model to use (default: openai/gpt-4o)
+ * @param {string} model - Model to use (default: uses defaultModel)
+ * @param {Array<{role: string, content: string}>} [conversationHistory] - Previous conversation turns for multi-turn chat
  * @returns {Promise<string>} - The AI's response
  */
-export async function chatWithAI(message, apiKey, model = 'openai/gpt-4o') {
+export async function chatWithAI(message, apiKey, model = null, conversationHistory = null) {
   try {
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ];
+
+    if (conversationHistory && conversationHistory.length > 0) {
+      messages.push(...conversationHistory);
+    }
+
+    messages.push({ role: 'user', content: message });
+
     const response = await axios.post(
       OPENROUTER_API_URL,
       {
-        model: model,
-        // Nudge the model to keep answers short enough for one Discord message
-        max_tokens: 800,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a concise assistant for a Discord bot. Keep answers brief and under 1800 characters so they fit in one reply. Use tight bullet points when helpful. Only go long if the user explicitly asks for a long or detailed answer.'
-          },
-          {
-            role: 'user',
-            content: message
-          }
-        ]
+        model: model || defaultModel,
+        max_tokens: maxTokens,
+        messages
       },
       {
         headers: {

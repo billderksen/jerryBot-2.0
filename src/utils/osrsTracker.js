@@ -53,7 +53,7 @@ function delay(ms) {
 
 function getRequestDelay() {
   const playerCount = trackerData.trackedPlayers.length;
-  const totalRequests = playerCount * 4; // 1 detail + 3 gain periods
+  const totalRequests = playerCount * 5; // 1 update POST + 1 detail fallback + 3 gain periods
   if (totalRequests <= 20) return BASE_REQUEST_DELAY_MS;
   // Scale delay to stay under 20 req/60s
   return Math.ceil(60000 / totalRequests) + 100;
@@ -66,6 +66,18 @@ async function womFetch(path) {
   });
   if (!response.ok) {
     throw new Error(`WOM API ${response.status}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function womPost(path) {
+  const url = `${WOM_BASE}${path}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'User-Agent': 'JerryBot/2.0' }
+  });
+  if (!response.ok) {
+    throw new Error(`WOM API POST ${response.status}: ${response.statusText}`);
   }
   return response.json();
 }
@@ -169,18 +181,34 @@ async function refreshAllPlayers() {
 
   for (const playerId of playerIds) {
     try {
-      const player = await womFetch(`/players/id/${playerId}`);
-      trackerData.players[playerId] = extractPlayerData(player);
+      // First, get the player's username from cached data or fetch it
+      let username = trackerData.players[playerId]?.username;
+      if (!username) {
+        const playerInfo = await womFetch(`/players/id/${playerId}`);
+        username = playerInfo.username;
+        await delay(requestDelay);
+      }
+
+      // POST to update the player on WOM (pulls fresh stats from OSRS hiscores)
+      try {
+        const updated = await womPost(`/players/${encodeURIComponent(username)}`);
+        trackerData.players[playerId] = extractPlayerData(updated);
+      } catch (updateError) {
+        // Update may fail due to rate limits (429) or cooldown — fall back to GET
+        console.warn(`[OSRS Tracker] Update POST failed for ${username}: ${updateError.message}, falling back to GET`);
+        const player = await womFetch(`/players/id/${playerId}`);
+        trackerData.players[playerId] = extractPlayerData(player);
+      }
       await delay(requestDelay);
 
-      const username = encodeURIComponent(player.username);
+      const encodedName = encodeURIComponent(username);
       for (const period of ['day', 'week', 'month']) {
         try {
-          const gains = await womFetch(`/players/${username}/gained?period=${period}`);
+          const gains = await womFetch(`/players/${encodedName}/gained?period=${period}`);
           if (!trackerData.gains[playerId]) trackerData.gains[playerId] = {};
           trackerData.gains[playerId][period] = extractGainsData(gains);
         } catch (error) {
-          console.error(`[OSRS Tracker] Error fetching ${period} gains for ${player.displayName}:`, error.message);
+          console.error(`[OSRS Tracker] Error fetching ${period} gains for ${username}:`, error.message);
         }
         await delay(requestDelay);
       }

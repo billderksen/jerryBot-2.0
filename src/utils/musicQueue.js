@@ -46,6 +46,15 @@ if (systemYtDlpPath) {
   console.log('Or: sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp');
   ytDlpExec = ytDlpPkg;
 }
+// YouTube cookies for authenticated access (improves radio variety, age-gated content, etc.)
+// YOUTUBE_COOKIES_BROWSER=firefox  → extracts cookies from browser at runtime (simplest)
+// YOUTUBE_COOKIES=path/to/file.txt → uses a Netscape-format cookies file
+const ytCookieOpts = process.env.YOUTUBE_COOKIES_BROWSER
+  ? { cookiesFromBrowser: process.env.YOUTUBE_COOKIES_BROWSER }
+  : process.env.YOUTUBE_COOKIES && existsSync(process.env.YOUTUBE_COOKIES)
+    ? { cookies: process.env.YOUTUBE_COOKIES }
+    : {};
+
 // (moved up)
 import ffmpegStatic from 'ffmpeg-static';
 import { tmpdir } from 'os';
@@ -293,7 +302,25 @@ export function isRadioEnabled() {
   return globalSettings.radioEnabled;
 }
 
+// Export getter for music settings
+export function getMusicSettings() {
+  return {
+    loopMode: globalSettings.loopMode,
+    is24_7: globalSettings.is24_7,
+    radioEnabled: globalSettings.radioEnabled
+  };
+}
+
 // Player settings persistence
+const defaultMixerFilters = {
+  bass: 0, mid: 0, treble: 0, speed: 1.0,
+  karaoke: false,
+  eightD: false, eightDRate: 0.15,
+  reverb: 0,
+  compressor: false,
+  flanger: false
+};
+
 function loadSettings() {
   try {
     if (existsSync(SETTINGS_FILE)) {
@@ -306,13 +333,14 @@ function loadSettings() {
         loopMode: data.loopMode || 'off',
         is24_7: data.is24_7 || false,
         sleepEndTime: data.sleepEndTime || null,
-        radioEnabled: data.radioEnabled || false
+        radioEnabled: data.radioEnabled || false,
+        mixerFilters: { ...defaultMixerFilters, ...(data.mixerFilters || {}) }
       };
     }
   } catch (error) {
     console.error('Error loading settings:', error);
   }
-  return { loopMode: 'off', is24_7: false, sleepEndTime: null, radioEnabled: false };
+  return { loopMode: 'off', is24_7: false, sleepEndTime: null, radioEnabled: false, mixerFilters: { ...defaultMixerFilters } };
 }
 
 function saveSettings() {
@@ -325,6 +353,30 @@ function saveSettings() {
   } catch (error) {
     console.error('Error saving settings:', error);
   }
+}
+
+function buildFilterChain() {
+  const filters = ['aresample=resampler=soxr'];
+  const m = globalSettings.mixerFilters;
+
+  if (m.bass !== 0) filters.push(`bass=g=${m.bass}`);
+  if (m.mid !== 0) filters.push(`equalizer=f=1000:width_type=o:width=1:g=${m.mid}`);
+  if (m.treble !== 0) filters.push(`treble=g=${m.treble}`);
+  if (m.compressor) filters.push('acompressor=threshold=0.089:ratio=8:attack=5:release=50:makeup=2');
+  if (m.karaoke) filters.push('pan=stereo|c0=c0-c1|c1=c1-c0');
+  if (m.flanger) filters.push('flanger=delay=3:depth=4:speed=0.5:shape=sinusoidal');
+  if (m.reverb > 0) {
+    const d = m.reverb / 100;
+    filters.push(`aecho=0.8:0.88:60|120|180:${(d * 0.4).toFixed(2)}|${(d * 0.3).toFixed(2)}|${(d * 0.2).toFixed(2)}`);
+  }
+  if (m.eightD) filters.push(`apulsator=mode=sine:hz=${m.eightDRate || 0.15}:amount=1`);
+
+  if (m.speed !== 1.0) {
+    filters.push(`asetrate=48000*${m.speed}`);
+    filters.push('aresample=48000');
+  }
+
+  return filters.join(',');
 }
 
 // Global settings (shared across all clients)
@@ -399,6 +451,51 @@ export function cancelSleepTimer() {
   saveSettings();
   console.log('Sleep timer cancelled');
   broadcastState();
+}
+
+export function applyMixerFilters(newFilters) {
+  const firstQueue = queues.values().next().value;
+  if (firstQueue) {
+    return firstQueue.applyFilters(newFilters);
+  }
+  // No active queue — save settings so they apply to next song
+  clampMixerFilters(newFilters);
+  saveSettings();
+  broadcastState();
+  return true;
+}
+
+function clampMixerFilters(newFilters) {
+  if (newFilters.bass !== undefined) {
+    globalSettings.mixerFilters.bass = Math.max(-20, Math.min(20, Math.round(newFilters.bass)));
+  }
+  if (newFilters.mid !== undefined) {
+    globalSettings.mixerFilters.mid = Math.max(-20, Math.min(20, Math.round(newFilters.mid)));
+  }
+  if (newFilters.treble !== undefined) {
+    globalSettings.mixerFilters.treble = Math.max(-20, Math.min(20, Math.round(newFilters.treble)));
+  }
+  if (newFilters.speed !== undefined) {
+    globalSettings.mixerFilters.speed = Math.max(0.5, Math.min(2.0, newFilters.speed));
+  }
+  if (newFilters.karaoke !== undefined) {
+    globalSettings.mixerFilters.karaoke = !!newFilters.karaoke;
+  }
+  if (newFilters.eightD !== undefined) {
+    globalSettings.mixerFilters.eightD = !!newFilters.eightD;
+  }
+  if (newFilters.eightDRate !== undefined) {
+    globalSettings.mixerFilters.eightDRate = Math.max(0.05, Math.min(0.5, newFilters.eightDRate));
+  }
+  if (newFilters.reverb !== undefined) {
+    globalSettings.mixerFilters.reverb = Math.max(0, Math.min(100, Math.round(newFilters.reverb)));
+  }
+  if (newFilters.compressor !== undefined) {
+    globalSettings.mixerFilters.compressor = !!newFilters.compressor;
+  }
+  if (newFilters.flanger !== undefined) {
+    globalSettings.mixerFilters.flanger = !!newFilters.flanger;
+  }
 }
 
 // Export getter for recently played (used by web server for initial state)
@@ -508,37 +605,77 @@ export function triggerStateBroadcast() {
   broadcastState();
 }
 
+// Periodic state broadcast for Watch Together sync
+let positionBroadcastInterval = null;
+
+function startPositionBroadcast() {
+  if (positionBroadcastInterval) return;
+  positionBroadcastInterval = setInterval(() => {
+    const firstQueue = queues.values().next().value;
+    if (firstQueue && firstQueue.isPlaying && firstQueue.songStartTime &&
+        firstQueue.player.state.status !== AudioPlayerStatus.Paused) {
+      broadcastState();
+    } else {
+      stopPositionBroadcast();
+    }
+  }, 1000);
+}
+
+function stopPositionBroadcast() {
+  if (positionBroadcastInterval) {
+    clearInterval(positionBroadcastInterval);
+    positionBroadcastInterval = null;
+  }
+}
+
 function broadcastState(seekPosition = null) {
   if (!webUpdateCallback) return;
-  
+
   // Get first active queue (for now, support single guild)
   const firstQueue = queues.values().next().value;
-  
+
   if (firstQueue) {
     // Debug: log current song thumbnail
     if (firstQueue.currentSong) {
       console.log('Current song thumbnail:', firstQueue.currentSong.thumbnail || 'NO THUMBNAIL');
+    }
+    // Calculate current playback position in seconds
+    let position = 0;
+    const isPaused = firstQueue.player.state.status === AudioPlayerStatus.Paused;
+    if (firstQueue.songStartTime) {
+      const speed = globalSettings.mixerFilters?.speed || 1.0;
+      position = (Date.now() - firstQueue.songStartTime) / 1000 * speed;
     }
     webUpdateCallback({
       currentSong: firstQueue.currentSong,
       queue: firstQueue.songs,
       recentlyPlayed: globalRecentlyPlayed,
       isPlaying: firstQueue.isPlaying,
-      isPaused: firstQueue.player.state.status === AudioPlayerStatus.Paused,
+      isPaused: isPaused,
       volume: firstQueue.volume,
       guildId: firstQueue.guildId,
       guildName: firstQueue.guildName,
       guildIcon: firstQueue.guildIcon,
       voiceChannelName: firstQueue.voiceChannelName,
       seekPosition: seekPosition,
+      position: position,
       isCached: !!(firstQueue.cachedAudioPath && existsSync(firstQueue.cachedAudioPath)),
       songStartTime: firstQueue.songStartTime,
       loopMode: globalSettings.loopMode,
       is24_7: globalSettings.is24_7,
       sleepEndTime: globalSettings.sleepEndTime,
-      radioEnabled: globalSettings.radioEnabled
+      radioEnabled: globalSettings.radioEnabled,
+      mixerFilters: globalSettings.mixerFilters
     });
+
+    // Start periodic broadcast when playing
+    if (firstQueue.isPlaying && !isPaused) {
+      startPositionBroadcast();
+    } else {
+      stopPositionBroadcast();
+    }
   } else {
+    stopPositionBroadcast();
     webUpdateCallback({
       currentSong: null,
       queue: [],
@@ -547,10 +684,12 @@ function broadcastState(seekPosition = null) {
       isPaused: false,
       volume: 1.0,
       guildId: null,
+      position: 0,
       loopMode: globalSettings.loopMode,
       is24_7: globalSettings.is24_7,
       sleepEndTime: globalSettings.sleepEndTime,
-      radioEnabled: globalSettings.radioEnabled
+      radioEnabled: globalSettings.radioEnabled,
+      mixerFilters: globalSettings.mixerFilters
     });
   }
 }
@@ -597,8 +736,9 @@ export class MusicQueue {
       
       // Set song start time when actually playing (accounting for seek offset)
       if (!this.songStartTime) {
-        this.songStartTime = Date.now() - (this.seekOffset * 1000);
-        console.log('Song start time set:', new Date(this.songStartTime), 'with offset:', this.seekOffset);
+        const speed = globalSettings.mixerFilters?.speed || 1.0;
+        this.songStartTime = Date.now() - (this.seekOffset / speed * 1000);
+        console.log('Song start time set:', new Date(this.songStartTime), 'with offset:', this.seekOffset, 'at speed:', speed);
       }
       
       broadcastState();
@@ -769,6 +909,7 @@ export class MusicQueue {
       // Format priority: opus (best quality) > m4a/aac > webm/vorbis > any audio > any format
       // Prefer 160kbps+ audio when available
       const result = await ytDlpExec(this.currentSong.url, {
+        ...ytCookieOpts,
         dumpSingleJson: true,
         noCheckCertificates: true,
         noWarnings: true,
@@ -816,7 +957,7 @@ export class MusicQueue {
       '-i', audioUrl,
       '-analyzeduration', '0',
       '-loglevel', '0',
-      '-af', 'aresample=resampler=soxr', // High quality resampling
+      '-af', buildFilterChain(),
       '-f', 's16le',
       '-ar', '48000', // Discord's native sample rate
       '-ac', '2',     // Stereo
@@ -866,6 +1007,7 @@ export class MusicQueue {
       // Cache at highest quality opus (quality 0 = best, ~256kbps VBR)
       // Use same format preference as streaming for consistency
       await ytDlpExec(this.currentSong.url, {
+        ...ytCookieOpts,
         output: cachePath,
         extractAudio: true,
         audioFormat: 'opus',
@@ -915,7 +1057,7 @@ export class MusicQueue {
       '-i', this.cachedAudioPath,
       '-analyzeduration', '0',
       '-loglevel', '0',
-      '-af', 'aresample=resampler=soxr', // High quality resampling
+      '-af', buildFilterChain(),
       '-f', 's16le',
       '-ar', '48000', // Discord's native sample rate
       '-ac', '2',     // Stereo
@@ -1123,6 +1265,51 @@ export class MusicQueue {
     
     // Broadcast state with seek position
     broadcastState(seconds);
+    return true;
+  }
+
+  // Apply mixer filter changes and re-spawn FFmpeg at current position
+  async applyFilters(newFilters) {
+    // Calculate current position BEFORE updating speed
+    // songStartTime is encoded as: start - seekOffset / speed * 1000
+    // So: (now - songStartTime) / 1000 * speed = audio position
+    const oldSpeed = globalSettings.mixerFilters.speed || 1.0;
+    let currentPosition = 0;
+    if (this.songStartTime) {
+      const wallElapsed = (Date.now() - this.songStartTime) / 1000;
+      currentPosition = wallElapsed * oldSpeed;
+    }
+
+    clampMixerFilters(newFilters);
+
+    saveSettings();
+
+    if (!this.currentSong || !this.connection) {
+      broadcastState();
+      return true;
+    }
+
+    console.log(`[Mixer] Applying filters at position ${currentPosition.toFixed(1)}s:`, globalSettings.mixerFilters);
+
+    this.isSeeking = true;
+    this.songStartTime = null;
+    const oldFFmpeg = this.currentFFmpeg;
+
+    if (this.cachedAudioPath && existsSync(this.cachedAudioPath)) {
+      this.playFromCache(currentPosition);
+    } else if (this.currentAudioUrl) {
+      this.playFromUrl(this.currentAudioUrl, currentPosition);
+    } else {
+      this.isSeeking = false;
+      broadcastState();
+      return false;
+    }
+
+    if (oldFFmpeg) {
+      oldFFmpeg.kill();
+    }
+
+    broadcastState(currentPosition);
     return true;
   }
 

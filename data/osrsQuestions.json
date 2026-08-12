@@ -1,0 +1,902 @@
+[
+  {
+    "question": "What is the maximum combat level in OSRS?",
+    "correctAnswer": "126",
+    "incorrectAnswers": ["99", "120", "138"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the first quest most players complete in Lumbridge?",
+    "correctAnswer": "Cook's Assistant",
+    "incorrectAnswers": ["Dragon Slayer", "Sheep Shearer", "Imp Catcher"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What Woodcutting level do you need to cut a Yew tree?",
+    "correctAnswer": "60",
+    "incorrectAnswers": ["50", "55", "65"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the strongest free-to-play melee weapon?",
+    "correctAnswer": "Rune scimitar",
+    "incorrectAnswers": ["Adamant scimitar", "Rune longsword", "Rune 2h sword"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where do players typically train Cooking early on?",
+    "correctAnswer": "Lumbridge Castle",
+    "incorrectAnswers": ["Varrock", "Falador", "Edgeville"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What skill lets you create potions?",
+    "correctAnswer": "Herblore",
+    "incorrectAnswers": ["Crafting", "Cooking", "Fletching"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What colour is a party hat from the rarest Christmas cracker drop?",
+    "correctAnswer": "All colours exist",
+    "incorrectAnswers": ["Red", "Green", "Blue"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the currency in OSRS?",
+    "correctAnswer": "Gold pieces (GP)",
+    "incorrectAnswers": ["RuneCoins", "Credits", "Tokens"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What monster drops bones commonly used for Prayer training?",
+    "correctAnswer": "Green dragons",
+    "incorrectAnswers": ["Chickens", "Cows", "Goblins"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How many skills are there in OSRS?",
+    "correctAnswer": "23",
+    "incorrectAnswers": ["20", "21", "25"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the tutorial area for new players?",
+    "correctAnswer": "Tutorial Island",
+    "incorrectAnswers": ["Lumbridge", "Varrock", "Starter Island"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What monster must you defeat to wear a Rune platebody?",
+    "correctAnswer": "Elvarg",
+    "incorrectAnswers": ["King Black Dragon", "Jad", "Kalphite Queen"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the maximum level for any skill?",
+    "correctAnswer": "99",
+    "incorrectAnswers": ["100", "120", "200"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where is the Grand Exchange located?",
+    "correctAnswer": "Varrock",
+    "incorrectAnswers": ["Falador", "Lumbridge", "Edgeville"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What prayer protects against melee attacks?",
+    "correctAnswer": "Protect from Melee",
+    "incorrectAnswers": ["Protect from Missiles", "Protect from Magic", "Redemption"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of weapon is the Abyssal whip?",
+    "correctAnswer": "Slash",
+    "incorrectAnswers": ["Stab", "Crush", "Ranged"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What Slayer level is required to kill Abyssal demons?",
+    "correctAnswer": "85",
+    "incorrectAnswers": ["72", "80", "90"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Wilderness?",
+    "correctAnswer": "A PvP area north of Edgeville",
+    "incorrectAnswers": ["A forest near Varrock", "A dungeon", "A minigame"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which god does Saradomin represent?",
+    "correctAnswer": "Order and Light",
+    "incorrectAnswers": ["Chaos", "Balance", "Darkness"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do you fish at level 1?",
+    "correctAnswer": "Shrimp",
+    "incorrectAnswers": ["Trout", "Sardines", "Anchovies"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which city is known for its castle and cows nearby?",
+    "correctAnswer": "Lumbridge",
+    "incorrectAnswers": ["Varrock", "Falador", "Ardougne"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does the Farming skill let you do?",
+    "correctAnswer": "Grow crops and herbs",
+    "incorrectAnswers": ["Cook food", "Raise animals", "Craft armour"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the desert city south of Al Kharid?",
+    "correctAnswer": "Pollnivneach",
+    "incorrectAnswers": ["Sophanem", "Nardah", "Menaphos"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do you need to enter Morytania?",
+    "correctAnswer": "Completion of Priest in Peril",
+    "incorrectAnswers": ["A silver sickle", "A dramen staff", "A holy symbol"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the highest tier of standard metal armour?",
+    "correctAnswer": "Rune",
+    "incorrectAnswers": ["Adamant", "Dragon", "Barrows"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where can you smelt bars?",
+    "correctAnswer": "A furnace",
+    "incorrectAnswers": ["An anvil", "A forge", "A workbench"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Runecrafting skill used for?",
+    "correctAnswer": "Crafting runes",
+    "incorrectAnswers": ["Making armour", "Enchanting weapons", "Creating staffs"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do lobsters heal?",
+    "correctAnswer": "12 HP",
+    "incorrectAnswers": ["10 HP", "14 HP", "16 HP"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which minigame rewards you with the Fighter Torso?",
+    "correctAnswer": "Barbarian Assault",
+    "incorrectAnswers": ["Pest Control", "Castle Wars", "Soul Wars"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of logs do you burn at level 1 Firemaking?",
+    "correctAnswer": "Normal logs",
+    "incorrectAnswers": ["Oak", "Willow", "Any logs"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where is the Duel Arena located?",
+    "correctAnswer": "Al Kharid",
+    "incorrectAnswers": ["Varrock", "Lumbridge", "Falador"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does the Agility skill improve?",
+    "correctAnswer": "Run energy restoration",
+    "incorrectAnswers": ["Attack speed", "Defence", "Hit chance"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What level Mining do you need for Mithril ore?",
+    "correctAnswer": "55",
+    "incorrectAnswers": ["45", "50", "60"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which boss drops the Dragon Warhammer?",
+    "correctAnswer": "Lizardman Shaman",
+    "incorrectAnswers": ["General Graardor", "Vorkath", "Zulrah"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the fairy ring code format?",
+    "correctAnswer": "Three letters",
+    "incorrectAnswers": ["Two letters", "Four numbers", "Two numbers"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What type of rune is used for combat magic spells?",
+    "correctAnswer": "Chaos runes",
+    "incorrectAnswers": ["Nature runes", "Law runes", "Cosmic runes"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What item do you need to use fairy rings?",
+    "correctAnswer": "Dramen staff",
+    "incorrectAnswers": ["Lunar staff", "Staff of air", "Iban's staff"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the examine text of a raw chicken?",
+    "correctAnswer": "I need to cook this first",
+    "incorrectAnswers": ["It's raw chicken", "Yuck!", "Raw chicken"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do you need to enter the Champions' Guild?",
+    "correctAnswer": "32 Quest Points",
+    "incorrectAnswers": ["30 Quest Points", "25 Quest Points", "35 Quest Points"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Where is Bob's Axes shop?",
+    "correctAnswer": "Lumbridge",
+    "incorrectAnswers": ["Varrock", "Falador", "Edgeville"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which skill lets you make bows and arrows?",
+    "correctAnswer": "Fletching",
+    "incorrectAnswers": ["Crafting", "Smithing", "Woodcutting"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do you bury to train Prayer?",
+    "correctAnswer": "Bones",
+    "incorrectAnswers": ["Ashes", "Gems", "Runes"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What monster is found in the Stronghold of Security's first floor?",
+    "correctAnswer": "Minotaurs",
+    "incorrectAnswers": ["Giants", "Goblins", "Zombies"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What do you use to teleport to Varrock?",
+    "correctAnswer": "Air runes and law runes",
+    "incorrectAnswers": ["Air runes and fire runes", "Fire runes and law runes", "Water runes and law runes"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the Combat Triangle in OSRS?",
+    "correctAnswer": "Melee > Ranged > Magic > Melee",
+    "incorrectAnswers": ["Attack > Defence > Strength", "Stab > Slash > Crush", "Prayer > Combat > Skills"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What is the name of the bank in Lumbridge?",
+    "correctAnswer": "Lumbridge Castle bank",
+    "incorrectAnswers": ["Bank of Lumbridge", "There is no bank in Lumbridge", "Lumbridge General Store"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What level Ranged do you need to wear green d'hide?",
+    "correctAnswer": "40",
+    "incorrectAnswers": ["30", "35", "45"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "Which NPC sells capes of accomplishment?",
+    "correctAnswer": "Various skill masters",
+    "incorrectAnswers": ["The quest giver", "The Grand Exchange clerk", "Hans"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "How do you make a gold ring?",
+    "correctAnswer": "Use a gold bar on a furnace with a ring mould",
+    "incorrectAnswers": ["Use a gold bar on an anvil", "Use Crafting on a gold bar", "Smith it at a forge"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What does the acronym 'GE' stand for?",
+    "correctAnswer": "Grand Exchange",
+    "incorrectAnswers": ["Gold Exchange", "General Exchange", "Great Exchange"],
+    "difficulty": "easy"
+  },
+  {
+    "question": "What Runecrafting level is required to craft Nature runes?",
+    "correctAnswer": "44",
+    "incorrectAnswers": ["40", "48", "50"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the ship you repair in Dragon Slayer?",
+    "correctAnswer": "The Lady Lumbridge",
+    "incorrectAnswers": ["The Port Sarim Clipper", "The Elf", "The Wind Rider"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What combat level is the King Black Dragon?",
+    "correctAnswer": "276",
+    "incorrectAnswers": ["224", "256", "318"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the weight reduction of a full Graceful outfit?",
+    "correctAnswer": "-25 kg",
+    "incorrectAnswers": ["-20 kg", "-28 kg", "-30 kg"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which Slayer master requires combat level 100 to use?",
+    "correctAnswer": "Duradel",
+    "incorrectAnswers": ["Nieve", "Steve", "Konar"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What boss drops the Toxic blowpipe?",
+    "correctAnswer": "Zulrah",
+    "incorrectAnswers": ["Vorkath", "Cerberus", "Kraken"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Where is the Wizard's Guild located?",
+    "correctAnswer": "Yanille",
+    "incorrectAnswers": ["Seers' Village", "Falador", "Varrock"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What quest unlocks the Barrows Gloves?",
+    "correctAnswer": "Recipe for Disaster",
+    "incorrectAnswers": ["Dragon Slayer II", "Monkey Madness II", "Song of the Elves"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many floors does the Stronghold of Security have?",
+    "correctAnswer": "4",
+    "incorrectAnswers": ["3", "5", "6"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the BiS melee cape?",
+    "correctAnswer": "Infernal cape",
+    "incorrectAnswers": ["Fire cape", "Max cape", "Mythical cape"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Who rules Varrock?",
+    "correctAnswer": "King Roald",
+    "incorrectAnswers": ["King Lathas", "King Narnode", "King Arthur"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What boss do you fight to get the Fire cape?",
+    "correctAnswer": "Jad",
+    "incorrectAnswers": ["Zuk", "Galvek", "Vorkath"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which quest is required to use the Elf city of Prifddinas?",
+    "correctAnswer": "Song of the Elves",
+    "incorrectAnswers": ["Regicide", "Mourning's End Part II", "Underground Pass"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Herblore level is needed to make a Super Combat potion?",
+    "correctAnswer": "90",
+    "incorrectAnswers": ["85", "88", "96"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What drops the Dragon pickaxe?",
+    "correctAnswer": "Wilderness bosses (Callisto, Venenatis, Vet'ion)",
+    "incorrectAnswers": ["King Black Dragon", "Cerberus", "Dagannoth Kings"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the maximum hit of the special attack from the Dragon Dagger?",
+    "correctAnswer": "Two hits",
+    "incorrectAnswers": ["One big hit", "Three rapid hits", "Four hits"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Prayer level is required for Piety?",
+    "correctAnswer": "70",
+    "incorrectAnswers": ["60", "65", "74"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What quest gives access to the Lunar spellbook?",
+    "correctAnswer": "Lunar Diplomacy",
+    "incorrectAnswers": ["Desert Treasure", "Dream Mentor", "The Fremennik Trials"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which city is the capital of the Fremennik province?",
+    "correctAnswer": "Rellekka",
+    "incorrectAnswers": ["Jatizso", "Neitiznot", "Waterbirth"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the examine text for a bronze dagger?",
+    "correctAnswer": "Short but pointy",
+    "incorrectAnswers": ["A small sharp dagger", "Not very strong", "A basic weapon"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "How many quest points are needed for the Quest Point Cape?",
+    "correctAnswer": "It varies as quests are added",
+    "incorrectAnswers": ["280", "290", "300"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What boss drops Bandos armour?",
+    "correctAnswer": "General Graardor",
+    "incorrectAnswers": ["Commander Zilyana", "K'ril Tsutsaroth", "Kree'arra"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the fastest way to travel to Edgeville?",
+    "correctAnswer": "Amulet of Glory",
+    "incorrectAnswers": ["Walk from Varrock", "Fairy ring", "Canoe"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Agility level is required for the Ardougne rooftop course?",
+    "correctAnswer": "90",
+    "incorrectAnswers": ["80", "85", "87"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which metal is between Steel and Mithril?",
+    "correctAnswer": "There is no metal between them",
+    "incorrectAnswers": ["Iron", "Black", "Silver"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What God Wars boss drops the Armadyl Crossbow?",
+    "correctAnswer": "Commander Zilyana",
+    "incorrectAnswers": ["General Graardor", "Kree'arra", "K'ril Tsutsaroth"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What does the Ava's Assembler do?",
+    "correctAnswer": "Automatically retrieves ammunition",
+    "incorrectAnswers": ["Picks up your melee drops", "Doubles your loot", "Increases attack speed"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What quest unlocks Ancient Magicks?",
+    "correctAnswer": "Desert Treasure",
+    "incorrectAnswers": ["Lunar Diplomacy", "Dream Mentor", "The Temple at Senntisten"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Corporeal Beast weak to?",
+    "correctAnswer": "Stab attacks",
+    "incorrectAnswers": ["Slash attacks", "Magic", "Ranged"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What herb is used to make Prayer potions?",
+    "correctAnswer": "Ranarr weed",
+    "incorrectAnswers": ["Tarromin", "Harralander", "Snapdragon"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Fishing level do you need to catch sharks?",
+    "correctAnswer": "76",
+    "incorrectAnswers": ["72", "80", "85"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Where do you start the Monkey Madness quest?",
+    "correctAnswer": "Gnome Stronghold",
+    "incorrectAnswers": ["Ardougne", "Karamja", "Ape Atoll"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Protection prayer drain rate mechanic?",
+    "correctAnswer": "Drain over time based on prayer bonus",
+    "incorrectAnswers": ["Constant drain", "Drain per hit taken", "Drain per prayer switch"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which boss drops Primordial, Pegasian, and Eternal crystals?",
+    "correctAnswer": "Cerberus",
+    "incorrectAnswers": ["Abyssal Sire", "Thermonuclear Smoke Devil", "Kraken"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the name of the bone that gives the most Prayer XP on a regular altar?",
+    "correctAnswer": "Superior dragon bones",
+    "incorrectAnswers": ["Dragon bones", "Dagannoth bones", "Wyvern bones"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What level Thieving do you need to pickpocket Master Farmers?",
+    "correctAnswer": "38",
+    "incorrectAnswers": ["28", "30", "45"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What does the Serpentine Helm do?",
+    "correctAnswer": "Both poison immunity and envenoms attackers",
+    "incorrectAnswers": ["Gives poison immunity", "Increases Ranged accuracy", "Envenoms attackers"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Where is Zulrah located?",
+    "correctAnswer": "Tirannwn",
+    "incorrectAnswers": ["Morytania", "Karamja", "Zeah"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What are the three combat styles for melee?",
+    "correctAnswer": "Stab, Slash, Crush",
+    "incorrectAnswers": ["Accurate, Aggressive, Defensive", "Attack, Strength, Defence", "Quick, Strong, Balanced"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is required to obtain a Trident of the Seas?",
+    "correctAnswer": "Killing Kraken",
+    "incorrectAnswers": ["Crafting level 80", "Buying from a shop", "Combining kraken tentacle with trident"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which boss drops the Draconic Visage (used for Dragonfire Shield)?",
+    "correctAnswer": "King Black Dragon",
+    "incorrectAnswers": ["Vorkath", "Any metal dragon", "Elvarg"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the Wilderness level that allows teleportation up to?",
+    "correctAnswer": "Level 30",
+    "incorrectAnswers": ["Level 20", "Level 25", "Level 35"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Which minigame rewards you with Void Knight armour?",
+    "correctAnswer": "Pest Control",
+    "incorrectAnswers": ["Barbarian Assault", "Castle Wars", "Soul Wars"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What does 'BIS' stand for in the OSRS community?",
+    "correctAnswer": "Best in Slot",
+    "incorrectAnswers": ["Best in Show", "Basic Item Setup", "Balanced Item Set"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the demon you kill in the quest Demon Slayer?",
+    "correctAnswer": "Delrith",
+    "incorrectAnswers": ["K'ril Tsutsaroth", "Agrith-Naar", "Skotizo"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What Smithing level is needed to make a Rune platebody?",
+    "correctAnswer": "99",
+    "incorrectAnswers": ["90", "92", "96"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "Where is the Farming Guild located?",
+    "correctAnswer": "Kourend",
+    "incorrectAnswers": ["Morytania", "Tirannwn", "Karamja"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What does a Ring of Recoil do?",
+    "correctAnswer": "Reflects 10% of damage taken",
+    "incorrectAnswers": ["Teleports you when low HP", "Boosts Defence", "Restores prayer"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What level do you need in all Fremennik Trials skills?",
+    "correctAnswer": "25",
+    "incorrectAnswers": ["30", "35", "40"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the max stack of an item in OSRS?",
+    "correctAnswer": "2,147,483,647",
+    "incorrectAnswers": ["999,999", "9,999,999", "Unlimited"],
+    "difficulty": "medium"
+  },
+  {
+    "question": "What is the base XP for cutting a Yew log?",
+    "correctAnswer": "175",
+    "incorrectAnswers": ["150", "162.5", "187.5"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the max HP of the Corporeal Beast?",
+    "correctAnswer": "2000",
+    "incorrectAnswers": ["1500", "2500", "3000"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the drop rate of a Dragon Chainbody from Dust Devils?",
+    "correctAnswer": "1/32,768",
+    "incorrectAnswers": ["1/16,384", "1/50,000", "1/65,536"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the first Grandmaster quest released in RuneScape?",
+    "correctAnswer": "While Guthix Sleeps",
+    "incorrectAnswers": ["Nomad's Requiem", "Dragon Slayer II", "Song of the Elves"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many bank spaces were available when OSRS first launched?",
+    "correctAnswer": "800",
+    "incorrectAnswers": ["400", "600", "1000"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What NPC runs the Warriors' Guild?",
+    "correctAnswer": "Harrallak Menarous",
+    "incorrectAnswers": ["Kamfreena", "Ghommal", "Shanomi"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What colour was Rune armour originally planned to be in RuneScape Classic?",
+    "correctAnswer": "Purple",
+    "incorrectAnswers": ["Blue", "White", "Red"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What item did Jagex drop as a joke on April 1st, 2012?",
+    "correctAnswer": "Green peahats",
+    "incorrectAnswers": ["Green partyhats", "Rubber chickens", "Cabbage capes"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the fairy ring code for the Kalphite Queen lair?",
+    "correctAnswer": "BIQ",
+    "incorrectAnswers": ["DLQ", "CKR", "AKQ"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What slayer item protects you from Cave Horrors?",
+    "correctAnswer": "Witchwood icon",
+    "incorrectAnswers": ["Nose peg", "Earmuffs", "Mirror shield"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the drop rate of the Twisted Bow from Chambers of Xeric?",
+    "correctAnswer": "Based on total points divided by 8,676",
+    "incorrectAnswers": ["1/34.5 per point", "1/8,676 per unique", "Approximately 1/34 per purple"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the examine text for a Rubber Chicken?",
+    "correctAnswer": "It's rubbery",
+    "incorrectAnswers": ["It's a rubber chicken", "Fun weapon", "A novelty weapon"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the maximum total level in OSRS?",
+    "correctAnswer": "2,277",
+    "incorrectAnswers": ["2,178", "2,376", "2,200"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How much XP is needed for level 99 in any skill?",
+    "correctAnswer": "13,034,431",
+    "incorrectAnswers": ["12,034,431", "14,034,431", "15,034,431"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What spell requires 94 Magic and is used for healing in PvP?",
+    "correctAnswer": "Vengeance",
+    "incorrectAnswers": ["Ice Barrage", "Blood Barrage", "Heal Other"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the maximum hit of the Dharok's set effect at 1 HP with max strength?",
+    "correctAnswer": "95+",
+    "incorrectAnswers": ["85+", "75+", "65+"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many quest points does Dragon Slayer II require?",
+    "correctAnswer": "200",
+    "incorrectAnswers": ["175", "205", "225"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What was the very first quest added to OSRS that wasn't in the 2007 backup?",
+    "correctAnswer": "Sleeping Giants",
+    "incorrectAnswers": ["The Giant Dwarf", "Dream Mentor", "A Kingdom Divided"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the only item that can be used to note items in your inventory?",
+    "correctAnswer": "There is no such item",
+    "incorrectAnswers": ["Looting bag", "Herb sack", "Bank"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the drop rate of a pet from the Kalphite Queen?",
+    "correctAnswer": "1/3,000",
+    "incorrectAnswers": ["1/2,000", "1/4,000", "1/5,000"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the prayer bonus of a full Proselyte armour set?",
+    "correctAnswer": "+23",
+    "incorrectAnswers": ["+17", "+21", "+25"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many rune essence can you mine before the rock depletes?",
+    "correctAnswer": "It never depletes",
+    "incorrectAnswers": ["28", "50", "100"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the NPC who teaches you to make a cannon?",
+    "correctAnswer": "Nulodion",
+    "incorrectAnswers": ["Captain Lawgof", "Dwarf Commander", "Rolad"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Which Treasure Trail reward is the rarest?",
+    "correctAnswer": "Third-age druidic",
+    "incorrectAnswers": ["3rd age pickaxe", "Bloodhound pet", "Ring of 3rd age"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What year did OSRS officially launch?",
+    "correctAnswer": "2013",
+    "incorrectAnswers": ["2012", "2014", "2015"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Agility shortcut requires level 87 and is used at the Corporeal Beast?",
+    "correctAnswer": "The cave entrance",
+    "incorrectAnswers": ["The stepping stone", "The wall squeeze", "None exists, 87 is not a shortcut level"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the prayer drain rate of Smite?",
+    "correctAnswer": "1 point per 1.8 seconds",
+    "incorrectAnswers": ["1 point per 0.6 seconds", "1 point per 1.2 seconds", "1 point per 3 seconds"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many charges does a Trident of the Seas hold at maximum?",
+    "correctAnswer": "2,500",
+    "incorrectAnswers": ["2,000", "5,000", "Unlimited (requires runes)"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Farming level required to grow a Spirit tree?",
+    "correctAnswer": "83",
+    "incorrectAnswers": ["75", "80", "85"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Jad attack style should you pray against when he raises his legs?",
+    "correctAnswer": "Ranged",
+    "incorrectAnswers": ["Magic", "Both", "Neither"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many Barrows brothers are there in OSRS?",
+    "correctAnswer": "6",
+    "incorrectAnswers": ["4", "5", "7"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What unlocks the ability to use the Bones to Peaches spell?",
+    "correctAnswer": "It's unlocked via the Mage Training Arena",
+    "incorrectAnswers": ["Recipe for Disaster", "Lunar Diplomacy", "The Fremennik Exiles"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the tick rate in OSRS?",
+    "correctAnswer": "0.6 seconds",
+    "incorrectAnswers": ["0.3 seconds", "0.5 seconds", "1.0 seconds"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How much does a max cash stack equal?",
+    "correctAnswer": "2.147 billion GP",
+    "incorrectAnswers": ["2.1 billion GP", "999 million GP", "1 billion GP"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the NPC who starts the quest Underground Pass?",
+    "correctAnswer": "King Lathas",
+    "incorrectAnswers": ["King Roald", "Elena", "Iorwerth"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Slayer level is required to kill a Thermonuclear Smoke Devil?",
+    "correctAnswer": "93",
+    "incorrectAnswers": ["87", "90", "95"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the Runecrafting level needed to double Cosmic runes?",
+    "correctAnswer": "59",
+    "incorrectAnswers": ["54", "64", "69"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many waves are there in the Inferno?",
+    "correctAnswer": "69",
+    "incorrectAnswers": ["63", "66", "72"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the highest single hit possible without any effects in OSRS PvM?",
+    "correctAnswer": "118",
+    "incorrectAnswers": ["80", "100", "150"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "Who is the NPC you talk to to start Recipe for Disaster?",
+    "correctAnswer": "The Cook",
+    "incorrectAnswers": ["Duke Horacio", "The Wise Old Man", "The Lumbridge Guide"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the drop rate of a Draconic Visage from Vorkath?",
+    "correctAnswer": "1/5,000",
+    "incorrectAnswers": ["1/2,000", "1/3,000", "1/10,000"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the teleportation spell that requires 96 Magic on the Lunar spellbook?",
+    "correctAnswer": "Spellbook Swap",
+    "incorrectAnswers": ["Ourania Teleport", "Fishing Guild Teleport", "Teleport to Target"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "How many Marks of Grace does a full Graceful outfit cost?",
+    "correctAnswer": "260",
+    "incorrectAnswers": ["330", "400", "500"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the combat level of TzKal-Zuk?",
+    "correctAnswer": "702",
+    "incorrectAnswers": ["1,400", "1,000", "850"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What boss has a Defence level of 0?",
+    "correctAnswer": "Wintertodt",
+    "incorrectAnswers": ["Giant Mole", "Vorkath", "Zulrah"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What Woodcutting level do you need for Redwood trees?",
+    "correctAnswer": "90",
+    "incorrectAnswers": ["85", "87", "92"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "In what year did the God Wars Dungeon originally release in RuneScape?",
+    "correctAnswer": "2007",
+    "incorrectAnswers": ["2005", "2006", "2008"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the name of the cat you get in the Gertrude's Cat quest?",
+    "correctAnswer": "You name it yourself",
+    "incorrectAnswers": ["Bob", "Gertrude's kitten", "It has no name"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the highest possible Runecrafting XP per hour through traditional training?",
+    "correctAnswer": "30k-40k",
+    "incorrectAnswers": ["20k-30k", "40k-50k", "50k-60k"],
+    "difficulty": "hard"
+  },
+  {
+    "question": "What is the first King of Great Kourend?",
+    "correctAnswer": "King Rada",
+    "incorrectAnswers": ["King Shayzien", "King Varlamore", "King Hosidius"],
+    "difficulty": "hard"
+  }
+]

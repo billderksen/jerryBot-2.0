@@ -208,7 +208,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
           await newState.disconnect();
           const generalChannel = newState.guild.channels.cache.get('1419789649873735680');
           if (generalChannel) {
-            generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door ${antiOffline.enabledBy}.`);
+            generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`);
           }
         } catch (e) {
           console.error('[AntiOffline] Voice kick error:', e.message);
@@ -336,7 +336,7 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
         await member.voice.disconnect();
         const generalChannel = newPresence.guild.channels.cache.get('1419789649873735680');
         if (generalChannel) {
-          generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door ${antiOffline.enabledBy}.`);
+          generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`);
         }
       } catch (e) {
         console.error('[AntiOffline] Presence kick error:', e.message);
@@ -433,6 +433,7 @@ client.once(Events.ClientReady, readyClient => {
 
   startWebServer();
 
+
   // Periodically refresh listeners to catch any nickname changes (every 30 seconds)
   setInterval(() => {
     broadcastListeners();
@@ -458,7 +459,7 @@ client.on(Events.MessageCreate, async message => {
     if (!presence || presence.status === 'offline') {
       try {
         await message.delete();
-        await message.channel.send(`<@${message.author.id}> De Discord staat in anti offline modus, aangezet door ${antiOffline.enabledBy}.`);
+        await message.channel.send(`<@${message.author.id}> De Discord staat in anti offline modus, aangezet door <@183235848794406914>.`);
       } catch (e) {
         console.error('[AntiOffline] Error:', e.message);
       }
