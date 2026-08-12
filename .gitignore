@@ -3,24 +3,18 @@ node_modules/
 *.log
 .DS_Store
 
-# Session data (contains sensitive auth tokens)
-data/sessions/
+# Data directory: runtime + user data is never tracked.
+# Only curated content (question banks, song/word lists) is allowlisted.
+data/*
+!data/hitsterSongs.json
+!data/pictionaryWords.json
+!data/lotrQuestions.json
+!data/osrsQuestions.json
+!data/pokemonQuestions.json
+!data/wowQuestions.json
 
-# Runtime data (user-specific, changes frequently)
-data/recentlyPlayed.json
-data/listeningStats.json
-data/playerSettings.json
-
-# Game leaderboards (user-generated stats)
-data/pestenLeaderboard.json
-data/hitsterLeaderboard.json
-data/pictionaryLeaderboard.json
-
-# Game runtime data
-data/pictionaryWords.json
-
-# OSRS tracker cache (regenerates from WOM API)
-data/osrsTracker.json
+# Audit report: repo is public — do not publish until the fixes are merged
+docs/codebase-audit-2026-08-12.md
 
 # Temporary audio cache files
 *.opus
