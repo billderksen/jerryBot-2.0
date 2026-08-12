@@ -1,9 +1,10 @@
 // Pictionary Game Manager
 // Manages rooms, game state, scoring, and leaderboard persistence
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,14 +47,7 @@ function loadWords() {
 
 // Load leaderboard from file
 function loadLeaderboard() {
-  try {
-    if (existsSync(LEADERBOARD_FILE)) {
-      return JSON.parse(readFileSync(LEADERBOARD_FILE, 'utf8'));
-    }
-  } catch (error) {
-    console.error('Error loading pictionary leaderboard:', error);
-  }
-  return { players: {} };
+  return loadJsonSync(LEADERBOARD_FILE, { players: {} });
 }
 
 // Save leaderboard with debouncing
@@ -62,15 +56,7 @@ let leaderboard = loadLeaderboard();
 const words = loadWords();
 
 function saveLeaderboard() {
-  try {
-    const dataDir = dirname(LEADERBOARD_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(LEADERBOARD_FILE, JSON.stringify(leaderboard, null, 2));
-  } catch (error) {
-    console.error('Error saving pictionary leaderboard:', error);
-  }
+  saveJsonSync(LEADERBOARD_FILE, leaderboard);
 }
 
 function scheduleSaveLeaderboard() {

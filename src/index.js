@@ -10,7 +10,8 @@ const __dirname = dirname(__filename);
 // Load environment variables with explicit path
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
-import { readdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
+import { readdirSync, appendFileSync } from 'fs';
+import { loadJsonSync, saveJsonSync } from './utils/jsonStore.js';
 import { chatWithAI } from './utils/openrouter.js';
 import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, setMemberFetcher, setDiscordClient as setWebDiscordClient, broadcastListeners } from './web/server.js';
 import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast } from './utils/musicQueue.js';
@@ -442,8 +443,7 @@ client.once(Events.ClientReady, readyClient => {
 
 // Word filter
 const kekwFile = join(__dirname, '..', 'data', 'kekwCounts.json');
-let kekwCounts = {};
-try { if (existsSync(kekwFile)) kekwCounts = JSON.parse(readFileSync(kekwFile, 'utf8')); } catch (e) {}
+let kekwCounts = loadJsonSync(kekwFile, {});
 
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot || !message.guild) return;
@@ -470,7 +470,7 @@ client.on(Events.MessageCreate, async message => {
   if (/kekw/i.test(message.content)) {
     const userId = message.author.id;
     kekwCounts[userId] = (kekwCounts[userId] || 0) + 1;
-    try { writeFileSync(kekwFile, JSON.stringify(kekwCounts, null, 2)); } catch (e) {}
+    saveJsonSync(kekwFile, kekwCounts);
     try {
       await message.delete();
       await message.channel.send(`<@${userId}> Dat zeggen we hier niet. Je hebt dit al ${kekwCounts[userId]} keer proberen te zeggen.`);
@@ -663,7 +663,7 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
   if (/kekw/i.test(newMessage.content)) {
     const userId = newMessage.author.id;
     kekwCounts[userId] = (kekwCounts[userId] || 0) + 1;
-    try { writeFileSync(kekwFile, JSON.stringify(kekwCounts, null, 2)); } catch (e) {}
+    saveJsonSync(kekwFile, kekwCounts);
     try {
       await newMessage.delete();
       await newMessage.channel.send(`<@${userId}> Sneaky edit? Dat zeggen we hier niet. Je hebt dit al ${kekwCounts[userId]} keer proberen te zeggen.`);

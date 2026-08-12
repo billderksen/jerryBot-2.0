@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { loadJsonSync, saveJsonSync } from '../utils/jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,28 +11,18 @@ const DATA_FILE = join(__dirname, '../../data/antioffline.json');
 const antiOfflineState = new Map();
 
 function load() {
-  try {
-    if (existsSync(DATA_FILE)) {
-      const raw = JSON.parse(readFileSync(DATA_FILE, 'utf8'));
-      for (const [guildId, state] of Object.entries(raw)) {
-        antiOfflineState.set(guildId, state);
-      }
-    }
-  } catch (e) {
-    console.error('[AntiOffline] Error loading state:', e.message);
+  const raw = loadJsonSync(DATA_FILE, {});
+  for (const [guildId, state] of Object.entries(raw)) {
+    antiOfflineState.set(guildId, state);
   }
 }
 
 function save() {
-  try {
-    const obj = {};
-    for (const [guildId, state] of antiOfflineState) {
-      obj[guildId] = state;
-    }
-    writeFileSync(DATA_FILE, JSON.stringify(obj, null, 2));
-  } catch (e) {
-    console.error('[AntiOffline] Error saving state:', e.message);
+  const obj = {};
+  for (const [guildId, state] of antiOfflineState) {
+    obj[guildId] = state;
   }
+  saveJsonSync(DATA_FILE, obj);
 }
 
 // Load on import

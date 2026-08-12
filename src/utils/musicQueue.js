@@ -59,8 +59,9 @@ const ytCookieOpts = process.env.YOUTUBE_COOKIES_BROWSER
 import ffmpegStatic from 'ffmpeg-static';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
-import { unlinkSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { unlinkSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -95,34 +96,18 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Load recently played from file
 function loadRecentlyPlayed() {
-  try {
-    if (existsSync(RECENTLY_PLAYED_FILE)) {
-      const data = JSON.parse(readFileSync(RECENTLY_PLAYED_FILE, 'utf8'));
-      // Filter out entries older than 7 days
-      const now = Date.now();
-      return data.filter(song => (now - song.playedAt) < SEVEN_DAYS_MS);
-    }
-  } catch (error) {
-    console.error('Error loading recently played:', error);
-  }
-  return [];
+  const data = loadJsonSync(RECENTLY_PLAYED_FILE, []);
+  // Filter out entries older than 7 days
+  const now = Date.now();
+  return data.filter(song => (now - song.playedAt) < SEVEN_DAYS_MS);
 }
 
 // Save recently played to file
 function saveRecentlyPlayed(recentlyPlayed) {
-  try {
-    // Ensure data directory exists
-    const dataDir = dirname(RECENTLY_PLAYED_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    // Filter out entries older than 7 days before saving
-    const now = Date.now();
-    const filtered = recentlyPlayed.filter(song => (now - song.playedAt) < SEVEN_DAYS_MS);
-    writeFileSync(RECENTLY_PLAYED_FILE, JSON.stringify(filtered, null, 2));
-  } catch (error) {
-    console.error('Error saving recently played:', error);
-  }
+  // Filter out entries older than 7 days before saving
+  const now = Date.now();
+  const filtered = recentlyPlayed.filter(song => (now - song.playedAt) < SEVEN_DAYS_MS);
+  saveJsonSync(RECENTLY_PLAYED_FILE, filtered);
 }
 
 // Global recently played list (shared across all guilds for persistence)
@@ -131,26 +116,11 @@ console.log(`Loaded ${globalRecentlyPlayed.length} recently played songs from st
 
 // Listening stats persistence
 function loadStats() {
-  try {
-    if (existsSync(STATS_FILE)) {
-      return JSON.parse(readFileSync(STATS_FILE, 'utf8'));
-    }
-  } catch (error) {
-    console.error('Error loading listening stats:', error);
-  }
-  return { users: {}, songs: {}, totalSongsPlayed: 0, totalListeningTime: 0 };
+  return loadJsonSync(STATS_FILE, { users: {}, songs: {}, totalSongsPlayed: 0, totalListeningTime: 0 });
 }
 
 function saveStats() {
-  try {
-    const dataDir = dirname(STATS_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(STATS_FILE, JSON.stringify(listeningStats, null, 2));
-  } catch (error) {
-    console.error('Error saving listening stats:', error);
-  }
+  saveJsonSync(STATS_FILE, listeningStats);
 }
 
 // Track when a song starts playing (increment play count for requester)
@@ -322,37 +292,22 @@ const defaultMixerFilters = {
 };
 
 function loadSettings() {
-  try {
-    if (existsSync(SETTINGS_FILE)) {
-      const data = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'));
-      // Check if sleep timer has expired
-      if (data.sleepEndTime && data.sleepEndTime < Date.now()) {
-        data.sleepEndTime = null;
-      }
-      return {
-        loopMode: data.loopMode || 'off',
-        is24_7: data.is24_7 || false,
-        sleepEndTime: data.sleepEndTime || null,
-        radioEnabled: data.radioEnabled || false,
-        mixerFilters: { ...defaultMixerFilters, ...(data.mixerFilters || {}) }
-      };
-    }
-  } catch (error) {
-    console.error('Error loading settings:', error);
+  const data = loadJsonSync(SETTINGS_FILE, { loopMode: 'off', is24_7: false, sleepEndTime: null, radioEnabled: false, mixerFilters: { ...defaultMixerFilters } });
+  // Check if sleep timer has expired
+  if (data.sleepEndTime && data.sleepEndTime < Date.now()) {
+    data.sleepEndTime = null;
   }
-  return { loopMode: 'off', is24_7: false, sleepEndTime: null, radioEnabled: false, mixerFilters: { ...defaultMixerFilters } };
+  return {
+    loopMode: data.loopMode || 'off',
+    is24_7: data.is24_7 || false,
+    sleepEndTime: data.sleepEndTime || null,
+    radioEnabled: data.radioEnabled || false,
+    mixerFilters: { ...defaultMixerFilters, ...(data.mixerFilters || {}) }
+  };
 }
 
 function saveSettings() {
-  try {
-    const dataDir = dirname(SETTINGS_FILE);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(SETTINGS_FILE, JSON.stringify(globalSettings, null, 2));
-  } catch (error) {
-    console.error('Error saving settings:', error);
-  }
+  saveJsonSync(SETTINGS_FILE, globalSettings);
 }
 
 function buildFilterChain() {

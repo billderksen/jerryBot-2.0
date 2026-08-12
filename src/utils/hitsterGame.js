@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,21 +27,11 @@ const leaderboardPath = path.join(__dirname, '../../data/hitsterLeaderboard.json
 let leaderboard = { players: {} };
 
 function loadLeaderboard() {
-    try {
-        if (fs.existsSync(leaderboardPath)) {
-            leaderboard = JSON.parse(fs.readFileSync(leaderboardPath, 'utf8'));
-        }
-    } catch (error) {
-        console.error('Error loading Hitster leaderboard:', error);
-    }
+    leaderboard = loadJsonSync(leaderboardPath, { players: {} });
 }
 
 function saveLeaderboard() {
-    try {
-        fs.writeFileSync(leaderboardPath, JSON.stringify(leaderboard, null, 2));
-    } catch (error) {
-        console.error('Error saving Hitster leaderboard:', error);
-    }
+    saveJsonSync(leaderboardPath, leaderboard);
 }
 
 loadLeaderboard();

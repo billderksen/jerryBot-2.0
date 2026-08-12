@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,23 +28,11 @@ const rooms = new Map();
 let leaderboard = loadLeaderboard();
 
 function loadLeaderboard() {
-  try {
-    if (existsSync(LEADERBOARD_PATH)) {
-      const data = readFileSync(LEADERBOARD_PATH, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error loading Pesten leaderboard:', error);
-  }
-  return { players: {} };
+  return loadJsonSync(LEADERBOARD_PATH, { players: {} });
 }
 
 function saveLeaderboard() {
-  try {
-    writeFileSync(LEADERBOARD_PATH, JSON.stringify(leaderboard, null, 2));
-  } catch (error) {
-    console.error('Error saving Pesten leaderboard:', error);
-  }
+  saveJsonSync(LEADERBOARD_PATH, leaderboard);
 }
 
 function createDeck() {
