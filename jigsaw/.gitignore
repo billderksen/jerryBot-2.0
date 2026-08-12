@@ -1,6 +1,0 @@
-node_modules/
-data/*.db
-uploads/*
-!uploads/.gitkeep
-.env
-sessions/
