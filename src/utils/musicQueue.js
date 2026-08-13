@@ -673,6 +673,12 @@ export class MusicQueue {
     this.seekOffset = 0; // Offset in seconds for when song started (for seeking)
     this.historyIndex = -1; // Current position in recently played history (-1 = not navigating history)
     this.playingFromHistory = false; // Flag to prevent re-adding history songs
+    this.cacheGeneration = 0; // Bumped whenever the current song changes - stale background downloads are discarded
+    this.cachingGeneration = null; // Generation of the in-flight background download (null = none in flight)
+    this.autoLeaveTimer = null; // Handle for the empty-queue auto-disconnect timer
+    this.consecutiveFailures = 0; // Consecutive play() failures - trips a breaker at 3
+    this.destroying = false; // True while cleanup() runs, so player events don't restart anything
+    this.listenerConnection = null; // Connection object we already attached lifecycle listeners to
     // Note: loopMode, is24_7, and sleepEndTime are now in globalSettings for persistence
 
     // Handle player state changes - use arrow function to preserve 'this'
@@ -682,6 +688,10 @@ export class MusicQueue {
         console.log('Player went idle during seek, ignoring...');
         return;
       }
+      if (this.destroying) {
+        console.log('Player went idle during cleanup, ignoring...');
+        return;
+      }
       console.log('Player went idle, playing next...');
       this.playNext();
     });
@@ -689,7 +699,8 @@ export class MusicQueue {
     this.player.on(AudioPlayerStatus.Playing, () => {
       console.log('Player is now playing');
       this.isSeeking = false; // Clear seeking flag when playing resumes
-      
+      this.consecutiveFailures = 0; // Audio actually started - reset the failure breaker
+
       // Set song start time when actually playing (accounting for seek offset)
       if (!this.songStartTime) {
         const speed = globalSettings.mixerFilters?.speed || 1.0;
@@ -708,6 +719,7 @@ export class MusicQueue {
     this.player.on('error', error => {
       console.error(`Error in audio player for guild ${guildId}:`, error);
       this.isSeeking = false;
+      if (this.destroying) return;
       this.playNext();
     });
   }
@@ -723,18 +735,31 @@ export class MusicQueue {
 
     this.connection.subscribe(this.player);
 
-    // Handle connection state
-    this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
-      try {
-        await Promise.race([
-          entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
-          entersState(this.connection, VoiceConnectionStatus.Connecting, 5000),
-        ]);
-      } catch {
-        this.connection.destroy();
-        this.cleanup();
-      }
-    });
+    // joinVoiceChannel can hand back an existing connection for this guild, so only
+    // attach the lifecycle listeners once per connection object
+    if (this.listenerConnection !== this.connection) {
+      this.listenerConnection = this.connection;
+
+      // Handle connection state
+      this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        try {
+          await Promise.race([
+            entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
+            entersState(this.connection, VoiceConnectionStatus.Connecting, 5000),
+          ]);
+        } catch {
+          // Reconnect failed - tear down, but never destroy an already-destroyed connection
+          if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+            this.connection.destroy();
+          }
+          this.cleanup();
+        }
+      });
+
+      this.connection.on('error', err => {
+        console.error('[MusicQueue] connection error:', err.message);
+      });
+    }
 
     return this.connection;
   }
@@ -815,6 +840,9 @@ export class MusicQueue {
       return;
     }
 
+    // A song is starting, so the empty-queue disconnect no longer applies
+    this.clearAutoLeaveTimer();
+
     // Clean up previous FFmpeg process and cached audio
     if (this.currentFFmpeg) {
       this.currentFFmpeg.kill();
@@ -824,7 +852,8 @@ export class MusicQueue {
 
     this.isPlaying = true;
     this.currentSong = this.songs.shift();
-    
+    this.cacheGeneration++; // New song - any background download still in flight is now stale
+
     // Only add to recently played if not playing from history navigation
     if (!this.playingFromHistory) {
       // Reset history index when playing new songs normally
@@ -893,8 +922,23 @@ export class MusicQueue {
       
     } catch (error) {
       console.error('Error playing song:', error);
+      // Drop the failed song BEFORE playNext() - otherwise loop mode 'song' re-queues it
+      // and we spin on the same broken URL forever
+      const failedSong = this.currentSong;
+      this.currentSong = null;
       this.isPlaying = false;
       this.cleanupCachedAudio();
+
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= 3) {
+        console.error(`[MusicQueue] Skipping repeatedly failing song: ${failedSong?.title || 'unknown'}`);
+        // Purge any remaining copies (loop re-queues, duplicate adds) of the failing song
+        if (failedSong?.url) {
+          this.songs = this.songs.filter(s => s.url !== failedSong.url);
+        }
+        this.consecutiveFailures = 0;
+      }
+
       this.playNext();
     }
   }
@@ -955,9 +999,14 @@ export class MusicQueue {
 
   // Cache audio in the background for instant seeking
   async cacheAudioInBackground() {
-    if (this.isCaching || !this.currentSong) return;
-    
+    if (!this.currentSong) return;
+
+    // Snapshot the generation this download belongs to - the song may change while yt-dlp runs
+    const gen = this.cacheGeneration;
+    if (this.isCaching && this.cachingGeneration === gen) return; // already downloading this song
+
     this.isCaching = true;
+    this.cachingGeneration = gen;
     const tempFileName = `godcord_${this.guildId}_${Date.now()}.opus`;
     const cachePath = join(tmpdir(), tempFileName);
     
@@ -983,20 +1032,26 @@ export class MusicQueue {
         postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
       });
       
-      // Only set cached path if we're still playing the same song
-      if (this.isPlaying && this.currentSong) {
+      // Only set cached path if this download still belongs to the song that's playing
+      if (gen === this.cacheGeneration && this.isPlaying && this.currentSong) {
         this.cachedAudioPath = cachePath;
         console.log('Audio cached successfully - seeking will now be instant!');
         broadcastState(); // Update UI to show cached checkmark
       } else {
-        // Song changed, clean up the cache we just made
+        // Song changed while we were downloading, discard this file
+        console.log('Discarding stale background cache (song changed during download)');
         try { unlinkSync(cachePath); } catch (e) {}
       }
     } catch (error) {
       console.error('Background caching failed:', error);
+      try { unlinkSync(cachePath); } catch (e) {}
     }
-    
-    this.isCaching = false;
+
+    // Only release the flag if a newer download hasn't already claimed it
+    if (this.cachingGeneration === gen) {
+      this.isCaching = false;
+      this.cachingGeneration = null;
+    }
   }
 
   // Play from cached audio file at specific position
@@ -1071,6 +1126,15 @@ export class MusicQueue {
     this.currentAudioUrl = null;
     this.isCaching = false;
     this.songStartTime = null;
+    this.cacheGeneration++; // Invalidate any background download still in flight
+  }
+
+  // Clear the empty-queue auto-disconnect timer (if one is pending)
+  clearAutoLeaveTimer() {
+    if (this.autoLeaveTimer) {
+      clearTimeout(this.autoLeaveTimer);
+      this.autoLeaveTimer = null;
+    }
   }
 
   async playNext() {
@@ -1127,7 +1191,14 @@ export class MusicQueue {
       } else {
         console.log('Queue empty, will disconnect in 60 seconds if no new songs');
         // Queue finished, disconnect after a delay
-        setTimeout(() => {
+        this.clearAutoLeaveTimer();
+        this.autoLeaveTimer = setTimeout(() => {
+          this.autoLeaveTimer = null;
+          // A timer left over from a discarded queue must never touch the live one
+          if (queues.get(this.guildId) !== this) {
+            console.log('[MusicQueue] Stale auto-leave timer fired for a replaced queue, ignoring');
+            return;
+          }
           if (this.songs.length === 0 && !this.isPlaying && !globalSettings.is24_7) {
             this.leave();
           }
@@ -1380,17 +1451,39 @@ export class MusicQueue {
       trackListeningTime(this.currentSong, actualListenedSeconds);
     }
     
-    if (this.connection) {
+    // destroy() throws on an already-destroyed connection, and leave() runs from a timer
+    // callback where that would take down the process
+    if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
       this.connection.destroy();
     }
     this.cleanup();
   }
 
   cleanup() {
+    // Empty the queue first: player.stop() below fires Idle synchronously, and an empty
+    // queue plus the destroying flag keep that from restarting playback or re-tracking stats
     this.songs = [];
+    this.destroying = true;
+
+    // Stop playback and kill the encoder, otherwise ffmpeg keeps running headless
+    this.player.stop(true);
+    if (this.currentFFmpeg) {
+      this.currentFFmpeg.kill('SIGKILL');
+      this.currentFFmpeg = null;
+    }
+
+    // Delete the /tmp cache file for the song we were playing
+    this.cleanupCachedAudio();
+
+    // After player.stop(), since the Idle -> playNext() above may have armed a fresh one
+    this.clearAutoLeaveTimer();
+
     this.isPlaying = false;
+    this.isSeeking = false;
     this.currentSong = null;
+    this.currentResource = null;
     this.connection = null;
+    this.listenerConnection = null;
     // Reset logged song tracker on cleanup
     if (resetLastLoggedSongCallback) {
       resetLastLoggedSongCallback();
@@ -1399,7 +1492,11 @@ export class MusicQueue {
     if (updatePresenceCallback) {
       updatePresenceCallback(null);
     }
-    queues.delete(this.guildId);
+    // Only drop the map entry if it still points at us - a newer queue may own this guild now
+    if (queues.get(this.guildId) === this) {
+      queues.delete(this.guildId);
+    }
+    this.destroying = false;
     broadcastState();
   }
 
