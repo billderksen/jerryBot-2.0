@@ -41,3 +41,7 @@ ehthumbs.db
 
 # Local planning docs (public repo - keep working docs out)
 docs/superpowers/
+
+# Voice stack: binaries/models/venv fetched by scripts/setup-voice.sh
+tools/
+*.onnx
