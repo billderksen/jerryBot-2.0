@@ -692,55 +692,13 @@
           <button class="period-btn" data-period="month">Month</button>
         </div>
 
-        <div class="user-profile" id="userProfile" onclick="toggleUserDropdown()">
+        <div class="user-profile" id="userProfile">
           <div class="user-avatar" id="userAvatar">?</div>
           <div class="user-info">
             <span class="user-label">Logged in as</span>
             <span class="user-name" id="userName">Loading...</span>
           </div>
-          <div class="user-dropdown">
-            <a href="/" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Music Player
-            </a>
-            <a href="/stats" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              Listening Stats
-            </a>
-            <a href="/recap" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              Weekly Recap
-            </a>
-            <a href="/pictionary" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
-              Pictionary
-            </a>
-            <a href="/twitch" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5v4l4-4h5l4-4V2z"/><path d="M10 6v6"/><path d="M14 6v6"/></svg>
-              Twitch Alerts
-            </a>
-            <a href="/playlists" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-3-7 3V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-              My Playlists
-            </a>
-            <a href="/trivia" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              Trivia
-            </a>
-            <a href="/f1" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-              F1 Predictions
-            </a>
-            <a href="/birthdays" class="user-dropdown-item">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
-              Birthdays
-            </a>
-            <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-              Bot Settings
-            </a>
-            <a href="/logout" class="user-dropdown-item logout">Logout</a>
-          </div>
+          <div id="jb-nav"></div>
         </div>
       </div>
     </header>
@@ -758,6 +716,7 @@
     </footer>
   </div>
 
+  <script src="/js/common.js"></script>
   <script>
     // Skill order matching the OSRS skill tab layout
     const SKILL_ORDER = [
@@ -866,15 +825,7 @@
     let cachedData = null;
     let lastRefreshTime = null;
 
-    // User dropdown
-    function toggleUserDropdown() {
-      document.getElementById('userProfile').classList.toggle('open');
-    }
-
-    document.addEventListener('click', (e) => {
-      const up = document.getElementById('userProfile');
-      if (up && !up.contains(e.target)) up.classList.remove('open');
-    });
+    JB.initNav('osrs');
 
     async function loadUserInfo() {
       try {
