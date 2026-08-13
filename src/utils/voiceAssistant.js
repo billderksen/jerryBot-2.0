@@ -199,6 +199,12 @@ function destroyStream(stream) {
 let client = null;
 let engine = null;
 let started = false;
+// Set when the wake-word sidecar has crashed past its respawn budget. Detection
+// is gone until the bot restarts, so the assistant must stop holding audio
+// subscriptions open and let itself be re-deafened - sitting there undeafened
+// while deaf to wake words is exactly the "is it listening?" ambiguity the
+// opt-in model exists to avoid.
+let engineDead = false;
 let voiceStateHandler = null;
 let reconcileTimer = null;
 let runMusicCommand = null; // index.js's web-dashboard command handler
@@ -280,6 +286,7 @@ function startMonitoring(state, userId) {
   const connection = state.connection;
   if (!connection || connection.state.status !== VoiceConnectionStatus.Ready) return;
   if (state.monitors.has(userId) || state.capturing.has(userId)) return;
+  if (engineDead) return; // nothing would ever read the audio
   // doSync only ever passes opted-in users, but the guard sits here too so that
   // every receiver.subscribe() in this file is consent-checked in its own frame.
   if (!isOptedIn(userId)) return;
@@ -329,10 +336,21 @@ async function stopAllMonitors(state) {
   }
 }
 
-// Rejoin the current channel with a different selfDeaf flag. joinVoiceChannel()
-// reuses the existing connection object and rejoins it (same approach /record
-// uses to hear anything), so the music player's subscription survives - but the
-// receiver's streams do not, which is why the Ready handler re-subscribes.
+// Flip self-deafen on the current connection (the same joinVoiceChannel() call
+// /record uses to be able to hear anything).
+//
+// For a connection that is not Disconnected, joinVoiceChannel() does NOT rejoin:
+// createVoiceConnection() just sends the gateway payload and hands back the same
+// connection object. So nothing is torn down here - no state transition fires,
+// the voice UDP socket and the receiver are untouched, and both the music
+// player's subscription and any existing receive streams survive.
+//
+// Convergence is therefore driven by the echoed VOICE_STATE_UPDATE rather than by
+// any connection event: discord.js writes the new flag to joinConfig.selfDeaf
+// (VoiceConnection#addStatePacket) before it emits Events.VoiceStateUpdate, so our
+// own voiceStateHandler re-syncs one gateway round-trip later and sees the applied
+// value. If that echo never arrives, doSync simply asks again on the next
+// reconcile tick - i.e. this fails safe by retrying, never by assuming success.
 function rejoinWithDeaf(state, selfDeaf) {
   const connection = state.connection;
   const channelId = connection?.joinConfig.channelId;
@@ -368,8 +386,12 @@ async function doSync(state) {
     return;
   }
 
-  // The only place the set of people we listen to is decided.
-  const consenting = new Set(
+  // The only place the set of people we listen to is decided. A dead wake engine
+  // collapses it to nobody, which makes every path below - unsubscribe everyone,
+  // re-deafen, never resurrect a monitor - fall out of the existing logic instead
+  // of needing a second teardown path. It also means the reconcile tick keeps
+  // retrying the re-deafen if an interaction was still in flight when it died.
+  const consenting = engineDead ? new Set() : new Set(
     [...channel.members.values()]
       .filter((member) => !member.user.bot && isOptedIn(member.id))
       .map((member) => member.id)
@@ -379,17 +401,21 @@ async function doSync(state) {
     if (!consenting.has(userId)) await stopMonitoring(state.guildId, userId);
   }
 
-  // Deafen state first: a rejoin resets the receiver, so subscribing before it
-  // would just throw the fresh streams away.
+  // Deafen state before subscribing. The flip leaves the receiver and its streams
+  // intact (see rejoinWithDeaf), so nothing needs tearing down here - the loop
+  // above has already dropped everyone who is no longer consenting. We still
+  // return rather than subscribing straight away: joinConfig.selfDeaf only holds
+  // the requested value once Discord echoes it back, and subscribing to a user we
+  // are still deafened against would just create a stream that receives nothing
+  // until then. The echoed VOICE_STATE_UPDATE re-runs this function.
   const wantsUndeafened = consenting.size > 0;
   if (wantsUndeafened && connection.joinConfig.selfDeaf) {
-    await stopAllMonitors(state);
-    if (rejoinWithDeaf(state, false)) return; // the Ready transition re-syncs
+    if (rejoinWithDeaf(state, false)) return;
   } else if (!wantsUndeafened && !connection.joinConfig.selfDeaf) {
     // Don't deafen out from under a /record session or a reply that is still
-    // being spoken - both need the connection left as it is.
+    // being spoken - both need the connection left as it is. The reconcile tick
+    // retries, so the bot still ends up deafened once they finish.
     if (state.active.size === 0 && state.capturing.size === 0 && !isRecording(state.guildId)) {
-      await stopAllMonitors(state);
       if (rejoinWithDeaf(state, true)) return;
     }
   }
@@ -425,8 +451,11 @@ function bindConnection(state, connection) {
 
   const handler = (oldState, newState) => {
     if (newState.status === VoiceConnectionStatus.Ready && oldState.status !== VoiceConnectionStatus.Ready) {
-      // Reconnect or rejoin: every receive stream that existed before it is
-      // dead, so tear them all down and rebuild rather than topping up.
+      // A real reconnect (resume, region change, channel move) replaces the
+      // networking layer, so every receive stream that existed before it is
+      // dead: tear them all down and rebuild rather than topping up. A plain
+      // self-deafen flip does NOT come through here - it produces no state
+      // transition at all (see rejoinWithDeaf).
       enqueue(state, async () => {
         await stopAllMonitors(state);
         await doSync(state);
@@ -472,7 +501,7 @@ async function handleWake({ slot, score }) {
   const { guildId, userId } = owner;
 
   const state = guildStates.get(guildId);
-  if (!started || !state) return;
+  if (!started || engineDead || !state) return;
   if (!isOptedIn(userId)) return; // opted out between speaking and detection
   if (state.active.has(userId)) return; // already handling this user
   if (state.active.size >= MAX_CONCURRENT_PER_GUILD) {
@@ -514,7 +543,11 @@ async function runInteraction(state, userId) {
   let transcript = null;
 
   try {
-    await playBeep(guildId);
+    // A silent beep isn't worth abandoning the interaction over - the capture
+    // still works, the user just doesn't get the audible "go ahead".
+    if (!await playBeep(guildId)) {
+      console.warn(`[VoiceAssistant] wake beep did not play in guild ${guildId}`);
+    }
 
     stage = 'capture';
     const pcm = await captureUtterance(state, userId);
@@ -540,9 +573,22 @@ async function runInteraction(state, userId) {
     const result = await dispatch(state, { userId, displayName, intent });
 
     stage = 'speak';
-    if (result.reply) await speak(guildId, result.reply); // null = dispatch already spoke
+    // speak() resolves false instead of rejecting when a clip can't be played
+    // (tts.js deliberately swallows job errors so no caller is forced to handle
+    // them), so a throw is not how TTS failure arrives here - this boolean is.
+    // A null reply means dispatch already did the speaking and reported how it went.
+    const spoken = result.reply === null ? result.spoken !== false : await speak(guildId, result.reply);
+    if (!spoken) console.error(`[VoiceAssistant] could not speak the reply in guild ${guildId}`);
 
-    await logInteraction({ displayName, transcript, summary: result.summary, detail: result.detail, ok: !result.failed });
+    await logInteraction({
+      displayName,
+      transcript,
+      // Don't try to speak this failure: speech is precisely what didn't work.
+      summary: spoken ? result.summary : `${result.summary} — niet uitgesproken`,
+      detail: result.detail,
+      ok: spoken && !result.failed,
+      stage: spoken ? null : 'speak',
+    });
   } catch (err) {
     const detailedStage = stage === 'transcribe' && err.stage ? `transcribe:${err.stage}` : stage;
     console.error(`[VoiceAssistant] interaction failed at ${detailedStage}:`, err.message);
@@ -674,13 +720,14 @@ async function dispatch(state, { userId, displayName, intent }) {
       return { reply: `Oké, ik speel ${song.title}`, summary: `speelt **${song.title}**` };
     }
 
-    case 'stop':
+    case 'stop': {
       // 'stop' disconnects the bot, so the confirmation has to be spoken while
       // there is still a voice connection to speak it on. reply:null then tells
-      // the caller the speaking is already done.
-      await speak(guildId, 'Oké');
+      // the caller the speaking is already done, and `spoken` how it went.
+      const spoken = await speak(guildId, 'Oké');
       runCommand('stop', guildId);
-      return { reply: null, summary: 'stop' };
+      return { reply: null, spoken, summary: 'stop' };
+    }
 
     case 'skip':
     case 'pause':
@@ -807,6 +854,18 @@ function reconcileAll() {
   }
 }
 
+// The sidecar exhausted its respawn budget: no wake word will ever be detected
+// again in this process. Drop every subscription and let the bot re-deafen, so
+// it stops looking like it is listening when it cannot hear.
+function handleEngineDeath() {
+  if (engineDead) return;
+  engineDead = true;
+  console.error('[VoiceAssistant] Wake engine dead — assistant disabled until restart');
+  // doSync now sees nobody as consenting, so this both unsubscribes everyone and
+  // re-deafens (deferring, as always, to an interaction or /record still running).
+  reconcileAll();
+}
+
 /** @returns {boolean} whether the assistant is running (env + models present). */
 export function isVoiceAssistantEnabled() {
   return started;
@@ -834,10 +893,12 @@ export function initVoiceAssistant(discordClient, handlers = {}) {
   addSongToQueue = handlers.addSong ?? null;
   loadStore();
 
+  engineDead = false;
   engine = new WakewordEngine();
   engine.on('wake', (event) => {
     handleWake(event).catch((err) => console.error('[VoiceAssistant] wake handling failed:', err.message));
   });
+  engine.on('dead', handleEngineDeath);
   engine.start();
 
   voiceStateHandler = (oldState, newState) => {
@@ -890,6 +951,7 @@ export function stopVoiceAssistant() {
     engine.stop(); // sync child.kill(), no await needed
     engine = null;
   }
+  engineDead = false;
 
   try {
     saveStore(); // opt-ins already persist on every change; this is belt and braces

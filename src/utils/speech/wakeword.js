@@ -219,6 +219,11 @@ export class WakewordEngine extends EventEmitter {
       if (!this.gaveUpLogged) {
         console.error(`[Wakeword] sidecar crashed ${RESPAWN_BACKOFF_MS.length} times in a row, giving up on respawning`);
         this.gaveUpLogged = true;
+        // Detection is over until someone restarts the bot. Consumers need to
+        // know so they can stop pretending to listen (drop subscriptions, and
+        // re-deafen). Emitted once per give-up: nothing respawns after this, so
+        // no further 'exit' can bring us back through here.
+        this.emit('dead');
       }
       return;
     }
