@@ -70,6 +70,9 @@ import { isRecording, stopRecording } from './voiceRecorder.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// How long the bot stays in the channel after the queue runs dry
+const AUTO_LEAVE_MS = 60_000;
+
 // Determine FFmpeg path - try ffmpeg-static first, fall back to system ffmpeg
 let ffmpegPath = ffmpegStatic;
 
@@ -1276,6 +1279,32 @@ export class MusicQueue {
     }
   }
 
+  // (Re)start the empty-queue auto-disconnect clock.
+  armAutoLeave(ms = AUTO_LEAVE_MS) {
+    this.clearAutoLeaveTimer();
+    this.autoLeaveTimer = setTimeout(() => {
+      this.autoLeaveTimer = null;
+      // A timer left over from a discarded queue must never touch the live one
+      if (queues.get(this.guildId) !== this) {
+        console.log('[MusicQueue] Stale auto-leave timer fired for a replaced queue, ignoring');
+        return;
+      }
+      if (this.songs.length === 0 && !this.isPlaying && !globalSettings.is24_7) {
+        this.leave();
+      }
+    }, ms);
+  }
+
+  // Push the pending auto-disconnect back. The "Hey Jerry" voice assistant calls
+  // this while an interaction is in flight so the 60s timer can't hang up on
+  // Jerry mid-sentence. Only re-arms a timer that was already pending — it never
+  // starts one on a queue that is still playing.
+  deferAutoLeave(ms = AUTO_LEAVE_MS) {
+    if (!this.autoLeaveTimer) return false;
+    this.armAutoLeave(ms);
+    return true;
+  }
+
   // Milliseconds of real playback since the current song started, with paused time removed.
   // Single source of truth: position broadcasts, filter restarts and listening stats all use it.
   getPlaybackElapsedMs() {
@@ -1451,18 +1480,7 @@ export class MusicQueue {
       } else {
         console.log('Queue empty, will disconnect in 60 seconds if no new songs');
         // Queue finished, disconnect after a delay
-        this.clearAutoLeaveTimer();
-        this.autoLeaveTimer = setTimeout(() => {
-          this.autoLeaveTimer = null;
-          // A timer left over from a discarded queue must never touch the live one
-          if (queues.get(this.guildId) !== this) {
-            console.log('[MusicQueue] Stale auto-leave timer fired for a replaced queue, ignoring');
-            return;
-          }
-          if (this.songs.length === 0 && !this.isPlaying && !globalSettings.is24_7) {
-            this.leave();
-          }
-        }, 60000); // 1 minute
+        this.armAutoLeave();
       }
     }
   }
@@ -1911,6 +1929,17 @@ export class MusicQueue {
 
 export function getQueue(guildId) {
   return queues.get(guildId);
+}
+
+/**
+ * Push this guild's empty-queue auto-disconnect back by `ms` (see
+ * MusicQueue#deferAutoLeave). Used by the voice assistant to keep the bot in
+ * the channel for the length of a "Hey Jerry" interaction.
+ * @returns {boolean} whether a pending timer was actually re-armed.
+ */
+export function deferAutoLeave(guildId, ms) {
+  const queue = queues.get(guildId);
+  return queue ? queue.deferAutoLeave(ms) : false;
 }
 
 export function createQueue(guildId, guildInfo = null) {

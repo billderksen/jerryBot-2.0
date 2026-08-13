@@ -25,6 +25,7 @@ import { initReminderTracker } from './utils/reminderTracker.js';
 import { getAntiOfflineState } from './commands/antioffline.js';
 import { updateLastSeen, flushLastSeen } from './utils/lastSeenTracker.js';
 import { initTeamspeakStatus } from './utils/teamspeakStatus.js';
+import { initVoiceAssistant, stopVoiceAssistant } from './utils/voiceAssistant.js';
 
 // Store the last used voice channel for web dashboard
 let lastVoiceChannel = null;
@@ -72,8 +73,9 @@ setWebUpdateCallback(updateState);
 // Setup activity logger callbacks
 setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong);
 
-// Handle commands from web dashboard
-setCommandHandler((command, guildId) => {
+// Handle music control commands. Registered for the web dashboard and reused by
+// the "Hey Jerry" voice assistant, so both go through one code path.
+function handleMusicCommand(command, guildId) {
   const queueGuildId = guildId || lastGuildId;
   const queue = getQueue(queueGuildId);
   if (!queue) return;
@@ -115,10 +117,11 @@ setCommandHandler((command, guildId) => {
   } else if (command === 'radio') {
     queue.toggleRadio();
   }
-});
+}
+setCommandHandler(handleMusicCommand);
 
-// Handle adding songs from web dashboard
-setAddSongHandler(async (song, guildId) => {
+// Handle adding songs (web dashboard + voice assistant)
+async function handleAddSong(song, guildId) {
   console.log('Add song handler called:', { songTitle: song.title, guildId });
   
   // Use provided guildId, last known, or fallback to env GUILD_ID
@@ -188,9 +191,10 @@ setAddSongHandler(async (song, guildId) => {
     await queue.play();
     return { success: true, message: 'Now playing' };
   }
-  
+
   return { success: true, message: 'Added to queue' };
-});
+}
+setAddSongHandler(handleAddSong);
 
 // Track voice channel usage
 let emptyChannelTimeout = null;
@@ -436,6 +440,9 @@ client.once(Events.ClientReady, readyClient => {
 
   startWebServer();
 
+  // Initialize the "Hey Jerry" voice assistant. Last, so the music/web handlers
+  // it dispatches through are already wired up.
+  initVoiceAssistant(readyClient, { runMusicCommand: handleMusicCommand, addSong: handleAddSong });
 
   // Periodically refresh listeners to catch any nickname changes (every 30 seconds)
   setInterval(() => {
@@ -740,6 +747,7 @@ function flushState() {
   try { stopDiscordTracker(); } catch (e) { console.error('[Shutdown] discordTracker:', e); }
   try { flushLastSeen(); } catch (e) { console.error('[Shutdown] lastSeen:', e); }
   try { flushStats(); } catch (e) { console.error('[Shutdown] musicStats:', e); }
+  try { stopVoiceAssistant(); } catch (e) { console.error('[Shutdown] voiceAssistant:', e); }
 }
 
 async function shutdown(signal) {
