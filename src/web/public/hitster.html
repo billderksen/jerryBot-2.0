@@ -1277,7 +1277,7 @@
                 <button class="back-btn" onclick="handleBack(event)">Back</button>
                 <h1>Hitster</h1>
             </div>
-            <div class="user-profile" id="userProfile" onclick="toggleUserDropdown(event)">
+            <div class="user-profile" id="userProfile">
                 <div class="user-avatar">
                     <img id="user-avatar" src="" alt="Avatar">
                 </div>
@@ -1285,51 +1285,7 @@
                     <span class="user-label">Logged in as</span>
                     <span class="user-name" id="username">Loading...</span>
                 </div>
-                <div class="user-dropdown">
-                    <a href="/" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;"><use href="#icon-music"/></svg>
-                        Music Player
-                    </a>
-                    <a href="/stats" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;"><use href="#icon-stats"/></svg>
-                        Listening Stats
-                    </a>
-                    <a href="/pictionary" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;"><use href="#icon-pictionary"/></svg>
-                        Pictionary Game
-                    </a>
-                    <a href="/hitster" class="user-dropdown-item active">
-                        <svg style="width:16px;height:16px;"><use href="#icon-hitster"/></svg>
-                        Hitster Music Game
-                    </a>
-                    <a href="/pesten" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;"><use href="#icon-pesten"/></svg>
-                        Pesten Card Game
-                    </a>
-                    <a href="/osrs" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                        Runescape Tracker
-                    </a>
-                    <a href="/trivia" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        Trivia
-                    </a>
-                    <a href="/f1" class="user-dropdown-item">
-                      <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-                      F1 Predictions
-                    </a>
-                    <a href="/birthdays" class="user-dropdown-item">
-                        <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="14" rx="2"/><path d="M12 8V5"/><path d="M8 8V5"/><path d="M16 8V5"/><circle cx="12" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="3.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="3.5" r="1.5" fill="currentColor" stroke="none"/></svg>
-                        Birthdays
-                    </a>
-                    <a href="/admin" class="user-dropdown-item" id="adminLink" style="display:none">
-                        <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-                        Bot Settings
-                    </a>
-                    <a href="/logout" class="user-dropdown-item logout">
-                        🚪 Logout
-                    </a>
-                </div>
+                <div id="jb-nav"></div>
             </div>
         </header>
 
@@ -1495,7 +1451,10 @@
     <!-- YouTube IFrame API -->
     <script src="https://www.youtube.com/iframe_api"></script>
 
+    <script src="/js/common.js"></script>
     <script>
+        const escapeHtml = JB.escapeHtml;
+
         // State
         let ws = null;
         let user = null;
@@ -1542,6 +1501,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             fetchUser();
             connectWebSocket();
+            JB.initNav('hitster');
         });
 
         async function fetchUser() {
@@ -1563,31 +1523,26 @@
         }
 
         function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${window.location.host}`);
+            ws = JB.connectSocket({
+                onOpen: () => {
+                    console.log('WebSocket connected');
+                    requestRoomList();
+                    requestLeaderboard();
 
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                requestRoomList();
-                requestLeaderboard();
-
-                // Try to rejoin room if we were in one
-                const savedRoomId = sessionStorage.getItem('hitsterRoomId');
-                if (savedRoomId) {
-                    console.log('Attempting to rejoin room:', savedRoomId);
-                    ws.send(JSON.stringify({ type: 'hitster:room:rejoin', roomId: savedRoomId }));
+                    // Try to rejoin room if we were in one
+                    const savedRoomId = sessionStorage.getItem('hitsterRoomId');
+                    if (savedRoomId) {
+                        console.log('Attempting to rejoin room:', savedRoomId);
+                        ws.send({ type: 'hitster:room:rejoin', roomId: savedRoomId });
+                    }
+                },
+                onMessage: (data) => {
+                    handleMessage(data);
+                },
+                onClose: () => {
+                    console.log('WebSocket disconnected');
                 }
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                setTimeout(connectWebSocket, 3000);
-            };
+            });
         }
 
         function handleMessage(data) {
@@ -1608,7 +1563,7 @@
                     handleRoomLeft();
                     break;
                 case 'hitster:room:error':
-                    alert(data.message);
+                    JB.toast(data.message, 'error');
                     break;
                 case 'hitster:room:rejoinFailed':
                     sessionStorage.removeItem('hitsterRoomId');
@@ -1650,11 +1605,11 @@
         }
 
         function requestRoomList() {
-            ws.send(JSON.stringify({ type: 'hitster:room:list' }));
+            ws.send({ type: 'hitster:room:list' });
         }
 
         function requestLeaderboard() {
-            ws.send(JSON.stringify({ type: 'hitster:leaderboard' }));
+            ws.send({ type: 'hitster:leaderboard' });
         }
 
         function renderRoomList(rooms) {
@@ -1728,24 +1683,24 @@
             const cardsToWin = parseInt(document.getElementById('cards-to-win').value);
             const maxPlayers = parseInt(document.getElementById('max-players').value);
 
-            ws.send(JSON.stringify({
+            ws.send({
                 type: 'hitster:room:create',
                 name,
                 settings: { cardsToWin, maxPlayers }
-            }));
+            });
 
             hideCreateModal();
         }
 
         function joinRoom(roomId) {
-            ws.send(JSON.stringify({
+            ws.send({
                 type: 'hitster:room:join',
                 roomId
-            }));
+            });
         }
 
         function leaveRoom() {
-            ws.send(JSON.stringify({ type: 'hitster:room:leave' }));
+            ws.send({ type: 'hitster:room:leave' });
         }
 
         function handleRoomJoined(data) {
@@ -1823,7 +1778,7 @@
         }
 
         function startGame() {
-            ws.send(JSON.stringify({ type: 'hitster:game:start' }));
+            ws.send({ type: 'hitster:game:start' });
         }
 
         function showActiveGame() {
@@ -1903,10 +1858,10 @@
         function placeSong(position) {
             if (!canPlace && !canSteal) return;
 
-            ws.send(JSON.stringify({
+            ws.send({
                 type: canSteal ? 'hitster:game:steal' : 'hitster:game:place',
                 position
-            }));
+            });
 
             canPlace = false;
             canSteal = false;
@@ -1955,7 +1910,7 @@
         }
 
         function passSteal() {
-            ws.send(JSON.stringify({ type: 'hitster:game:passSteal' }));
+            ws.send({ type: 'hitster:game:passSteal' });
             canSteal = false;
             renderMyTimeline();
         }
@@ -2117,10 +2072,10 @@
             const message = input.value.trim();
             if (!message) return;
 
-            ws.send(JSON.stringify({
+            ws.send({
                 type: 'hitster:chat',
                 message
-            }));
+            });
 
             input.value = '';
         }
@@ -2143,28 +2098,6 @@
             }
         }
 
-        // User dropdown toggle
-        function toggleUserDropdown(event) {
-            event.stopPropagation();
-            const userProfile = document.getElementById('userProfile');
-            userProfile.classList.toggle('open');
-        }
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
-            const userProfile = document.getElementById('userProfile');
-            if (userProfile && !userProfile.contains(e.target)) {
-                userProfile.classList.remove('open');
-            }
-        });
-
-        // Utility
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
     </script>
 </body>
 </html>
