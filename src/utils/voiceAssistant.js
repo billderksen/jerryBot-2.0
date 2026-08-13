@@ -41,7 +41,7 @@ import { addReminder } from './reminderTracker.js';
 import { chatWithAI, getChatConfig } from './openrouter.js';
 import { getLogChannelId } from './activityLogger.js';
 import { sanitizeSearchQuery } from './urlValidation.js';
-import { isRecording } from './voiceRecorder.js';
+import { isRecording, getActiveRecordingTarget, onRecordingEnd } from './voiceRecorder.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STORE_PATH = path.join(__dirname, '..', '..', 'data', 'voiceAssistant.json');
@@ -65,6 +65,13 @@ const MIN_CAPTURE_BYTES = OUT_SAMPLE_RATE * 2 * 0.3; // <0.3s of speech is not w
 const SPOKEN_ANSWER_MAX_CHARS = 400;
 const AUTO_LEAVE_DEFER_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 30_000;
+// Mirrors musicQueue.js's DUCK_MAX_MS (120s; not imported, to avoid a module
+// coupling for one number - bump this if that constant changes) plus a safety
+// margin. deferAutoLeave() is normally called at wake start/end with the 60s
+// default above, but a long spoken answer or a maximally-ducked clip can run
+// past that - re-deferring with this larger window right before actually
+// speaking keeps the queue's auto-leave timer from hanging up mid-reply.
+const SPEAK_AUTO_LEAVE_DEFER_MS = Math.max(AUTO_LEAVE_DEFER_MS, 120_000 + 10_000);
 
 const ERROR_REPLY = 'Sorry, dat verstond ik niet.';
 
@@ -206,6 +213,7 @@ let started = false;
 // opt-in model exists to avoid.
 let engineDead = false;
 let voiceStateHandler = null;
+let unregisterRecordingEndHook = null;
 let reconcileTimer = null;
 let runMusicCommand = null; // index.js's web-dashboard command handler
 let addSongToQueue = null; // index.js's web-dashboard add-song handler
@@ -269,8 +277,13 @@ function acquireSlot(guildId, userId) {
     const victim = slotOwners[oldest];
     console.warn(`[VoiceAssistant] All ${MAX_SLOTS} wake-word slots in use, evicting user ${victim.userId}`);
     releaseSlotAt(oldest); // also resets the sidecar's model state for the slot
-    stopMonitoring(victim.guildId, victim.userId, { keepSlot: true })
-      .catch((err) => console.error('[VoiceAssistant] evicting a slot failed:', err.message));
+    stopMonitoring(victim.guildId, victim.userId, {
+      keepSlot: true,
+      // If the victim is also /record's active target, their receive stream may
+      // be the SAME object voiceRecorder.js is writing to (see getActiveRecordingTarget) -
+      // don't destroy it out from under that recording.
+      keepStream: getActiveRecordingTarget(victim.guildId) === victim.userId,
+    }).catch((err) => console.error('[VoiceAssistant] evicting a slot failed:', err.message));
     index = oldest;
   }
 
@@ -290,6 +303,11 @@ function startMonitoring(state, userId) {
   // doSync only ever passes opted-in users, but the guard sits here too so that
   // every receiver.subscribe() in this file is consent-checked in its own frame.
   if (!isOptedIn(userId)) return;
+  // Same reasoning as the recordingTarget exclusion in doSync below: never open
+  // a stream that voiceRecorder.js already owns, or is about to - receiver.subscribe()
+  // would hand back voiceRecorder's existing stream (or vice versa), and the two
+  // modules would then be racing to destroy a stream the other still needs.
+  if (getActiveRecordingTarget(state.guildId) === userId) return;
 
   const slot = acquireSlot(state.guildId, userId);
   const opusStream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.Manual } });
@@ -309,10 +327,29 @@ function startMonitoring(state, userId) {
   decoder.on('data', onData);
   opusStream.pipe(decoder);
 
+  // Self-heal: the stream can close out from under us without stopMonitoring()
+  // ever being called - e.g. a decoder-side throw, a receiver-side drop, or
+  // voiceRecorder.js finishing a recording that ended up sharing this stream. A
+  // deliberate stop always sets monitor.stopped and removes the map entry before
+  // it destroys anything, so this only fires for an unplanned close; left alone,
+  // it would leave a zombie monitors-map entry that makes every future
+  // startMonitoring() for this user a silent no-op (wake detection dead) because
+  // nothing ever repairs state.monitors.
+  opusStream.once('close', () => {
+    if (monitor.stopped || state.monitors.get(userId) !== monitor) return;
+    monitor.stopped = true;
+    state.monitors.delete(userId);
+    monitor.decoder.off('data', monitor.onData);
+    try { monitor.decoder.destroy(); } catch { /* already torn down */ }
+    releaseSlotAt(monitor.slot);
+    console.warn(`[VoiceAssistant] receive stream for ${userId} in ${state.guildId} closed unexpectedly, resyncing`);
+    syncSubscriptions(state.guildId);
+  });
+
   state.monitors.set(userId, monitor);
 }
 
-async function stopMonitoring(guildId, userId, { keepSlot = false } = {}) {
+async function stopMonitoring(guildId, userId, { keepSlot = false, keepStream = false } = {}) {
   const state = guildStates.get(guildId);
   const monitor = state?.monitors.get(userId);
   if (!monitor) return;
@@ -324,7 +361,14 @@ async function stopMonitoring(guildId, userId, { keepSlot = false } = {}) {
   monitor.decoder.off('data', monitor.onData);
 
   try { monitor.opusStream.unpipe(monitor.decoder); } catch { /* already torn down */ }
-  await destroyStream(monitor.opusStream);
+  if (keepStream) {
+    // voiceRecorder.js owns this stream (see getActiveRecordingTarget) and will
+    // destroy it when the recording ends - destroying it here would silently
+    // truncate the recording, since receiver.subscribe() hands the SAME stream
+    // object to whichever caller asked for this user id second.
+  } else {
+    await destroyStream(monitor.opusStream);
+  }
   try { monitor.decoder.destroy(); } catch { /* already torn down */ }
 
   if (!keepSlot) releaseSlotAt(monitor.slot);
@@ -391,14 +435,25 @@ async function doSync(state) {
   // re-deafen, never resurrect a monitor - fall out of the existing logic instead
   // of needing a second teardown path. It also means the reconcile tick keeps
   // retrying the re-deafen if an interaction was still in flight when it died.
+  //
+  // The active /record target (if any) is excluded the same way: receiver.subscribe()
+  // hands back the SAME AudioReceiveStream to whichever of us and voiceRecorder.js
+  // asks for that user id second, so monitoring them while they're being recorded
+  // means one module can end up destroying a stream the other still needs. Their
+  // monitor, if they had one, comes down via the loop below with keepStream so the
+  // recording is untouched; onRecordingEnd (wired in initVoiceAssistant) re-syncs
+  // once voiceRecorder.js is done with the stream.
+  const recordingTarget = getActiveRecordingTarget(state.guildId);
   const consenting = engineDead ? new Set() : new Set(
     [...channel.members.values()]
-      .filter((member) => !member.user.bot && isOptedIn(member.id))
+      .filter((member) => !member.user.bot && isOptedIn(member.id) && member.id !== recordingTarget)
       .map((member) => member.id)
   );
 
   for (const userId of [...state.monitors.keys()]) {
-    if (!consenting.has(userId)) await stopMonitoring(state.guildId, userId);
+    if (!consenting.has(userId)) {
+      await stopMonitoring(state.guildId, userId, { keepStream: userId === recordingTarget });
+    }
   }
 
   // Deafen state before subscribing. The flip leaves the receiver and its streams
@@ -486,10 +541,10 @@ function withinRateLimit(state) {
 
 // The music queue disconnects 60s after the queue empties; without pushing that
 // back, it can hang up on Jerry mid-sentence.
-async function deferAutoLeave(guildId) {
+async function deferAutoLeave(guildId, ms = AUTO_LEAVE_DEFER_MS) {
   try {
     const { deferAutoLeave: defer } = await import('./musicQueue.js');
-    defer(guildId, AUTO_LEAVE_DEFER_MS);
+    defer(guildId, ms);
   } catch (err) {
     console.error('[VoiceAssistant] could not defer the music auto-leave:', err.message);
   }
@@ -503,6 +558,11 @@ async function handleWake({ slot, score }) {
   const state = guildStates.get(guildId);
   if (!started || engineDead || !state) return;
   if (!isOptedIn(userId)) return; // opted out between speaking and detection
+  // Can't wake Jerry while /record is capturing them: captureUtterance would have
+  // to contend with voiceRecorder.js for the same receive stream (see the
+  // recordingTarget comment in doSync). Narrow and acceptable - a recorded
+  // session is short and this is a documented limitation, not a silent failure.
+  if (getActiveRecordingTarget(guildId) === userId) return;
   if (state.active.has(userId)) return; // already handling this user
   if (state.active.size >= MAX_CONCURRENT_PER_GUILD) {
     console.warn(`[VoiceAssistant] Guild ${guildId} already has ${state.active.size} interactions running, ignoring wake`);
@@ -573,6 +633,10 @@ async function runInteraction(state, userId) {
     const result = await dispatch(state, { userId, displayName, intent });
 
     stage = 'speak';
+    // deferAutoLeave was last called at wake start (with the 60s default); a
+    // long spoken answer or a maximally-ducked clip can outlive that, so push it
+    // back again with the larger window right before actually speaking.
+    await deferAutoLeave(guildId, SPEAK_AUTO_LEAVE_DEFER_MS);
     // speak() resolves false instead of rejecting when a clip can't be played
     // (tts.js deliberately swallows job errors so no caller is forced to handle
     // them), so a throw is not how TTS failure arrives here - this boolean is.
@@ -608,6 +672,12 @@ async function runInteraction(state, userId) {
 async function captureUtterance(state, userId) {
   state.capturing.add(userId);
   try {
+    // handleWake already refuses to reach here for an active recording target;
+    // this recheck closes the gap between that check and this one (a recording
+    // starting mid-wake, e.g. during the awaited playBeep()) before we touch
+    // their wake monitor - let alone open our own stream - at all.
+    if (getActiveRecordingTarget(state.guildId) === userId) throw new Error('user is being recorded');
+
     await stopMonitoring(state.guildId, userId);
 
     const connection = getVoiceConnection(state.guildId);
@@ -790,7 +860,7 @@ async function dispatch(state, { userId, displayName, intent }) {
     default:
       return {
         reply: ERROR_REPLY,
-        summary: intent.error ? `niet begrepen (${intent.error})` : 'niet begrepen',
+        summary: intent.error ? `not understood (${intent.error})` : 'not understood',
         failed: true,
       };
   }
@@ -814,14 +884,14 @@ async function logInteraction({ displayName, transcript, summary, detail, ok, st
     const channel = await client.channels.fetch(logChannelId);
     if (!channel) return;
 
-    const spoken = transcript ? `"${transcript}"` : '_(niets verstaan)_';
+    const spoken = transcript ? `"${transcript}"` : '_(nothing understood)_';
     const embed = new EmbedBuilder()
       .setDescription(`🎤 **${displayName}**: ${spoken} → ${summary}`)
       .setColor(ok ? 0x57f287 : 0xed4245)
       .setTimestamp();
 
-    if (stage) embed.addFields({ name: 'Mislukt bij', value: stage, inline: true });
-    if (detail) embed.addFields({ name: ok ? 'Antwoord' : 'Details', value: String(detail).slice(0, 1024) });
+    if (stage) embed.addFields({ name: 'Failed at', value: stage, inline: true });
+    if (detail) embed.addFields({ name: ok ? 'Answer' : 'Details', value: String(detail).slice(0, 1024) });
 
     await channel.send({ embeds: [embed] });
   } catch (err) {
@@ -907,6 +977,11 @@ export function initVoiceAssistant(discordClient, handlers = {}) {
   };
   client.on(Events.VoiceStateUpdate, voiceStateHandler);
 
+  // Once voiceRecorder.js is done with a recording, re-sync so the former
+  // target (if still opted in and present) gets their monitor back - see the
+  // recordingTarget exclusion in doSync.
+  unregisterRecordingEndHook = onRecordingEnd((guildId) => syncSubscriptions(guildId));
+
   // Safety net for connections that appear without a voice state update we act
   // on (e.g. the bot was already connected when this started).
   reconcileTimer = setInterval(reconcileAll, RECONCILE_INTERVAL_MS);
@@ -931,6 +1006,10 @@ export function stopVoiceAssistant() {
   if (client && voiceStateHandler) {
     client.off(Events.VoiceStateUpdate, voiceStateHandler);
     voiceStateHandler = null;
+  }
+  if (unregisterRecordingEndHook) {
+    unregisterRecordingEndHook();
+    unregisterRecordingEndHook = null;
   }
 
   for (const state of guildStates.values()) {

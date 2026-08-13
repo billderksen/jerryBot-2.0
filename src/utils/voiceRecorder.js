@@ -19,6 +19,35 @@ export function isRecording(guildId) {
   return recordings.has(guildId);
 }
 
+/**
+ * @param {string} guildId
+ * @returns {string|null} the user id currently being recorded in this guild, or
+ *   null. voiceAssistant.js reads this to keep its wake-word monitor off the
+ *   same user's receive stream: receiver.subscribe() hands back the SAME
+ *   AudioReceiveStream object to whichever caller asks for a given user id
+ *   second, options and all, so two independent owners destroying it
+ *   independently is what silently truncates a recording or zombies a monitor.
+ */
+export function getActiveRecordingTarget(guildId) {
+  return recordings.get(guildId)?.targetId ?? null;
+}
+
+// Callbacks fired with (guildId) once a recording's streams are fully torn down -
+// manual /record stop, the 30-minute auto-stop, and the connection dying all
+// funnel through finalize(), so this is the one place that covers all three.
+// voiceAssistant.js uses it to know when it's safe to resume monitoring the
+// former target.
+const recordingEndListeners = new Set();
+
+/**
+ * @param {(guildId: string) => void} cb
+ * @returns {() => void} call to unregister
+ */
+export function onRecordingEnd(cb) {
+  recordingEndListeners.add(cb);
+  return () => recordingEndListeners.delete(cb);
+}
+
 // Pure and exported so it can be unit-tested without touching Discord or the filesystem.
 // Defaults match Discord's native PCM format, so existing bare-number calls
 // (e.g. from streamPcmToWav below) produce byte-identical output to before.
@@ -166,6 +195,14 @@ async function finalize(guildId, reason = null) {
 
   if (reason && state.channel) {
     state.channel.send(`⏹️ Recording of <@${state.targetId}> stopped: ${reason}.`).catch(() => {});
+  }
+
+  for (const cb of recordingEndListeners) {
+    try {
+      cb(guildId);
+    } catch (err) {
+      console.error('[voiceRecorder] onRecordingEnd callback failed:', err.message);
+    }
   }
 
   return files;
