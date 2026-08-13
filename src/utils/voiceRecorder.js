@@ -20,9 +20,12 @@ export function isRecording(guildId) {
 }
 
 // Pure and exported so it can be unit-tested without touching Discord or the filesystem.
-export function buildWavHeader(dataSize) {
-  const byteRate = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE;
-  const blockAlign = CHANNELS * BYTES_PER_SAMPLE;
+// Defaults match Discord's native PCM format, so existing bare-number calls
+// (e.g. from streamPcmToWav below) produce byte-identical output to before.
+export function buildWavHeader(dataSize, { sampleRate = SAMPLE_RATE, channels = CHANNELS, bitsPerSample = BITS_PER_SAMPLE } = {}) {
+  const bytesPerSample = bitsPerSample / 8;
+  const byteRate = sampleRate * channels * bytesPerSample;
+  const blockAlign = channels * bytesPerSample;
   const header = Buffer.alloc(44);
 
   header.write('RIFF', 0);
@@ -31,11 +34,11 @@ export function buildWavHeader(dataSize) {
   header.write('fmt ', 12);
   header.writeUInt32LE(16, 16);
   header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(CHANNELS, 22);
-  header.writeUInt32LE(SAMPLE_RATE, 24);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
   header.writeUInt32LE(byteRate, 28);
   header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(BITS_PER_SAMPLE, 34);
+  header.writeUInt16LE(bitsPerSample, 34);
   header.write('data', 36);
   header.writeUInt32LE(dataSize, 40);
 
