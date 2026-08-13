@@ -1,7 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { addReminder, getUserReminders, cancelReminder } from '../utils/reminderTracker.js';
+import { addReminder, getUserReminders, cancelReminder, isValidCalendarDate } from '../utils/reminderTracker.js';
 
-const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -83,18 +82,21 @@ export default {
       const now = new Date();
       const day = interaction.options.getInteger('day') ?? now.getDate();
       const month = interaction.options.getInteger('month') ?? (now.getMonth() + 1);
+      const year = now.getFullYear();
 
-      if (day > DAYS_IN_MONTH[month - 1]) {
-        return interaction.reply({ content: `Invalid date: ${MONTH_NAMES[month - 1]} only has ${DAYS_IN_MONTH[month - 1]} days.`, flags: MessageFlags.Ephemeral });
+      if (!isValidCalendarDate(day, month, year)) {
+        return interaction.reply({ content: `Invalid date: ${MONTH_NAMES[month - 1]} ${day} does not exist.`, flags: MessageFlags.Ephemeral });
       }
 
       // Build the fire date (server timezone = Europe/Amsterdam)
-      let year = now.getFullYear();
       const fireDate = new Date(year, month - 1, day, hour, minute, 0, 0);
       if (fireDate <= now) {
         const userSetDay = interaction.options.getInteger('day') !== null;
         const userSetMonth = interaction.options.getInteger('month') !== null;
         if (userSetDay || userSetMonth) {
+          if (!isValidCalendarDate(day, month, year + 1)) {
+            return interaction.reply({ content: `Invalid date: ${MONTH_NAMES[month - 1]} ${day} does not exist in ${year + 1}.`, flags: MessageFlags.Ephemeral });
+          }
           fireDate.setFullYear(year + 1);
         } else {
           fireDate.setDate(fireDate.getDate() + 1);
