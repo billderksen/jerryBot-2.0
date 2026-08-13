@@ -1,10 +1,11 @@
-import { SlashCommandBuilder, MessageFlags, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import {
   isOptedIn,
   setOptIn,
   syncSubscriptions,
   isVoiceAssistantEnabled,
 } from '../utils/voiceAssistant.js';
+import { getVoiceConfig, setVoiceSpokenReplies } from '../utils/openrouter.js';
 
 // Opting in is what makes the bot listen to you at all - there is no way to be
 // heard by "Hey Jerry" without running /heyjerry on first, and opting out takes
@@ -21,11 +22,45 @@ export default {
     )
     .addSubcommand(sub =>
       sub.setName('status').setDescription('Show your opt-in state and who else is opted in here')
+    )
+    .addSubcommand(sub =>
+      sub.setName('replies')
+        .setDescription('Toggle whether Jerry speaks his replies out loud (requires Manage Server)')
+        .addStringOption(opt =>
+          opt.setName('state')
+            .setDescription('Speak replies out loud, or only report in the activity log')
+            .setRequired(true)
+            .addChoices(
+              { name: 'on', value: 'on' },
+              { name: 'off', value: 'off' },
+            ))
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const userId = interaction.user.id;
+
+    if (sub === 'replies') {
+      // Server-wide setting, unlike on/off/status which are personal opt-in -
+      // gated at runtime only (the command itself has no default permission
+      // restriction, since on/off/status must stay open to everyone).
+      if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({
+          content: 'You need the **Manage Server** permission to use this command.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      const spoken = interaction.options.getString('state', true) === 'on';
+      setVoiceSpokenReplies(spoken);
+
+      return interaction.reply({
+        content: spoken
+          ? '🔊 Jerry now speaks his replies out loud in voice channels, in addition to the activity-log embed.'
+          : '🔇 Jerry now only reports his replies in the activity-log embed (the wake beep still plays).',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
 
     if (sub === 'on' || sub === 'off') {
       const optIn = sub === 'on';
@@ -58,6 +93,7 @@ export default {
       .addFields(
         { name: 'You', value: isOptedIn(userId) ? '✅ Opted in' : '❌ Opted out', inline: true },
         { name: 'Assistant', value: isVoiceAssistantEnabled() ? '✅ Running' : '⚠️ Not running', inline: true },
+        { name: 'Spoken replies', value: getVoiceConfig().spokenReplies ? '✅ On' : '❌ Off', inline: true },
         {
           name: voiceChannel ? `Opted in — ${voiceChannel.name}` : 'Opted in here',
           value: !voiceChannel

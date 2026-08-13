@@ -35,7 +35,7 @@ const CATEGORIES = [
     emoji: '🔧',
     label: 'Utility',
     description: 'Chat, uptime & admin tools',
-    commands: ['chat', 'heyjerry', 'uptime', 'antioffline', 'record']
+    commands: ['chat', 'chatmodel', 'heyjerry', 'uptime', 'antioffline', 'record']
   }
 ];
 

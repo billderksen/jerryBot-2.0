@@ -276,6 +276,7 @@ Opt-in state lives in `data/voiceAssistant.json` and is written synchronously on
 - `/heyjerry on` - Let Jerry listen to you
 - `/heyjerry off` - Stop Jerry from listening (takes effect before the reply is sent)
 - `/heyjerry status` - Your opt-in state, whether the assistant is running, and who else in your voice channel is opted in
+- `/heyjerry replies <on|off>` - Toggle whether Jerry speaks replies out loud vs. only reporting in the activity log (requires Manage Server)
 
 Listed under the **utility** category in `/help`.
 
@@ -367,6 +368,7 @@ The `/chat` command uses OpenRouter API (currently Grok model) for AI responses.
 - Conversation history is capped at 10 turns to limit token usage
 - The bot identifies its own chat messages by the `**Question:**` prefix format
 - Implementation spans: `src/utils/openrouter.js` (accepts message history), `src/index.js` (reply chain handler), `src/commands/chat.js` (initial question)
+- `/chatmodel show` and `/chatmodel set <model>` (requires Manage Server) view/change the persisted `/chat` model at runtime, with autocomplete sourced from the OpenRouter models API. Implementation: `src/commands/chatmodel.js`
 
 ## Help Command
 

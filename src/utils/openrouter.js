@@ -121,6 +121,16 @@ export function setChatMaxTokens(tokens) {
 }
 
 /**
+ * Set whether the voice assistant speaks its replies out loud, vs. only
+ * reporting in the activity-log embed.
+ * @param {boolean} spoken
+ */
+export function setVoiceSpokenReplies(spoken) {
+  voiceSpokenReplies = spoken;
+  saveAiSettings();
+}
+
+/**
  * Send a chat message to OpenRouter API
  * @param {string} message - The user's message
  * @param {string} apiKey - OpenRouter API key
