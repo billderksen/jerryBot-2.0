@@ -42,6 +42,9 @@ function getWeekBounds(now = new Date()) {
     end.setDate(end.getDate() - 1);
   }
   end.setHours(recapData.scheduleHour, 0, 0, 0);
+  // Setting the hour can push a same-day match into the future (schedule hour
+  // hasn't happened yet today) — roll back to the previous scheduled week.
+  if (end > now) end.setDate(end.getDate() - 7);
 
   const start = new Date(end);
   start.setDate(start.getDate() - 7);
@@ -411,27 +414,34 @@ async function postRecapToChannel(recap) {
 }
 
 async function fireRecap() {
-  console.log('[WeeklyRecap] Generating scheduled recap...');
-  const now = new Date();
-  const end = new Date(now);
-  end.setHours(recapData.scheduleHour, 0, 0, 0);
-  const start = new Date(end);
-  start.setDate(start.getDate() - 7);
+  try {
+    console.log('[WeeklyRecap] Generating scheduled recap...');
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(recapData.scheduleHour, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 7);
 
-  const recap = buildRecap(start.getTime(), end.getTime());
+    const recap = buildRecap(start.getTime(), end.getTime());
 
-  // Store the recap
-  recapData.recaps.push(recap);
-  saveRecaps();
+    // Store the recap, capped to the last 26 weeks
+    recapData.recaps.push(recap);
+    if (recapData.recaps.length > 26) {
+      recapData.recaps = recapData.recaps.slice(-26);
+    }
+    saveRecaps();
 
-  // Snapshot leaderboards for next week's delta
-  snapshotLeaderboards();
+    // Snapshot leaderboards for next week's delta
+    snapshotLeaderboards();
 
-  // Post to Discord
-  await postRecapToChannel(recap);
-
-  // Schedule next
-  scheduleNext();
+    // Post to Discord
+    await postRecapToChannel(recap);
+  } catch (e) {
+    console.error('[WeeklyRecap] Error generating scheduled recap:', e.message);
+  } finally {
+    // Schedule next — always, even if the run above failed
+    scheduleNext();
+  }
 }
 
 function msUntilNext() {
@@ -464,6 +474,17 @@ function scheduleNext() {
   scheduleTimeout = setTimeout(fireRecap, ms);
 }
 
+// Wraps scheduleNext() so a startup failure (e.g. bad scheduleDay/Hour data)
+// doesn't leave the recap scheduler permanently dead — retries in 1h.
+function scheduleNextSafe() {
+  try {
+    scheduleNext();
+  } catch (e) {
+    console.error('[WeeklyRecap] Failed to schedule next recap, retrying in 1h:', e.message);
+    scheduleTimeout = setTimeout(scheduleNextSafe, 60 * 60 * 1000);
+  }
+}
+
 // === Public API ===
 
 export function initWeeklyRecap(client) {
@@ -483,7 +504,7 @@ export function initWeeklyRecap(client) {
     snapshotLeaderboards();
   }
 
-  scheduleNext();
+  scheduleNextSafe();
   console.log('[WeeklyRecap] Initialized');
 }
 

@@ -263,13 +263,23 @@ export function initDiscordTracker(client) {
   // Recover active voice sessions from current state
   const guild = client.guilds.cache.get(process.env.GUILD_ID);
   if (guild) {
+    const currentlyInVoice = new Set();
     for (const [, channel] of guild.channels.cache) {
       if (channel.isVoiceBased() && channel.members) {
         for (const [memberId, member] of channel.members) {
-          if (!member.user.bot && !data.activeVoice[memberId]) {
+          if (member.user.bot) continue;
+          currentlyInVoice.add(memberId);
+          if (!data.activeVoice[memberId]) {
             data.activeVoice[memberId] = Date.now();
           }
         }
+      }
+    }
+
+    // Clear stale entries for users who left voice while the bot was offline
+    for (const userId of Object.keys(data.activeVoice)) {
+      if (!currentlyInVoice.has(userId)) {
+        delete data.activeVoice[userId];
       }
     }
   }

@@ -46,39 +46,65 @@ function scheduleNext() {
   scheduleTimeout = setTimeout(fireBirthdayCheck, ms);
 }
 
+// Wraps scheduleNext() so a startup failure doesn't leave the birthday
+// scheduler permanently dead — retries in 1h.
+function scheduleNextSafe() {
+  try {
+    scheduleNext();
+  } catch (e) {
+    console.error('[BirthdayTracker] Failed to schedule next check, retrying in 1h:', e.message);
+    scheduleTimeout = setTimeout(scheduleNextSafe, 60 * 60 * 1000);
+  }
+}
+
+/**
+ * Whether `year` is a leap year (Gregorian calendar rules).
+ */
+export function isLeapYear(year) {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
 async function fireBirthdayCheck() {
-  load();
-  const now = new Date();
-  const today = { day: now.getDate(), month: now.getMonth() + 1 };
+  try {
+    load();
+    const now = new Date();
+    const today = { day: now.getDate(), month: now.getMonth() + 1 };
+    // In non-leap years, Feb 29 birthdays are celebrated on Feb 28 instead.
+    const isFeb28NonLeap = today.day === 28 && today.month === 2 && !isLeapYear(now.getFullYear());
 
-  const birthdayUsers = Object.entries(data.birthdays)
-    .filter(([, b]) => b.day === today.day && b.month === today.month)
-    .map(([userId, b]) => ({ userId, displayName: b.displayName }));
+    const birthdayUsers = Object.entries(data.birthdays)
+      .filter(([, b]) => (b.day === today.day && b.month === today.month) ||
+        (isFeb28NonLeap && b.day === 29 && b.month === 2))
+      .map(([userId, b]) => ({ userId, displayName: b.displayName }));
 
-  if (birthdayUsers.length > 0) {
-    for (const [guildId, channelId] of Object.entries(data.channels)) {
-      try {
-        const channel = await discordClient.channels.fetch(channelId);
-        if (!channel) continue;
+    if (birthdayUsers.length > 0) {
+      for (const [guildId, channelId] of Object.entries(data.channels)) {
+        try {
+          const channel = await discordClient.channels.fetch(channelId);
+          if (!channel) continue;
 
-        const mentions = birthdayUsers.map(u => `<@${u.userId}>`).join(', ');
-        const embed = new EmbedBuilder()
-          .setColor(0xFF69B4)
-          .setTitle('🎂 Happy Birthday!')
-          .setDescription(birthdayUsers.length === 1
-            ? `It's ${mentions}'s birthday today! Wish them a happy birthday! 🎉`
-            : `It's a special day! Happy birthday to ${mentions}! 🎉`)
-          .setTimestamp();
+          const mentions = birthdayUsers.map(u => `<@${u.userId}>`).join(', ');
+          const embed = new EmbedBuilder()
+            .setColor(0xFF69B4)
+            .setTitle('🎂 Happy Birthday!')
+            .setDescription(birthdayUsers.length === 1
+              ? `It's ${mentions}'s birthday today! Wish them a happy birthday! 🎉`
+              : `It's a special day! Happy birthday to ${mentions}! 🎉`)
+            .setTimestamp();
 
-        await channel.send({ embeds: [embed] });
-        console.log(`[BirthdayTracker] Posted birthday announcement for ${birthdayUsers.length} user(s) in guild ${guildId}`);
-      } catch (e) {
-        console.error(`[BirthdayTracker] Error posting to guild ${guildId}:`, e.message);
+          await channel.send({ embeds: [embed] });
+          console.log(`[BirthdayTracker] Posted birthday announcement for ${birthdayUsers.length} user(s) in guild ${guildId}`);
+        } catch (e) {
+          console.error(`[BirthdayTracker] Error posting to guild ${guildId}:`, e.message);
+        }
       }
     }
+  } catch (e) {
+    console.error('[BirthdayTracker] Error during birthday check:', e.message);
+  } finally {
+    // Schedule next — always, even if the run above failed
+    scheduleNext();
   }
-
-  scheduleNext();
 }
 
 // === Public API ===
@@ -86,7 +112,7 @@ async function fireBirthdayCheck() {
 export function initBirthdayTracker(client) {
   discordClient = client;
   load();
-  scheduleNext();
+  scheduleNextSafe();
   console.log('[BirthdayTracker] Initialized');
 }
 

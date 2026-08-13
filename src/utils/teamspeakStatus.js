@@ -48,7 +48,6 @@ async function updateChannel(discordClient) {
 
     // Only rename if count changed
     if (count === lastCount) return;
-    lastCount = count;
 
     const channel = discordClient.channels.cache.get(statusChannelId);
     if (!channel) {
@@ -58,13 +57,14 @@ async function updateChannel(discordClient) {
 
     const name = `TeamSpeak: ${count} online`;
     await channel.setName(name);
+    lastCount = count;
     console.log(`[TS6Status] Updated channel to: ${name}`);
   } catch (err) {
     console.error('[TS6Status] Error:', err.message);
   }
 }
 
-export function initTeamspeakStatus(discordClient) {
+export async function initTeamspeakStatus(discordClient) {
   // Read env vars at init time (after dotenv has loaded)
   statusChannelId = process.env.TS6_STATUS_CHANNEL_ID || '';
   sqApiKey = process.env.TS6_API_KEY || '';
@@ -84,7 +84,7 @@ export function initTeamspeakStatus(discordClient) {
   try {
     const channel = discordClient.channels.cache.get(statusChannelId);
     if (channel) {
-      channel.permissionOverwrites.edit(channel.guild.id, {
+      await channel.permissionOverwrites.edit(channel.guild.id, {
         [PermissionFlagsBits.ViewChannel]: true,
         [PermissionFlagsBits.Connect]: false,
       });
