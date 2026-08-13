@@ -66,17 +66,45 @@ const CAPTURE_SILENCE_MS = 1000; // end the utterance after this much silence
 const CAPTURE_MAX_MS = 10_000; // hard cap: a stream that never goes silent must still end
 const CAPTURE_MAX_BYTES = (CAPTURE_MAX_MS / 1000) * IN_SAMPLE_RATE * IN_CHANNELS * 2;
 const MIN_CAPTURE_BYTES = OUT_SAMPLE_RATE * 2 * 0.3; // <0.3s of speech is not worth an API call
+// ...unless what little we have is all speech: a short command that beat the
+// arming gate (see the capture state machine) rides the grace window out and
+// lands here well under MIN_CAPTURE_BYTES while still being a real word.
+const MIN_VOICED_BYTES = OUT_SAMPLE_RATE * 2 * 0.15;
+// 48k stereo in, 16k mono out: 3 frames of 4 bytes collapse to one 2-byte sample.
+const SOURCE_BYTES_PER_OUT_BYTE = 6;
 
-// How long to wait for the command to *begin* before giving up on a wake. It
-// covers the people who wait for the beep and think about it for a moment; the
-// CAPTURE_SILENCE_MS rule only takes over once they have actually started.
-const FIRST_SPEECH_GRACE_MS = 3500;
-// The wake fires around the end of "hey jarvis", so the first slice of audio
-// after it is the tail of the wake word rather than the command. It is still
-// buffered (Whisper copes fine with a stray syllable), but it must not count as
-// "the user has started speaking" - that would arm the silence timer and hang up
-// one second later on someone who is still waiting for the beep.
-const WAKE_TAIL_MS = 250;
+// --- The capture state machine -------------------------------------------
+//
+// Everything below exists to answer one question: which voiced audio means
+// "the user has started their command"? Getting that wrong in either direction
+// is what round one of live testing tripped over.
+//
+// Two things make noise right after a wake, and neither is the command:
+//   1. the tail of "hey jarvis" itself - the wake fires around the end of the
+//      phrase, so a syllable or two is still arriving;
+//   2. the beep, which a user on speakers hears and whose echo comes back up
+//      their own mic at full speech energy.
+// If either ARMS the utterance, the CAPTURE_SILENCE_MS rule takes over and
+// hangs up ~1s later - before someone who was politely waiting for the beep has
+// said a word. So arming is gated: voiced audio before `armGateUntil` is
+// buffered but does not arm. The gate starts at WAKE_TAIL_MS and, once the beep
+// clip actually finishes, extends to cover its echo round-trip.
+//
+// The gate is deliberately one-directional. Suppressing an arm costs latency
+// (the capture rides the grace window out and transcribes whatever it buffered,
+// see MIN_VOICED_BYTES); a wrong arm costs the command outright. Beep echo and
+// a fluent speaker are genuinely indistinguishable inside that window, so the
+// cheap mistake is the one to make.
+const FIRST_SPEECH_GRACE_MS = 3500; // how long to wait for the command to BEGIN
+const WAKE_TAIL_MS = 250; // audio this soon after the wake is still "...jarvis"
+// Added to the moment the beep clip finishes. It covers the client-side jitter
+// buffer plus the trip back up the speaker user's mic, which is why it is
+// measured from the end of the clip rather than from the wake.
+const BEEP_ECHO_MARGIN_MS = 250;
+// Ceiling on the gate, measured from the wake. tts.js serializes clips per
+// guild, so a beep queued behind another clip can settle arbitrarily late -
+// without this, a second waker's gate could swallow their whole grace window.
+const ARM_GATE_MAX_MS = 1200;
 // Mean absolute sample (of 32767) above which a decoded chunk counts as speech.
 // Deliberately low: a false positive only means the capture runs a little long,
 // while a false negative can cut a quiet speaker off.
@@ -84,6 +112,17 @@ const SPEECH_ENERGY_THRESHOLD = 300;
 const CAPTURE_POLL_MS = 100; // how often the capture checks its own end conditions
 
 const SPOKEN_ANSWER_MAX_CHARS = 400;
+
+// Discord rejects an embed description over 4096 characters, and EmbedBuilder
+// throws while BUILDING it - inside logInteraction's try, where the catch
+// swallows it and the interaction reports nothing at all. With spoken replies
+// off that embed is the entire response, so every part of it is clamped and the
+// answer is budgeted against whatever the heading actually used.
+const EMBED_DESCRIPTION_BUDGET = 4000; // headroom under Discord's hard 4096
+const EMBED_FIELD_MAX = 1024;
+const EMBED_NAME_MAX = 80;
+const EMBED_TRANSCRIPT_MAX = 300;
+const EMBED_SUMMARY_MAX = 500;
 const AUTO_LEAVE_DEFER_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 30_000;
 // Mirrors musicQueue.js's DUCK_MAX_MS (120s; not imported, to avoid a module
@@ -627,25 +666,32 @@ async function handleWake({ slot, score }) {
   console.log(`[VoiceAssistant] Wake from ${userId} in ${guildId} (score ${score.toFixed(2)})`);
   state.active.add(userId);
 
-  // Before anything that can await, and before the beep: from here on every
-  // decoded chunk from this user's monitor is also going into the capture
-  // buffer, so a command spoken straight after the wake word is recorded
-  // instead of being lost behind the beep's duck.
-  const capture = beginCapture(state, userId);
-  if (capture) state.capturing.add(userId);
-
-  // Fired, not awaited - it is an acknowledgement, and the ~0.5s it takes is
-  // exactly the window in which people say the command. A silent beep isn't
-  // worth abandoning the interaction over either; the capture works regardless.
-  playBeep(guildId)
-    .then((played) => {
-      if (!played) console.warn(`[VoiceAssistant] wake beep did not play in guild ${guildId}`);
-    })
-    .catch((err) => console.error('[VoiceAssistant] wake beep failed:', err.message));
-
-  await deferAutoLeave(guildId);
-
+  // Everything that registers this user as busy lives inside the try whose
+  // finally clears it: anything throwing in between would otherwise pin them in
+  // state.active forever, and a pinned user can never wake Jerry again.
+  let capture = null;
   try {
+    // Before anything that can await, and before the beep: from here on every
+    // decoded chunk from this user's monitor is also going into the capture
+    // buffer, so a command spoken straight after the wake word is recorded
+    // instead of being lost behind the beep's duck.
+    capture = beginCapture(state, userId);
+    if (capture) state.capturing.add(userId);
+
+    // Fired, not awaited - it is an acknowledgement, and the ~0.15s clip plus
+    // its duck is exactly the window in which people say the command. A silent
+    // beep isn't worth abandoning the interaction over either; the capture works
+    // regardless. Its settling is also the signal that the echo window has
+    // opened, which is why the capture is told about it.
+    playBeep(guildId)
+      .then((played) => {
+        if (!played) console.warn(`[VoiceAssistant] wake beep did not play in guild ${guildId}`);
+      })
+      .catch((err) => console.error('[VoiceAssistant] wake beep failed:', err.message))
+      .finally(() => capture?.noteBeepSettled());
+
+    await deferAutoLeave(guildId);
+
     await runInteraction(state, userId, capture);
   } finally {
     capture?.finish('interaction-ended'); // no-op once it ended on its own; stops the poll on any early return
@@ -654,6 +700,42 @@ async function handleWake({ slot, score }) {
     await deferAutoLeave(guildId); // restart the 60s clock now that Jerry is done talking
     syncSubscriptions(guildId);
   }
+}
+
+/**
+ * Where the arming gate moves to once the beep clip has finished playing.
+ * Pure, and exported for tests: this is half of the capture state machine, and
+ * both of its clamps guard a failure that only shows up with real-world timing.
+ * @param {number} startedAt - the wake
+ * @param {number} armGateUntil - the gate as it stands (>= startedAt + WAKE_TAIL_MS)
+ * @param {number} beepSettledAt - when the clip finished
+ * @returns {number} the new gate: far enough out for the echo, never past the cap
+ */
+export function armGateAfterBeep(startedAt, armGateUntil, beepSettledAt) {
+  return Math.min(
+    // max(): a beep that settles early must not pull the wake-tail gate back in.
+    Math.max(armGateUntil, beepSettledAt + BEEP_ECHO_MARGIN_MS),
+    // min(): a beep queued behind another clip can settle seconds late, and a
+    // gate that outlived the grace window would make every wake fail.
+    startedAt + ARM_GATE_MAX_MS
+  );
+}
+
+/**
+ * Whether the utterance is over, and why. Pure, and exported for tests - the
+ * other half of the capture state machine.
+ * @param {{startedAt: number, lastVoiceAt: number, speechStarted: boolean}} capture
+ * @param {number} now
+ * @returns {'max-duration'|'no-speech'|'silence'|null} null means keep listening
+ */
+export function captureEndReason(capture, now) {
+  if (now - capture.startedAt >= CAPTURE_MAX_MS) return 'max-duration';
+  // Before the command starts, only the grace window can end the capture -
+  // the silence rule would fire during the user's pause and cut them off.
+  if (!capture.speechStarted) {
+    return now - capture.startedAt >= FIRST_SPEECH_GRACE_MS ? 'no-speech' : null;
+  }
+  return now - capture.lastVoiceAt >= CAPTURE_SILENCE_MS ? 'silence' : null;
 }
 
 /**
@@ -681,16 +763,21 @@ function beginCapture(state, userId) {
     ended,
     chunks: [],
     bytes: 0,
+    voicedBytes: 0, // of `bytes`, how much was actually speech
     speechStarted: false,
     lastVoiceAt: startedAt,
+    armGateUntil: startedAt + WAKE_TAIL_MS,
     endReason: null,
 
     push(chunk) {
       if (capture.endReason) return;
+      const now = Date.now();
       const voiced = chunkEnergy(chunk) >= SPEECH_ENERGY_THRESHOLD;
       if (voiced) {
-        capture.lastVoiceAt = Date.now();
-        if (Date.now() - startedAt >= WAKE_TAIL_MS) capture.speechStarted = true;
+        capture.lastVoiceAt = now;
+        // Gated, not discarded: audio from inside the gate is still buffered
+        // and still counted as speech, it just can't start the silence timer.
+        if (now >= capture.armGateUntil) capture.speechStarted = true;
       } else if (!capture.speechStarted) {
         // Leading silence is exactly what Whisper invents words over, and a
         // pause before the command produces nothing but. Drop it; the buffer
@@ -699,7 +786,15 @@ function beginCapture(state, userId) {
       }
       capture.chunks.push(chunk);
       capture.bytes += chunk.length;
+      if (voiced) capture.voicedBytes += chunk.length;
       if (capture.bytes >= CAPTURE_MAX_BYTES) capture.finish('max-bytes');
+    },
+
+    // Called when the beep clip has finished playing - the echo window opens
+    // then, not at the wake.
+    noteBeepSettled() {
+      if (capture.endReason || capture.speechStarted) return;
+      capture.armGateUntil = armGateAfterBeep(startedAt, capture.armGateUntil, Date.now());
     },
 
     finish(reason) {
@@ -714,13 +809,8 @@ function beginCapture(state, userId) {
   // The monitor subscription is EndBehaviorType.Manual and stays open across the
   // pause, so nothing will tell us the utterance ended - we time it ourselves.
   poll = setInterval(() => {
-    const now = Date.now();
-    if (now - startedAt >= CAPTURE_MAX_MS) return capture.finish('max-duration');
-    if (!capture.speechStarted) {
-      if (now - startedAt >= FIRST_SPEECH_GRACE_MS) capture.finish('no-speech');
-      return;
-    }
-    if (now - capture.lastVoiceAt >= CAPTURE_SILENCE_MS) capture.finish('silence');
+    const reason = captureEndReason(capture, Date.now());
+    if (reason) capture.finish(reason);
   }, CAPTURE_POLL_MS);
   if (typeof poll.unref === 'function') poll.unref();
 
@@ -749,8 +839,16 @@ async function runInteraction(state, userId, capture) {
       console.log(`[VoiceAssistant] ${userId} opted out mid-capture, discarding ${pcm.length} bytes`);
       return;
     }
-    if (pcm.length < MIN_CAPTURE_BYTES) {
-      throw new Error(`captured only ${pcm.length} bytes of audio`);
+    // A command short enough to finish inside the arming gate never starts the
+    // silence timer, so it rides the grace window out and arrives here well
+    // under MIN_CAPTURE_BYTES - "skip" is exactly that command, and failing it
+    // would defeat the point of the whole capture rework. Voiced audio is what
+    // actually decides whether a Whisper call is worth making; total bytes were
+    // only ever a proxy for it. Residue that turns out to be beep echo or half a
+    // syllable gets caught by the hallucination guard a few lines down.
+    const voicedBytes = Math.floor(capture.voicedBytes / SOURCE_BYTES_PER_OUT_BYTE);
+    if (pcm.length < MIN_CAPTURE_BYTES && voicedBytes < MIN_VOICED_BYTES) {
+      throw new Error(`captured only ${pcm.length} bytes of audio (${voicedBytes} voiced)`);
     }
 
     stage = 'transcribe';
@@ -834,7 +932,8 @@ async function captureUtterance(userId, capture) {
   capture.chunks.length = 0; // the 48k stereo copy is six times the size of what we return
   console.log(
     `[VoiceAssistant] capture for ${userId} ended (${capture.endReason}) after ` +
-    `${Date.now() - capture.startedAt}ms, ${raw.length} bytes`
+    `${Date.now() - capture.startedAt}ms, ${raw.length} bytes ` +
+    `(${capture.voicedBytes} voiced, armed=${capture.speechStarted})`
   );
 
   return int16ToBuffer(downsample48kStereoTo16kMono(bufferToInt16(raw)));
@@ -984,6 +1083,37 @@ function truncateForSpeech(text) {
   return lastSpace > SPOKEN_ANSWER_MAX_CHARS * 0.6 ? cut.slice(0, lastSpace) : cut;
 }
 
+// Cut to `max` characters, marking the cut so a truncated answer doesn't read
+// as a complete one.
+function clampText(value, max) {
+  const text = String(value ?? '');
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+/**
+ * Builds the activity-log embed's description. Exported for tests: every input
+ * here is attacker-length (a Whisper transcript, an LLM summary, an LLM answer)
+ * and EmbedBuilder THROWS above 4096 characters, from inside logInteraction's
+ * try - so an unclamped description doesn't degrade, it makes the interaction
+ * report nothing at all.
+ * @returns {string} a description of at most EMBED_DESCRIPTION_BUDGET characters
+ */
+export function buildLogDescription({ displayName, transcript, summary, detail, ok }) {
+  const spoken = transcript ? `"${clampText(transcript, EMBED_TRANSCRIPT_MAX)}"` : '_(nothing understood)_';
+  const heading = `🎤 **${clampText(displayName, EMBED_NAME_MAX)}**: ${spoken} → ${clampText(summary, EMBED_SUMMARY_MAX)}`;
+
+  // A successful answer goes in the description rather than a field: with
+  // voice.spokenReplies off this embed is the only place the user ever sees it,
+  // so it has to read as the reply - and the description has far more room than
+  // a field's 1024. What is left of that room after the heading is what the
+  // answer gets, which is the part the old fixed 3800-character slice missed.
+  if (detail && ok) {
+    const room = EMBED_DESCRIPTION_BUDGET - heading.length - 2; // the blank line
+    if (room > 0) return `${heading}\n\n${clampText(detail, room)}`;
+  }
+  return clampText(heading, EMBED_DESCRIPTION_BUDGET);
+}
+
 async function logInteraction({ displayName, transcript, summary, detail, ok, stage }) {
   try {
     const logChannelId = getLogChannelId();
@@ -991,23 +1121,13 @@ async function logInteraction({ displayName, transcript, summary, detail, ok, st
     const channel = await client.channels.fetch(logChannelId);
     if (!channel) return;
 
-    const spoken = transcript ? `"${transcript}"` : '_(nothing understood)_';
-    const heading = `🎤 **${displayName}**: ${spoken} → ${summary}`;
     const embed = new EmbedBuilder()
       .setColor(ok ? 0x57f287 : 0xed4245)
       .setTimestamp();
 
-    // A successful answer goes in the description rather than a field: with
-    // voice.spokenReplies off this embed is the only place the user ever sees
-    // it, so it has to read as the reply - and the description holds 4096
-    // characters where a field caps out at 1024.
-    if (detail && ok) {
-      embed.setDescription(`${heading}\n\n${String(detail).slice(0, 3800)}`);
-    } else {
-      embed.setDescription(heading);
-    }
-    if (stage) embed.addFields({ name: 'Failed at', value: stage, inline: true });
-    if (detail && !ok) embed.addFields({ name: 'Details', value: String(detail).slice(0, 1024) });
+    embed.setDescription(buildLogDescription({ displayName, transcript, summary, detail, ok }));
+    if (stage) embed.addFields({ name: 'Failed at', value: clampText(stage, EMBED_FIELD_MAX), inline: true });
+    if (detail && !ok) embed.addFields({ name: 'Details', value: clampText(detail, EMBED_FIELD_MAX) });
 
     await channel.send({ embeds: [embed] });
   } catch (err) {

@@ -86,7 +86,12 @@ const HALLUCINATION_PHRASES = new Set([
   'music',
   'applaus',
   'ondertiteling',
+  // Whisper's Dutch training data is full of subtitled video, so it falls back
+  // to the sign-off and the subtitle credit when it has nothing to work with.
+  // Both spellings of the credit show up.
+  'bedankt voor het kijken',
   'ondertiteld door de amaraorg gemeenschap',
+  'ondertiteling door de amaraorg gemeenschap',
 ]);
 
 const SYSTEM_PROMPT = `Je bent de intent-parser voor Jerry, een Nederlandstalige Discord voice-assistant.

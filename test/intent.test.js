@@ -59,6 +59,10 @@ test('hallucination guard: rejects empty, noise and music-tag transcripts', () =
   assert.equal(isLikelyHallucination('ZANG EN MUZIEK'), true);
   assert.equal(isLikelyHallucination('[Muziek]'), true);
   assert.equal(isLikelyHallucination(null), true);
+  // Whisper's Dutch subtitle artifacts, both spellings of the credit.
+  assert.equal(isLikelyHallucination('Bedankt voor het kijken!'), true);
+  assert.equal(isLikelyHallucination('Ondertiteling door de Amara.org gemeenschap'), true);
+  assert.equal(isLikelyHallucination('Ondertiteld door de Amara.org gemeenschap'), true);
 });
 
 test('hallucination guard: keeps real commands and questions', () => {
