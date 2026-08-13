@@ -16,21 +16,39 @@ const DEFAULT_MODEL = 'x-ai/grok-4.1-fast';
 const DEFAULT_SYSTEM_PROMPT = 'You are a concise assistant for a Discord bot. Keep answers brief and under 1800 characters so they fit in one reply. Use tight bullet points when helpful. Only go long if the user explicitly asks for a long or detailed answer.';
 const DEFAULT_MAX_TOKENS = 800;
 
+// Voice assistant (Hey Jerry) intent-parsing model - separate from the /chat
+// model above since it needs to be fast/cheap and support JSON mode. Verified
+// present on OpenRouter (GET /api/v1/models) as of 2026-08-13.
+const DEFAULT_VOICE_MODEL = 'google/gemini-2.5-flash-lite';
+const DEFAULT_VOICE_MAX_TOKENS = 200;
+
 function loadAiSettings() {
   const data = loadJsonSync(AI_SETTINGS_FILE, {
     model: DEFAULT_MODEL,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
-    maxTokens: DEFAULT_MAX_TOKENS
+    maxTokens: DEFAULT_MAX_TOKENS,
+    voice: { model: DEFAULT_VOICE_MODEL, maxTokens: DEFAULT_VOICE_MAX_TOKENS }
   });
   return {
     model: data.model || DEFAULT_MODEL,
     systemPrompt: data.systemPrompt || DEFAULT_SYSTEM_PROMPT,
-    maxTokens: data.maxTokens || DEFAULT_MAX_TOKENS
+    maxTokens: data.maxTokens || DEFAULT_MAX_TOKENS,
+    // Non-destructive: files saved before the voice section existed won't
+    // have data.voice, so fall back to defaults without touching the rest.
+    voice: {
+      model: data.voice?.model || DEFAULT_VOICE_MODEL,
+      maxTokens: data.voice?.maxTokens || DEFAULT_VOICE_MAX_TOKENS
+    }
   };
 }
 
 function saveAiSettings() {
-  saveJsonSync(AI_SETTINGS_FILE, { model: defaultModel, systemPrompt, maxTokens });
+  saveJsonSync(AI_SETTINGS_FILE, {
+    model: defaultModel,
+    systemPrompt,
+    maxTokens,
+    voice: { model: voiceModel, maxTokens: voiceMaxTokens }
+  });
 }
 
 // Configurable runtime settings, persisted to data/aiSettings.json so admin-panel
@@ -39,6 +57,8 @@ const initialSettings = loadAiSettings();
 let defaultModel = initialSettings.model;
 let systemPrompt = initialSettings.systemPrompt;
 let maxTokens = initialSettings.maxTokens;
+let voiceModel = initialSettings.voice.model;
+let voiceMaxTokens = initialSettings.voice.maxTokens;
 
 /**
  * Get current chat configuration
@@ -46,6 +66,14 @@ let maxTokens = initialSettings.maxTokens;
  */
 export function getChatConfig() {
   return { model: defaultModel, systemPrompt, maxTokens };
+}
+
+/**
+ * Get current voice-assistant (Hey Jerry) intent-parsing configuration
+ * @returns {{model: string, maxTokens: number}}
+ */
+export function getVoiceConfig() {
+  return { model: voiceModel, maxTokens: voiceMaxTokens };
 }
 
 /**
