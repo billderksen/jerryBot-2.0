@@ -67,9 +67,16 @@ const CAPTURE_MAX_MS = 10_000; // hard cap: a stream that never goes silent must
 const CAPTURE_MAX_BYTES = (CAPTURE_MAX_MS / 1000) * IN_SAMPLE_RATE * IN_CHANNELS * 2;
 const MIN_CAPTURE_BYTES = OUT_SAMPLE_RATE * 2 * 0.3; // <0.3s of speech is not worth an API call
 // ...unless what little we have is all speech: a short command that beat the
-// arming gate (see the capture state machine) rides the grace window out and
-// lands here well under MIN_CAPTURE_BYTES while still being a real word.
-const MIN_VOICED_BYTES = OUT_SAMPLE_RATE * 2 * 0.15;
+// arming gate (see CaptureMachine) rides the grace window out and lands here
+// well under MIN_CAPTURE_BYTES while still being a real word.
+//
+// 0.2s is picked to sit in the gap between the two things that arrive at this
+// length. The tail of "hey jarvis" left over after the wake fires runs to about
+// 150ms of voiced audio, and the shortest real command ("skip", "stop") is about
+// 250ms - so this clears the tail by ~50ms and admits the command by ~50ms.
+// Erring low is deliberate: too high rejects a real "skip", while too low only
+// spends a Whisper call on a clip the hallucination guard then throws away.
+const MIN_VOICED_BYTES = OUT_SAMPLE_RATE * 2 * 0.2;
 // 48k stereo in, 16k mono out: 3 frames of 4 bytes collapse to one 2-byte sample.
 const SOURCE_BYTES_PER_OUT_BYTE = 6;
 
@@ -86,9 +93,16 @@ const SOURCE_BYTES_PER_OUT_BYTE = 6;
 //      their own mic at full speech energy.
 // If either ARMS the utterance, the CAPTURE_SILENCE_MS rule takes over and
 // hangs up ~1s later - before someone who was politely waiting for the beep has
-// said a word. So arming is gated: voiced audio before `armGateUntil` is
-// buffered but does not arm. The gate starts at WAKE_TAIL_MS and, once the beep
-// clip actually finishes, extends to cover its echo round-trip.
+// said a word. So arming is gated: voiced audio arriving while the gate is shut
+// is buffered and counted, it just cannot start the utterance.
+//
+// The gate is evaluated LIVE, per chunk, rather than latched at wake time. That
+// distinction is the whole fix: how long the beep actually takes is not knowable
+// up front - awaitClipEnd resolves on player-idle, which includes ffmpeg spawn
+// and trailing silence frames - so a gate computed from an estimated clip length
+// leaves a hole between the estimate and reality, and echo lands in exactly that
+// hole when the clip starts late. Instead the gate is simply SHUT for as long as
+// the clip is in flight, and opens a margin after it genuinely finishes.
 //
 // The gate is deliberately one-directional. Suppressing an arm costs latency
 // (the capture rides the grace window out and transcribes whatever it buffered,
@@ -99,11 +113,15 @@ const FIRST_SPEECH_GRACE_MS = 3500; // how long to wait for the command to BEGIN
 const WAKE_TAIL_MS = 250; // audio this soon after the wake is still "...jarvis"
 // Added to the moment the beep clip finishes. It covers the client-side jitter
 // buffer plus the trip back up the speaker user's mic, which is why it is
-// measured from the end of the clip rather than from the wake.
-const BEEP_ECHO_MARGIN_MS = 250;
-// Ceiling on the gate, measured from the wake. tts.js serializes clips per
-// guild, so a beep queued behind another clip can settle arbitrarily late -
-// without this, a second waker's gate could swallow their whole grace window.
+// measured from the end of the clip rather than from the wake. 400ms is sized
+// for a bad connection rather than a typical one (~100-150ms round trip): the
+// cost of overshooting is latency on a path that already falls back to the
+// grace window, while undershooting loses the command.
+const BEEP_ECHO_MARGIN_MS = 400;
+// Safety valve: however the beep is doing, the gate opens this long after the
+// wake. A clip that never settles - a hung ffmpeg, a promise lost to a bug -
+// must not suppress arming forever, and a beep queued behind another clip must
+// not swallow the grace window with it.
 const ARM_GATE_MAX_MS = 1200;
 // Mean absolute sample (of 32767) above which a decoded chunk counts as speech.
 // Deliberately low: a false positive only means the capture runs a little long,
@@ -678,11 +696,15 @@ async function handleWake({ slot, score }) {
     capture = beginCapture(state, userId);
     if (capture) state.capturing.add(userId);
 
-    // Fired, not awaited - it is an acknowledgement, and the ~0.15s clip plus
-    // its duck is exactly the window in which people say the command. A silent
-    // beep isn't worth abandoning the interaction over either; the capture works
-    // regardless. Its settling is also the signal that the echo window has
-    // opened, which is why the capture is told about it.
+    // Fired, not awaited - it is an acknowledgement, and the clip plus its duck
+    // is exactly the window in which people say the command. A silent beep isn't
+    // worth abandoning the interaction over either; the capture works regardless.
+    //
+    // The capture is told when the clip starts and when it ends, because those
+    // two moments bracket the window in which anything it hears might be the
+    // beep echoing back off the user's speakers. Marked before the call, so no
+    // decoded chunk can slip through between the two.
+    capture?.noteBeepStarted();
     playBeep(guildId)
       .then((played) => {
         if (!played) console.warn(`[VoiceAssistant] wake beep did not play in guild ${guildId}`);
@@ -703,39 +725,112 @@ async function handleWake({ slot, score }) {
 }
 
 /**
- * Where the arming gate moves to once the beep clip has finished playing.
- * Pure, and exported for tests: this is half of the capture state machine, and
- * both of its clamps guard a failure that only shows up with real-world timing.
- * @param {number} startedAt - the wake
- * @param {number} armGateUntil - the gate as it stands (>= startedAt + WAKE_TAIL_MS)
- * @param {number} beepSettledAt - when the clip finished
- * @returns {number} the new gate: far enough out for the echo, never past the cap
+ * The capture's timing decisions, with no audio, streams or clock of its own.
+ * Every method takes `now` explicitly and the class touches nothing outside
+ * itself, which is the point: beep echo, grace windows and arming races are
+ * timing bugs, and a timing bug that can only be reproduced by speaking into a
+ * microphone does not get reproduced. beginCapture() owns the buffer and the
+ * lifecycle; this owns when an utterance starts and when it is over.
+ *
+ * Events in:     chunk(now, energy, byteLength), beepStarted(), beepSettled(now)
+ * Decisions out: 'buffer' | 'drop' from chunk(); an end reason or null from poll()
  */
-export function armGateAfterBeep(startedAt, armGateUntil, beepSettledAt) {
-  return Math.min(
-    // max(): a beep that settles early must not pull the wake-tail gate back in.
-    Math.max(armGateUntil, beepSettledAt + BEEP_ECHO_MARGIN_MS),
-    // min(): a beep queued behind another clip can settle seconds late, and a
-    // gate that outlived the grace window would make every wake fail.
-    startedAt + ARM_GATE_MAX_MS
-  );
-}
-
-/**
- * Whether the utterance is over, and why. Pure, and exported for tests - the
- * other half of the capture state machine.
- * @param {{startedAt: number, lastVoiceAt: number, speechStarted: boolean}} capture
- * @param {number} now
- * @returns {'max-duration'|'no-speech'|'silence'|null} null means keep listening
- */
-export function captureEndReason(capture, now) {
-  if (now - capture.startedAt >= CAPTURE_MAX_MS) return 'max-duration';
-  // Before the command starts, only the grace window can end the capture -
-  // the silence rule would fire during the user's pause and cut them off.
-  if (!capture.speechStarted) {
-    return now - capture.startedAt >= FIRST_SPEECH_GRACE_MS ? 'no-speech' : null;
+export class CaptureMachine {
+  /**
+   * @param {number} startedAt - the wake event; all windows are measured from it
+   */
+  constructor(startedAt) {
+    this.startedAt = startedAt;
+    this.beepPending = false;
+    this.beepSettledAt = null;
+    this.speechStarted = false;
+    this.lastVoiceAt = startedAt;
+    this.bytes = 0;
+    this.voicedBytes = 0; // of `bytes`, how much was actually speech
+    this.endReason = null;
   }
-  return now - capture.lastVoiceAt >= CAPTURE_SILENCE_MS ? 'silence' : null;
+
+  /** The wake beep is now playing; nothing it might echo back can arm. */
+  beepStarted() {
+    if (this.beepSettledAt === null) this.beepPending = true;
+  }
+
+  /** The beep clip has finished - the echo window opens now, not at the wake. */
+  beepSettled(now) {
+    if (!this.beepPending) return;
+    this.beepPending = false;
+    this.beepSettledAt = now;
+  }
+
+  /**
+   * Whether voiced audio at `now` may start the utterance.
+   * @returns {boolean}
+   */
+  armGateOpen(now) {
+    // The valve comes first, so a beep that never settles cannot wedge the gate
+    // shut for the whole interaction.
+    if (now - this.startedAt >= ARM_GATE_MAX_MS) return true;
+    // While the clip is in flight, any voiced audio could be it coming back up a
+    // speaker user's mic. There is no way to tell that from speech, so none of
+    // it arms - and this is a live check rather than a precomputed deadline
+    // precisely because the clip's real duration is not knowable in advance.
+    if (this.beepPending) return false;
+    const tailGate = this.startedAt + WAKE_TAIL_MS;
+    const echoGate = this.beepSettledAt === null
+      ? tailGate // no beep was ever played, so there is no echo to wait out
+      : this.beepSettledAt + BEEP_ECHO_MARGIN_MS;
+    return now >= Math.max(tailGate, echoGate);
+  }
+
+  /**
+   * Offer one decoded chunk.
+   * @param {number} energy - mean absolute sample, see chunkEnergy()
+   * @returns {'buffer'|'drop'} whether the caller should keep it
+   */
+  chunk(now, energy, byteLength) {
+    if (this.endReason) return 'drop';
+    const voiced = energy >= SPEECH_ENERGY_THRESHOLD;
+    if (voiced) {
+      this.lastVoiceAt = now;
+      // Gated audio is still kept and still counted - only the arming is held
+      // back - so a command spoken over the beep survives to be transcribed.
+      if (this.armGateOpen(now)) this.speechStarted = true;
+    } else if (!this.speechStarted) {
+      // Leading silence is exactly what Whisper invents words over, and a pause
+      // before the command produces nothing but. Drop it; the buffer then holds
+      // the command with no dead air in front of it.
+      return 'drop';
+    }
+    this.bytes += byteLength;
+    if (voiced) this.voicedBytes += byteLength;
+    if (this.bytes >= CAPTURE_MAX_BYTES) this.endReason = 'max-bytes';
+    return 'buffer';
+  }
+
+  /**
+   * Whether the utterance is over, and why.
+   * @returns {'max-bytes'|'max-duration'|'no-speech'|'silence'|null} null means keep listening
+   */
+  poll(now) {
+    if (this.endReason) return this.endReason;
+    if (now - this.startedAt >= CAPTURE_MAX_MS) return 'max-duration';
+    // Before the command starts, only the grace window can end the capture - the
+    // silence rule would fire during the user's pause and cut them off.
+    if (!this.speechStarted) {
+      return now - this.startedAt >= FIRST_SPEECH_GRACE_MS ? 'no-speech' : null;
+    }
+    return now - this.lastVoiceAt >= CAPTURE_SILENCE_MS ? 'silence' : null;
+  }
+
+  /**
+   * Whether what was captured is worth a transcription call, in output (16k
+   * mono) bytes. Voiced audio is the real signal; total bytes were only ever a
+   * proxy for it, and a short command that never armed rides the grace window
+   * out and arrives well under the total floor while still being a real word.
+   */
+  static isWorthTranscribing(outBytes, voicedOutBytes) {
+    return outBytes >= MIN_CAPTURE_BYTES || voicedOutBytes >= MIN_VOICED_BYTES;
+  }
 }
 
 /**
@@ -758,43 +853,29 @@ function beginCapture(state, userId) {
   let resolveEnded;
   const ended = new Promise((resolve) => { resolveEnded = resolve; });
 
+  const machine = new CaptureMachine(startedAt);
+
   const capture = {
     startedAt,
     ended,
+    machine,
     chunks: [],
-    bytes: 0,
-    voicedBytes: 0, // of `bytes`, how much was actually speech
-    speechStarted: false,
-    lastVoiceAt: startedAt,
-    armGateUntil: startedAt + WAKE_TAIL_MS,
     endReason: null,
 
     push(chunk) {
       if (capture.endReason) return;
-      const now = Date.now();
-      const voiced = chunkEnergy(chunk) >= SPEECH_ENERGY_THRESHOLD;
-      if (voiced) {
-        capture.lastVoiceAt = now;
-        // Gated, not discarded: audio from inside the gate is still buffered
-        // and still counted as speech, it just can't start the silence timer.
-        if (now >= capture.armGateUntil) capture.speechStarted = true;
-      } else if (!capture.speechStarted) {
-        // Leading silence is exactly what Whisper invents words over, and a
-        // pause before the command produces nothing but. Drop it; the buffer
-        // then holds the command with no dead air in front of it.
-        return;
+      if (machine.chunk(Date.now(), chunkEnergy(chunk), chunk.length) === 'buffer') {
+        capture.chunks.push(chunk);
       }
-      capture.chunks.push(chunk);
-      capture.bytes += chunk.length;
-      if (voiced) capture.voicedBytes += chunk.length;
-      if (capture.bytes >= CAPTURE_MAX_BYTES) capture.finish('max-bytes');
+      if (machine.endReason) capture.finish(machine.endReason);
     },
 
-    // Called when the beep clip has finished playing - the echo window opens
-    // then, not at the wake.
+    noteBeepStarted() {
+      machine.beepStarted();
+    },
+
     noteBeepSettled() {
-      if (capture.endReason || capture.speechStarted) return;
-      capture.armGateUntil = armGateAfterBeep(startedAt, capture.armGateUntil, Date.now());
+      if (!capture.endReason) machine.beepSettled(Date.now());
     },
 
     finish(reason) {
@@ -809,7 +890,7 @@ function beginCapture(state, userId) {
   // The monitor subscription is EndBehaviorType.Manual and stays open across the
   // pause, so nothing will tell us the utterance ended - we time it ourselves.
   poll = setInterval(() => {
-    const reason = captureEndReason(capture, Date.now());
+    const reason = machine.poll(Date.now());
     if (reason) capture.finish(reason);
   }, CAPTURE_POLL_MS);
   if (typeof poll.unref === 'function') poll.unref();
@@ -846,8 +927,8 @@ async function runInteraction(state, userId, capture) {
     // actually decides whether a Whisper call is worth making; total bytes were
     // only ever a proxy for it. Residue that turns out to be beep echo or half a
     // syllable gets caught by the hallucination guard a few lines down.
-    const voicedBytes = Math.floor(capture.voicedBytes / SOURCE_BYTES_PER_OUT_BYTE);
-    if (pcm.length < MIN_CAPTURE_BYTES && voicedBytes < MIN_VOICED_BYTES) {
+    const voicedBytes = Math.floor(capture.machine.voicedBytes / SOURCE_BYTES_PER_OUT_BYTE);
+    if (!CaptureMachine.isWorthTranscribing(pcm.length, voicedBytes)) {
       throw new Error(`captured only ${pcm.length} bytes of audio (${voicedBytes} voiced)`);
     }
 
@@ -933,7 +1014,7 @@ async function captureUtterance(userId, capture) {
   console.log(
     `[VoiceAssistant] capture for ${userId} ended (${capture.endReason}) after ` +
     `${Date.now() - capture.startedAt}ms, ${raw.length} bytes ` +
-    `(${capture.voicedBytes} voiced, armed=${capture.speechStarted})`
+    `(${capture.machine.voicedBytes} voiced, armed=${capture.machine.speechStarted})`
   );
 
   return int16ToBuffer(downsample48kStereoTo16kMono(bufferToInt16(raw)));

@@ -5,9 +5,8 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { EmbedBuilder } from 'discord.js';
 import {
-  armGateAfterBeep,
+  CaptureMachine,
   buildLogDescription,
-  captureEndReason,
   downsample48kStereoTo16kMono,
   isOptedIn,
   setOptIn,
@@ -38,50 +37,135 @@ test('downsampler: handles negative samples without overflowing Int16', () => {
 });
 
 // --- capture state machine -------------------------------------------------
-// Times are milliseconds from the wake event (T=0). The constants under test:
+// Times are milliseconds from the wake event (T=0). Constants under test:
 // WAKE_TAIL_MS 250, BEEP_ECHO_MARGIN_MS 250, ARM_GATE_MAX_MS 1200,
-// CAPTURE_SILENCE_MS 1000, FIRST_SPEECH_GRACE_MS 3500, CAPTURE_MAX_MS 10000.
+// CAPTURE_SILENCE_MS 1000, FIRST_SPEECH_GRACE_MS 3500, CAPTURE_MAX_MS 10000,
+// SPEECH_ENERGY_THRESHOLD 300.
 
-test('arm gate: a beep settling at T+250 covers its echo round-trip', () => {
-  assert.equal(armGateAfterBeep(0, 250, 250), 500);
+const FRAME_MS = 20;                       // one Discord voice frame
+const FRAME_BYTES = 48000 * 2 * 2 * 0.02;  // 3840 B of 48k stereo
+const LOUD = 4000;                         // mean |sample| of speech (or beep echo)
+const QUIET = 20;                          // a silence frame from a client that keeps transmitting
+const OUT_BYTES_PER_MS = 32;               // 16k mono, 2 bytes/sample
+const SOURCE_PER_OUT = 6;
+
+/**
+ * Runs a whole capture: 20ms frames, `voiced` intervals loud and the rest quiet,
+ * beep in flight from T=0 until `beepSettledAt` (null = never settles).
+ */
+function runCapture({ voiced, beepSettledAt, beep = true }) {
+  const machine = new CaptureMachine(0);
+  if (beep) machine.beepStarted();
+  let buffered = 0, armedAt = null, settled = false;
+
+  for (let t = 0; t <= 12_000; t += FRAME_MS) {
+    if (beep && !settled && beepSettledAt !== null && t >= beepSettledAt) {
+      machine.beepSettled(beepSettledAt);
+      settled = true;
+    }
+    const energy = voiced.some(([a, b]) => t >= a && t < b) ? LOUD : QUIET;
+    if (machine.chunk(t, energy, FRAME_BYTES) === 'buffer') buffered += FRAME_BYTES;
+    if (machine.speechStarted && armedAt === null) armedAt = t;
+
+    const reason = machine.poll(t);
+    if (reason) {
+      const outBytes = Math.floor(buffered / SOURCE_PER_OUT);
+      const voicedOut = Math.floor(machine.voicedBytes / SOURCE_PER_OUT);
+      return {
+        reason, armedAt, endedAt: t, outBytes, voicedOut,
+        voicedMs: Math.round(voicedOut / OUT_BYTES_PER_MS),
+        transcribed: CaptureMachine.isWorthTranscribing(outBytes, voicedOut),
+      };
+    }
+  }
+  throw new Error('capture never ended');
+}
+
+const WAKE_TAIL = [0, 140]; // the tail of "hey jarvis" still arriving after the wake
+
+// The bug this round exists to kill: the gate used to be computed at wake time
+// from an ESTIMATED beep length, leaving [WAKE_TAIL_MS, beepSettledAt) unguarded.
+// A clip settling at T+400 let echo at T+260 arm permanently, and the capture
+// died at ~T+1600 - before the user, who was waiting for that very beep, spoke.
+test('capture (a): echo cannot arm while the beep is still in flight', () => {
+  const r = runCapture({ voiced: [WAKE_TAIL, [180, 600], [2000, 3400]], beepSettledAt: 400 });
+  assert.equal(r.armedAt, 2000, 'must arm on the user at T+2000, not on the echo');
+  assert.equal(r.reason, 'silence');
+  assert.ok(r.endedAt > 4000, `ended at T+${r.endedAt}, cutting the user off`);
+  assert.ok(r.transcribed);
 });
 
-test('arm gate: an early or dropped beep never pulls the wake-tail gate in', () => {
-  // tts.js resolves false immediately when it drops a clip; the gate must still
-  // cover the tail of "hey jarvis".
-  assert.equal(armGateAfterBeep(0, 250, 0), 250);
+test('capture (a\'): a long-lagging echo is still suppressed', () => {
+  // Echo still arriving 350ms after the clip finished - a bad connection. This
+  // is what sized BEEP_ECHO_MARGIN_MS: at 250ms the gate opened at T+500 and the
+  // echo's own tail armed the utterance.
+  const r = runCapture({ voiced: [WAKE_TAIL, [100, 600], [2000, 3400]], beepSettledAt: 250 });
+  assert.equal(r.armedAt, 2000);
+  assert.ok(r.transcribed);
 });
 
-test('arm gate: a late beep is capped so it cannot eat the grace window', () => {
-  // Queued behind a spoken reply, the beep can settle seconds after the wake.
-  assert.equal(armGateAfterBeep(0, 250, 5000), 1200);
-  assert.ok(armGateAfterBeep(0, 250, 5000) < 3500, 'gate must stay inside the grace window');
+test('capture (b): a command finishing inside the gate is transcribed, not lost', () => {
+  // "hey jarvis skip" said in one breath: over before the gate ever opens, so it
+  // never arms and rides the grace window out - but it is a real word.
+  const r = runCapture({ voiced: [[0, 280]], beepSettledAt: 250 });
+  assert.equal(r.armedAt, null, 'nothing after the gate opened, so nothing armed');
+  assert.equal(r.reason, 'no-speech');
+  assert.equal(r.endedAt, 3500);
+  assert.ok(r.transcribed, `${r.voicedMs}ms of speech must clear the voiced floor`);
 });
 
-test('capture end: waits out the grace window while nothing has been said', () => {
-  const waiting = { startedAt: 0, lastVoiceAt: 0, speechStarted: false };
-  // The old bug: the silence rule firing at T+1000 on someone still listening
-  // for the beep. It must not end here.
-  assert.equal(captureEndReason(waiting, 1000), null);
-  assert.equal(captureEndReason(waiting, 3499), null);
-  assert.equal(captureEndReason(waiting, 3500), 'no-speech');
+test('capture (c): speech overlapping the beep is buffered and arms at gate-open', () => {
+  // Headphones, so no echo - the user simply talks over the beep. None of it may
+  // be dropped, and arming happens within a frame of the gate opening.
+  const r = runCapture({ voiced: [[180, 1400]], beepSettledAt: 250 });
+  const gateOpensAt = 250 + 400; // beepSettledAt + BEEP_ECHO_MARGIN_MS
+  assert.ok(r.armedAt >= gateOpensAt && r.armedAt < gateOpensAt + FRAME_MS,
+    `armed at T+${r.armedAt}, expected within one frame of the gate opening at T+${gateOpensAt}`);
+  assert.equal(r.reason, 'silence');
+  assert.ok(r.voicedMs >= 1200, `all ${r.voicedMs}ms of speech kept, including the part over the beep`);
 });
 
-test('capture end: once armed, a second of silence ends the utterance', () => {
-  const speaking = { startedAt: 0, lastVoiceAt: 600, speechStarted: true };
-  assert.equal(captureEndReason(speaking, 1500), null);
-  assert.equal(captureEndReason(speaking, 1600), 'silence');
+test('capture (d): a beep that never settles opens the gate at the safety valve', () => {
+  const r = runCapture({ voiced: [WAKE_TAIL, [1300, 2200]], beepSettledAt: null });
+  assert.equal(r.armedAt, 1300, 'gate force-opens at ARM_GATE_MAX_MS, not never');
+  assert.equal(r.reason, 'silence');
+  assert.ok(r.transcribed);
 });
 
-test('capture end: a speaker armed late is not cut off by the grace window', () => {
-  // Started talking at T+2500, still going at T+4000 - past FIRST_SPEECH_GRACE_MS.
-  const lateStarter = { startedAt: 0, lastVoiceAt: 4000, speechStarted: true };
-  assert.equal(captureEndReason(lateStarter, 4000), null);
+test('capture (e): silence after the wake fails without a transcription call', () => {
+  const r = runCapture({ voiced: [WAKE_TAIL], beepSettledAt: 250 });
+  assert.equal(r.reason, 'no-speech');
+  assert.equal(r.armedAt, null);
+  assert.equal(r.transcribed, false, 'a wake-word tail alone is not worth an API call');
 });
 
-test('capture end: someone who never stops still ends at the hard cap', () => {
-  const endless = { startedAt: 0, lastVoiceAt: 9950, speechStarted: true };
-  assert.equal(captureEndReason(endless, 10_000), 'max-duration');
+// The margin that makes (b) and (e) different verdicts. Both are short bursts of
+// voiced audio; only the floor separates "a real command" from "the leftover of
+// the wake word", so it has to sit clear of both with room to spare.
+test('capture: the voiced floor clears the wake-word tail and admits a short command', () => {
+  const floorMs = Math.round(
+    [...Array(400).keys()].find((ms) => CaptureMachine.isWorthTranscribing(0, ms * OUT_BYTES_PER_MS))
+  );
+  assert.ok(floorMs - 140 >= 50, `floor ${floorMs}ms is only ${floorMs - 140}ms above a 140ms wake tail`);
+  assert.ok(250 - floorMs >= 50, `floor ${floorMs}ms leaves only ${250 - floorMs}ms under a 250ms "skip"`);
+});
+
+test('capture: a user who never stops still ends at the hard cap', () => {
+  const r = runCapture({ voiced: [[0, 12_000]], beepSettledAt: 250 });
+  assert.ok(r.reason === 'max-duration' || r.reason === 'max-bytes', `ended by ${r.reason}`);
+  assert.ok(r.endedAt <= 10_000);
+});
+
+test('capture: silence frames before the command are dropped, not buffered', () => {
+  // A client that transmits through the pause would otherwise hand Whisper two
+  // seconds of dead air to invent words over.
+  const r = runCapture({ voiced: [[2000, 3000]], beepSettledAt: 250 });
+  // 1s of speech + at most CAPTURE_SILENCE_MS of trailing silence. Had the 2s
+  // pause been buffered too, this would be ~4s of audio.
+  const bufferedMs = Math.round(r.outBytes / OUT_BYTES_PER_MS);
+  assert.ok(bufferedMs <= 2100, `buffered ${bufferedMs}ms - the leading pause was kept`);
+  assert.equal(r.voicedMs, 1000);
+  assert.equal(r.armedAt, 2000);
 });
 
 // EmbedBuilder throws above 4096, from inside logInteraction's try - where the
