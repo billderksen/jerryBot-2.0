@@ -32,7 +32,7 @@ export function getAntiOfflineState(guildId) {
   return antiOfflineState.get(guildId) || { enabled: false, enabledBy: null };
 }
 
-const GENERAL_CHANNEL_ID = '1419789649873735680';
+const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID || '1419789649873735680';
 
 /**
  * Scan all voice channels in a guild and kick offline members.

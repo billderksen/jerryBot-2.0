@@ -30,6 +30,9 @@ import { initTeamspeakStatus } from './utils/teamspeakStatus.js';
 let lastVoiceChannel = null;
 let lastGuildId = null;
 
+// Where anti-offline kick notifications get posted
+const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID || '1419789649873735680';
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -206,7 +209,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
       if (!presence || presence.status === 'offline') {
         try {
           await newState.disconnect();
-          const generalChannel = newState.guild.channels.cache.get('1419789649873735680');
+          const generalChannel = newState.guild.channels.cache.get(GENERAL_CHANNEL_ID);
           if (generalChannel) {
             generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`).catch(console.error);
           }
@@ -334,7 +337,7 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
     if (member?.voice?.channel) {
       try {
         await member.voice.disconnect();
-        const generalChannel = newPresence.guild.channels.cache.get('1419789649873735680');
+        const generalChannel = newPresence.guild.channels.cache.get(GENERAL_CHANNEL_ID);
         if (generalChannel) {
           generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`).catch(console.error);
         }

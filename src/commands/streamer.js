@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChannelType, MessageFlags } from 'discord.js';
 import { addStreamer, removeStreamer, subscribeUser, unsubscribeUser, setNotificationChannel, getTrackerData } from '../utils/twitchTracker.js';
 
-const DJ_ROLE_ID = '1467139293586653339';
+const DJ_ROLE_ID = process.env.DJ_ROLE_ID || '1467139293586653339';
 
 function hasDJRole(interaction) {
   return interaction.member?.roles?.cache?.has(DJ_ROLE_ID);

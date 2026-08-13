@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChannelType, MessageFlags } from 'discord.js';
 import { generateCurrentRecap, getLatestRecap, setRecapChannel, setRecapSchedule, buildDiscordEmbed, getRecapSettings } from '../utils/weeklyRecap.js';
 
-const DJ_ROLE_ID = '1467139293586653339';
+const DJ_ROLE_ID = process.env.DJ_ROLE_ID || '1467139293586653339';
 
 function hasDJRole(interaction) {
   return interaction.member?.roles?.cache?.has(DJ_ROLE_ID);

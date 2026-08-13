@@ -13,6 +13,7 @@ npm install          # Install dependencies
 npm run deploy       # Register Discord slash commands (required after command changes)
 npm start            # Production mode
 npm run dev          # Development with auto-reload (--watch)
+npm test             # Run the test suite (node --test test/)
 ```
 
 ## Architecture
@@ -20,6 +21,7 @@ npm run dev          # Development with auto-reload (--watch)
 ### Entry Points
 - `src/index.js` - Discord bot bootstrap, loads commands dynamically from `src/commands/`
 - `src/web/server.js` - Express + WebSocket server with Discord OAuth2
+- `src/loadEnv.js` - Loads `.env` into `process.env`; must be the literal first import in any entry-point-adjacent file (`index.js`, `web/server.js`) so it runs before other imports' subtrees evaluate
 
 ### Core Pattern: Callback Registration
 The bot uses callback registration to connect components:
@@ -32,19 +34,21 @@ setAddSongHandler(fn)           // Web dashboard adds songs to queue
 ```
 
 ### Key Modules
-- `src/utils/musicQueue.js` - Audio playback engine (queue, seek, loop, 24/7 mode, radio auto-play)
+- `src/utils/musicQueue.js` - Audio playback engine (queue, seek, loop, 24/7 mode, server-side radio auto-play — runs in the queue itself, no browser tab needed). All YouTube search/playback goes through the system `yt-dlp` binary (play-dl was removed)
+- `src/utils/voiceRecorder.js` - Streams a target user's voice channel audio to disk (`.wav`), 30-minute hard cap
 - `src/utils/pictionaryGame.js` - Drawing game with room management
 - `src/utils/pestenGame.js` - Dutch card game with bot AI players
 - `src/utils/hitsterGame.js` - Music timeline guessing game
 - `src/utils/activityLogger.js` - Logs user actions to Discord channel
-- `src/utils/openrouter.js` - AI API wrapper for OpenRouter
+- `src/utils/openrouter.js` - AI API wrapper for OpenRouter; model/prompt/token settings persisted in `data/aiSettings.json`, editable via the admin panel
 - `src/utils/levelSystem.js` - XP/level system rewarding message and voice activity
 - `src/utils/birthdayTracker.js` - Birthday persistence + daily announcement scheduler
-- `src/utils/reminderTracker.js` - Reminder persistence + per-reminder setTimeout scheduling
+- `src/utils/reminderTracker.js` - Reminder persistence + per-reminder setTimeout scheduling (delays beyond ~24.8 days are chained to avoid Node's setTimeout overflow; failed deliveries are retried)
 - `src/utils/triviaGame.js` - The Trivia API integration, leaderboard persistence, session management
 - `src/utils/lastSeenTracker.js` - Tracks user last-seen timestamps (messages, presence, voice)
 - `src/utils/f1Predictions.js` - F1 fantasy predictions (driver/race data, scoring, Jolpica API integration)
-- `src/utils/teamspeakStatus.js` - TeamSpeak 6 user count → Discord voice channel name
+- `src/utils/teamspeakStatus.js` - TeamSpeak 6 user count → Discord voice channel name (currently disabled on this host — see [TeamSpeak Status Channel](#teamspeak-status-channel))
+- `src/web/public/js/common.js` - Shared frontend module (escapeHtml, nav, reconnecting WebSocket, toasts) used by all 13 dashboard pages
 
 ### Data Flow
 ```
@@ -64,16 +68,18 @@ JSON files in `data/` directory:
 - `triviaLeaderboard.json` - Trivia game player stats
 - `lastSeen.json` - User last-seen timestamps (messages, presence, voice)
 - `f1Predictions.json` - F1 fantasy predictions, results cache, season standings
+- `aiSettings.json` - AI chat model/system prompt/max tokens, editable via the admin panel (persisted here, not env vars)
 - `commandLog.txt` - Slash command usage log
 - `sessions/` - Express session files
 
 ## Technical Details
 
 - **ES Modules** - Uses `import`/`export` (not CommonJS)
-- **Node.js 18+** required
-- **External dependencies**: FFmpeg and yt-dlp (system binaries preferred, npm packages as fallback)
+- **Node.js 20+** required (see `engines` in `package.json`)
+- **External dependencies**: FFmpeg and the system `yt-dlp` binary (auto-updated daily by a system timer; play-dl was removed, all YouTube search/playback/radio goes through yt-dlp)
 - **Real-time sync**: WebSocket broadcasts state to all connected web clients
 - **Session persistence**: File-based sessions survive server restarts
+- **Graceful shutdown**: SIGINT/SIGTERM (and uncaughtException) flush levelSystem, discordTracker, lastSeen, and listening-stats state to disk before exit. `pm2 restart` is safe; `ecosystem.config.cjs` sets `kill_timeout: 8000` to give the flush time to finish before SIGKILL
 
 ## Environment Variables
 
@@ -82,10 +88,13 @@ Copy `.env.example` to `.env`. Required:
 - `CLIENT_SECRET`, `OAUTH_REDIRECT_URI` - OAuth2 for web dashboard
 - `REQUIRED_ROLE_ID` - Discord role required to access dashboard
 - `WEB_PORT` - Web server port (default 3001)
+- `SESSION_SECRET` - Session cookie signing secret (`openssl rand -hex 32`); **the bot refuses to boot without this set**
 
 Optional:
-- `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` - AI chat feature
-- `TS6_API_KEY`, `TS6_STATUS_CHANNEL_ID` - TeamSpeak status voice channel
+- `OPENROUTER_API_KEY` - AI chat feature (model/prompt/tokens are configured separately in `data/aiSettings.json` via the admin panel, not env vars)
+- `YOUTUBE_COOKIES` / `YOUTUBE_COOKIES_BROWSER` - Improves radio variety with authenticated YouTube access
+- `TS6_API_KEY`, `TS6_STATUS_CHANNEL_ID` - TeamSpeak status voice channel (currently unset/disabled on this host)
+- `GENERAL_CHANNEL_ID`, `ACTIVITY_LOG_CHANNEL_ID`, `DJ_ROLE_ID`, `BOT_ADMIN_USER_ID` - Overrides for IDs that otherwise fall back to in-code literals (level-up/anti-offline announcements, activity log channel, streamer/recap DJ role gate, OSRS tracker admin gate)
 
 ## Web Dashboard Routes
 
@@ -96,6 +105,8 @@ Optional:
 - `/f1` - F1 Predictions fantasy league (race calendar, predictions, leaderboard)
 - `/birthdays` - Birthday calendar (month grid view of all registered birthdays)
 - `/admin` - Bot control panel (requires Control Panel role, manages birthday/recap/twitch/activity-log channels, AI chat model/prompt/tokens, OSRS tracker players, music status, server overview)
+
+All routes except `/login` and the OAuth callback go through `requireAuth`: unauthenticated requests get a JSON `401` under `/api/*` and a `302` redirect to `/login` for page routes.
 
 ## Level/XP System
 
@@ -128,7 +139,7 @@ Commands:
 - `/reminder list` - Show your pending reminders
 - `/reminder cancel <id>` - Cancel a reminder by ID
 
-Reminders persist across restarts via `data/reminders.json`. Each reminder gets a unique ID and its own `setTimeout`. If the time has already passed today (and no date was specified), it schedules for tomorrow. If a specific date in the past is given, it rolls to next year.
+Reminders persist across restarts via `data/reminders.json`. Each reminder gets a unique ID and its own `setTimeout`. If the time has already passed today (and no date was specified), it schedules for tomorrow. If a specific date in the past is given, it rolls to next year. Delays beyond Node's ~24.8-day `setTimeout` limit (2^31-1 ms) are chained rather than overflowing, so reminders far in the future fire correctly. Failed deliveries are retried.
 
 Implementation: `src/utils/reminderTracker.js` (core + scheduling), `src/commands/reminder.js`
 
@@ -136,7 +147,7 @@ Implementation: `src/utils/reminderTracker.js` (core + scheduling), `src/command
 
 Discord trivia game using The Trivia API (the-trivia-api.com, 12k+ vetted questions, no API key needed). Two modes: **buttons** (everyone picks, all correct score) and **race** (first correct answer wins). Leaderboard persists in `data/triviaLeaderboard.json`.
 
-**Custom local categories** with 150 hand-curated questions each (50 easy, 50 medium, 50 hard) stored in `data/`:
+**Custom local categories** with ~150 hand-curated questions each (50 easy, 50 medium, 50 hard) stored in `data/`:
 - Lord of the Rings (`data/lotrQuestions.json`)
 - Old School RuneScape (`data/osrsQuestions.json`)
 - Pokemon (`data/pokemonQuestions.json`)
@@ -167,7 +178,7 @@ Web-based F1 prediction game where users predict the podium (P1, P2, P3) and fas
 ### How It Works
 - Users predict P1, P2, P3, and fastest lap before each race
 - Predictions lock automatically at race start time
-- After the race, an admin fetches results via `/f1 fetchresults <round>` or the admin panel
+- After the race, an admin fetches results via the admin panel
 - Results are scored and broadcast to Discord + web dashboard via WebSocket
 
 ### Scoring System
@@ -224,7 +235,19 @@ Commands:
 
 Implementation: `src/utils/lastSeenTracker.js` (core + persistence), `src/commands/lastseen.js`, tracking hooks in `src/index.js` (MessageCreate, PresenceUpdate, VoiceStateUpdate)
 
+## Voice Recording
+
+Records a target user's voice channel audio to a `.wav` file. Gated behind the **Manage Server** permission, requires an explicit target user (the invoker can't silently record themselves-and-others), and announces publicly (non-ephemeral) when a recording starts so the room knows. Audio streams to disk as it's captured rather than buffering in memory, with a hard 30-minute cap that auto-stops the recording.
+
+Commands:
+- `/record start <target>` - Start recording a user in your voice channel
+- `/record stop` - Stop recording and save the `.wav` file
+
+Implementation: `src/commands/record.js`, `src/utils/voiceRecorder.js`
+
 ## TeamSpeak Status Channel
+
+**Currently disabled on this host** (the TS6 server was removed 2026-08-12; `TS6_API_KEY`/`TS6_STATUS_CHANNEL_ID` are commented out in `.env` and `initTeamspeakStatus()` skips setup at startup with both unset). Documented here for whenever TS6 comes back.
 
 A Discord voice channel that displays the current TeamSpeak 6 user count in its name (e.g. "TeamSpeak: 3 online"). The channel is view-only — permissions are set on startup to allow `ViewChannel` but deny `Connect` for @everyone.
 

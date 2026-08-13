@@ -1,6 +1,6 @@
 // Activity Logger - Sends music bot activity to a Discord channel
 
-let logChannelId = '1462410580185845893';
+let logChannelId = process.env.ACTIVITY_LOG_CHANNEL_ID || '1462410580185845893';
 
 let discordClient = null;
 let lastLoggedSong = null; // Track last logged song to avoid duplicates

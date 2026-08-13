@@ -13,6 +13,7 @@ const MESSAGE_XP_MAX = 25;
 const MESSAGE_COOLDOWN_MS = 60 * 1000; // 60 seconds
 const VOICE_XP_PER_MINUTE = 10;
 const VOICE_CHECK_INTERVAL_MS = 60 * 1000; // 60 seconds
+const GENERAL_CHANNEL_ID = process.env.GENERAL_CHANNEL_ID || '1419789649873735680';
 
 let data = { users: {}, roleRewards: {} };
 let saveTimer = null;
@@ -205,7 +206,7 @@ function handleMessageXp(message) {
 
   if (levelUp) {
     // Always send level-up notifications to the general channel
-    const generalChannel = message.guild?.channels.cache.get('1419789649873735680');
+    const generalChannel = message.guild?.channels.cache.get(GENERAL_CHANNEL_ID);
     sendLevelUpNotification(generalChannel || message.channel, userId, levelUp.newLevel, message.member);
     checkRoleRewards(message.member, levelUp.newLevel);
   }
@@ -237,7 +238,7 @@ function awardVoiceXp() {
 
       if (levelUp) {
         // For voice XP level-ups, post to general channel
-        const notifChannel = guild.channels.cache.get('1419789649873735680');
+        const notifChannel = guild.channels.cache.get(GENERAL_CHANNEL_ID);
 
         if (notifChannel) {
           sendLevelUpNotification(notifChannel, memberId, levelUp.newLevel, member);

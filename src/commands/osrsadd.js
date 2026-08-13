@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { addPlayerByUsername } from '../utils/osrsTracker.js';
 
-const ALLOWED_USER_ID = '81784467353513984';
+const ALLOWED_USER_ID = process.env.BOT_ADMIN_USER_ID || '81784467353513984';
 
 export default {
   data: new SlashCommandBuilder()
