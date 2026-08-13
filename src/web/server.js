@@ -1,17 +1,13 @@
+// Must be the first import: loads .env before any other import's subtree
+// evaluates (see src/loadEnv.js for why a same-file top-level statement isn't
+// enough — this module and its dependencies, like utils/musicQueue.js, read
+// process.env values at their own top level).
+import '../loadEnv.js';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import dotenv from 'dotenv';
-
-// This module reads several process.env values at top-level (module evaluation)
-// time — e.g. the SESSION_SECRET check below. Static imports (including this one,
-// as imported by index.js) are evaluated before any of the importing module's own
-// top-level code runs, which means index.js's own `dotenv.config()` call hasn't
-// executed yet by the time this file's top-level code does. Load .env here too so
-// those reads see real values instead of undefined.
-dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../.env') });
 import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';

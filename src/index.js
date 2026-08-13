@@ -1,14 +1,13 @@
+// Must be the first import: loads .env before any other import's subtree
+// evaluates (see src/loadEnv.js).
+import './loadEnv.js';
 import { Client, Events, GatewayIntentBits, Partials, Collection, MessageFlags, ActivityType, Options, EmbedBuilder } from 'discord.js';
-import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Get directory path for .env file
+// Get directory path for command loading below
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Load environment variables with explicit path
-dotenv.config({ path: join(__dirname, '..', '.env') });
 
 import { readdirSync, appendFileSync } from 'fs';
 import { loadJsonSync, saveJsonSync } from './utils/jsonStore.js';
