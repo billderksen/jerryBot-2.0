@@ -19,12 +19,12 @@ import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAc
 import { initTracker } from './utils/osrsTracker.js';
 import { initTwitchTracker } from './utils/twitchTracker.js';
 import { initWeeklyRecap } from './utils/weeklyRecap.js';
-import { initDiscordTracker } from './utils/discordTracker.js';
-import { initLevelSystem } from './utils/levelSystem.js';
+import { initDiscordTracker, stopDiscordTracker } from './utils/discordTracker.js';
+import { initLevelSystem, stopLevelSystem } from './utils/levelSystem.js';
 import { initBirthdayTracker } from './utils/birthdayTracker.js';
 import { initReminderTracker } from './utils/reminderTracker.js';
 import { getAntiOfflineState } from './commands/antioffline.js';
-import { updateLastSeen } from './utils/lastSeenTracker.js';
+import { updateLastSeen, flushLastSeen } from './utils/lastSeenTracker.js';
 import { initTeamspeakStatus } from './utils/teamspeakStatus.js';
 
 // Store the last used voice channel for web dashboard
@@ -209,7 +209,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
           await newState.disconnect();
           const generalChannel = newState.guild.channels.cache.get('1419789649873735680');
           if (generalChannel) {
-            generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`);
+            generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`).catch(console.error);
           }
         } catch (e) {
           console.error('[AntiOffline] Voice kick error:', e.message);
@@ -337,7 +337,7 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
         await member.voice.disconnect();
         const generalChannel = newPresence.guild.channels.cache.get('1419789649873735680');
         if (generalChannel) {
-          generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`);
+          generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`).catch(console.error);
         }
       } catch (e) {
         console.error('[AntiOffline] Presence kick error:', e.message);
@@ -728,4 +728,36 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+let shuttingDown = false;
+
+// Best-effort synchronous flush of all periodically-saved state. Shared by the
+// graceful shutdown path and the uncaughtException handler — no awaits here,
+// since the uncaughtException handler must not hang before process.exit(1).
+function flushState() {
+  try { stopLevelSystem(); } catch (e) { console.error('[Shutdown] levelSystem:', e); }
+  try { stopDiscordTracker(); } catch (e) { console.error('[Shutdown] discordTracker:', e); }
+  try { flushLastSeen(); } catch (e) { console.error('[Shutdown] lastSeen:', e); }
+}
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[Shutdown] ${signal} received, flushing state...`);
+  flushState();
+  try { client.destroy(); } catch { /* already down */ }
+  process.exit(0);
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('unhandledRejection', (reason) => console.error('[UnhandledRejection]', reason));
+process.on('uncaughtException', (err) => {
+  console.error('[UncaughtException]', err);
+  if (!shuttingDown) {
+    shuttingDown = true;
+    console.log('[Shutdown] uncaughtException, flushing state before exit...');
+    flushState();
+  }
+  process.exit(1);
+});
+
+client.login(process.env.DISCORD_TOKEN).catch(err => { console.error('Login failed:', err); process.exit(1); });

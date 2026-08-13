@@ -41,3 +41,15 @@ export function updateLastSeen(userId, displayName, type) {
 export function getLastSeen(userId) {
   return data[userId] || null;
 }
+
+/**
+ * Immediately flush any pending debounced save (bypasses the 10s debounce).
+ * Used on shutdown so in-flight updates aren't lost.
+ */
+export function flushLastSeen() {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+    saveTimeout = null;
+  }
+  saveJsonSync(DATA_FILE, data);
+}
