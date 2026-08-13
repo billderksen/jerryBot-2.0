@@ -94,6 +94,9 @@ const RECENTLY_PLAYED_FILE = join(__dirname, '..', '..', 'data', 'recentlyPlayed
 const SETTINGS_FILE = join(__dirname, '..', '..', 'data', 'playerSettings.json');
 const STATS_FILE = join(__dirname, '..', '..', 'data', 'listeningStats.json');
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+// How long a seek/filter restart may stay pending before we assume the Playing
+// transition is never coming and unstick the player
+const SEEK_WATCHDOG_MS = 10000;
 
 // Load recently played from file
 function loadRecentlyPlayed() {
@@ -595,13 +598,10 @@ function broadcastState(seekPosition = null) {
     if (firstQueue.currentSong) {
       console.log('Current song thumbnail:', firstQueue.currentSong.thumbnail || 'NO THUMBNAIL');
     }
-    // Calculate current playback position in seconds
-    let position = 0;
+    // Calculate current playback position in seconds (paused time excluded)
     const isPaused = firstQueue.player.state.status === AudioPlayerStatus.Paused;
-    if (firstQueue.songStartTime) {
-      const speed = globalSettings.mixerFilters?.speed || 1.0;
-      position = (Date.now() - firstQueue.songStartTime) / 1000 * speed;
-    }
+    const speed = globalSettings.mixerFilters?.speed || 1.0;
+    const position = firstQueue.getPlaybackElapsedMs() / 1000 * speed;
     webUpdateCallback({
       currentSong: firstQueue.currentSong,
       queue: firstQueue.songs,
@@ -616,7 +616,8 @@ function broadcastState(seekPosition = null) {
       seekPosition: seekPosition,
       position: position,
       isCached: !!(firstQueue.cachedAudioPath && existsSync(firstQueue.cachedAudioPath)),
-      songStartTime: firstQueue.songStartTime,
+      // Pause-corrected, since the client computes its own progress as (now - songStartTime)
+      songStartTime: firstQueue.getEffectiveSongStartTime(),
       loopMode: globalSettings.loopMode,
       is24_7: globalSettings.is24_7,
       sleepEndTime: globalSettings.sleepEndTime,
@@ -660,6 +661,7 @@ export class MusicQueue {
     this.songs = [];
     this.isPlaying = false;
     this.isSeeking = false;
+    this.skipRequested = false; // A user ended this song on purpose, so loop must not re-queue it
     this.connection = null;
     this.player = createAudioPlayer();
     this.currentSong = null;
@@ -670,6 +672,9 @@ export class MusicQueue {
     this.isCaching = false; // Whether we're currently caching audio
     this.currentAudioUrl = null; // Current streaming URL
     this.songStartTime = null; // Timestamp when current song started playing
+    this.pausedAt = null; // Timestamp of the pause currently in effect (null = not paused)
+    this.totalPausedMs = 0; // Paused milliseconds already accumulated for this song
+    this.seekWatchdog = null; // Handle for the timer that unsticks a seek that never resumed
     this.seekOffset = 0; // Offset in seconds for when song started (for seeking)
     this.historyIndex = -1; // Current position in recently played history (-1 = not navigating history)
     this.playingFromHistory = false; // Flag to prevent re-adding history songs
@@ -699,11 +704,15 @@ export class MusicQueue {
     this.player.on(AudioPlayerStatus.Playing, () => {
       console.log('Player is now playing');
       this.isSeeking = false; // Clear seeking flag when playing resumes
+      this.clearSeekWatchdog();
       this.consecutiveFailures = 0; // Audio actually started - reset the failure breaker
 
       // Set song start time when actually playing (accounting for seek offset)
+      // Note: this also fires on unpause, where songStartTime is already set and must stay put
       if (!this.songStartTime) {
         const speed = globalSettings.mixerFilters?.speed || 1.0;
+        this.pausedAt = null;
+        this.totalPausedMs = 0;
         this.songStartTime = Date.now() - (this.seekOffset / speed * 1000);
         console.log('Song start time set:', new Date(this.songStartTime), 'with offset:', this.seekOffset, 'at speed:', speed);
       }
@@ -719,6 +728,7 @@ export class MusicQueue {
     this.player.on('error', error => {
       console.error(`Error in audio player for guild ${guildId}:`, error);
       this.isSeeking = false;
+      this.clearSeekWatchdog();
       if (this.destroying) return;
       this.playNext();
     });
@@ -1125,7 +1135,7 @@ export class MusicQueue {
     this.cachedAudioPath = null;
     this.currentAudioUrl = null;
     this.isCaching = false;
-    this.songStartTime = null;
+    this.resetPlaybackClock();
     this.cacheGeneration++; // Invalidate any background download still in flight
   }
 
@@ -1137,18 +1147,88 @@ export class MusicQueue {
     }
   }
 
+  // Milliseconds of real playback since the current song started, with paused time removed.
+  // Single source of truth: position broadcasts, filter restarts and listening stats all use it.
+  getPlaybackElapsedMs() {
+    if (!this.songStartTime) return 0;
+    const pausedNow = this.pausedAt ? Date.now() - this.pausedAt : 0;
+    return Math.max(0, Date.now() - this.songStartTime - this.totalPausedMs - pausedNow);
+  }
+
+  // The start timestamp the song would have had if it had never been paused. The web client
+  // derives its progress bar from (Date.now() - songStartTime), so it gets this instead.
+  getEffectiveSongStartTime() {
+    if (!this.songStartTime) return null;
+    return Date.now() - this.getPlaybackElapsedMs();
+  }
+
+  // Drop the playback clock - pause bookkeeping is meaningless without a start time
+  resetPlaybackClock() {
+    this.songStartTime = null;
+    this.pausedAt = null;
+    this.totalPausedMs = 0;
+  }
+
+  // Credit listening time for the current song exactly once. stop()/leave() each trigger an
+  // Idle that runs playNext(), so whichever call arrives second finds songStartTime null.
+  trackAndClearListening() {
+    if (!this.currentSong || !this.songStartTime) return;
+    const listenedSeconds = Math.floor(this.getPlaybackElapsedMs() / 1000);
+    const song = this.currentSong;
+    this.resetPlaybackClock();
+    trackListeningTime(song, listenedSeconds);
+  }
+
+  // A seek/filter restart is only finished once Playing fires. If it never does (dead stream,
+  // seek past the end) isSeeking would stay true and swallow every later Idle event.
+  armSeekWatchdog() {
+    this.clearSeekWatchdog();
+    this.seekWatchdog = setTimeout(() => {
+      this.seekWatchdog = null;
+      if (!this.isSeeking) return;
+      console.warn('[MusicQueue] Seek watchdog fired - no Playing transition, clearing seek state');
+      this.isSeeking = false;
+      // The Idle that ended the old stream was swallowed, so nothing else will advance the queue
+      if (!this.destroying && this.player.state.status === AudioPlayerStatus.Idle) {
+        this.playNext();
+      }
+    }, SEEK_WATCHDOG_MS);
+  }
+
+  clearSeekWatchdog() {
+    if (this.seekWatchdog) {
+      clearTimeout(this.seekWatchdog);
+      this.seekWatchdog = null;
+    }
+  }
+
+  // Stop playback for an explicit user action (skip / jump / stop) so loop mode does not
+  // re-queue the song. The flag has to be set before stop(), which can emit Idle - and only
+  // when a song is actually ending, or it would leak onto the next song's natural end.
+  stopForUserAction() {
+    const status = this.player.state.status;
+    if (status === AudioPlayerStatus.Idle) return false;
+
+    this.skipRequested = true;
+    // Only a Playing player drains its silence padding frames; from any other state a plain
+    // stop() would leave it sitting there, so force the transition to Idle
+    this.player.stop(status !== AudioPlayerStatus.Playing);
+    return true;
+  }
+
   async playNext() {
     console.log('playNext called, songs in queue:', this.songs.length);
 
+    // Consume the skip flag: it only ever suppresses the loop re-queue for the song that
+    // the user just ended, never for the one after it
+    const wasSkipped = this.skipRequested;
+    this.skipRequested = false;
+
     // Track actual listening time for the song that just ended
-    if (this.currentSong && this.songStartTime) {
-      const actualListenedMs = Date.now() - this.songStartTime;
-      const actualListenedSeconds = Math.floor(actualListenedMs / 1000);
-      trackListeningTime(this.currentSong, actualListenedSeconds);
-    }
+    this.trackAndClearListening();
 
     // Handle loop modes before cleanup
-    if (this.currentSong && globalSettings.loopMode !== 'off') {
+    if (this.currentSong && !wasSkipped && globalSettings.loopMode !== 'off') {
       const songToLoop = { ...this.currentSong };
       delete songToLoop.playedAt; // Remove playedAt if present
 
@@ -1208,11 +1288,21 @@ export class MusicQueue {
   }
 
   pause() {
-    return this.player.pause();
+    const paused = this.player.pause();
+    // Only start the clock on a real transition, so a double /pause cannot lose time
+    if (paused && this.pausedAt === null) {
+      this.pausedAt = Date.now();
+    }
+    return paused;
   }
 
   resume() {
-    return this.player.unpause();
+    const resumed = this.player.unpause();
+    if (resumed && this.pausedAt !== null) {
+      this.totalPausedMs += Date.now() - this.pausedAt;
+      this.pausedAt = null;
+    }
+    return resumed;
   }
 
   setVolume(volume) {
@@ -1233,7 +1323,7 @@ export class MusicQueue {
   }
 
   skip() {
-    this.player.stop();
+    this.stopForUserAction();
   }
 
   // Cycle through loop modes: off -> song -> queue -> off
@@ -1268,38 +1358,51 @@ export class MusicQueue {
   // Seek to a specific position in the current song (in seconds)
   async seek(seconds) {
     if (!this.currentSong || !this.connection) return false;
-    
-    console.log(`Seeking to ${seconds} seconds in ${this.currentSong.title}`);
-    
+
+    const requested = Number(seconds);
+    if (!Number.isFinite(requested)) return false;
+
+    // Clamp into the song: seeking past the end produces a stream that ends immediately,
+    // and that Idle is swallowed by isSeeking
+    let target = Math.max(0, requested);
+    if (this.currentSong.duration > 0) {
+      target = Math.min(target, Math.max(0, this.currentSong.duration - 1));
+    }
+
+    console.log(`Seeking to ${target} seconds in ${this.currentSong.title}`);
+
     // Set seeking flag to prevent playNext from being triggered
     this.isSeeking = true;
-    
-    // Reset songStartTime so it gets recalculated when playback resumes
-    this.songStartTime = null;
-    
+    this.armSeekWatchdog();
+
+    // Reset songStartTime so it gets recalculated when playback resumes. Playing again from a
+    // paused player also resumes it, so the pause bookkeeping goes with it.
+    this.resetPlaybackClock();
+
     // Store old FFmpeg reference
     const oldFFmpeg = this.currentFFmpeg;
-    
+
     // Use cached file if available (instant), otherwise use URL (slower)
     if (this.cachedAudioPath && existsSync(this.cachedAudioPath)) {
       console.log('Using cached audio for instant seek');
-      this.playFromCache(seconds);
+      this.playFromCache(target);
     } else if (this.currentAudioUrl) {
       console.log('Cache not ready, using URL for seek (may have slight delay)');
-      this.playFromUrl(this.currentAudioUrl, seconds);
+      this.playFromUrl(this.currentAudioUrl, target);
     } else {
       console.log('No audio source available for seek');
       this.isSeeking = false;
+      this.clearSeekWatchdog();
       return false;
     }
-    
+
     // Clean up old FFmpeg process AFTER starting new one
     if (oldFFmpeg) {
       oldFFmpeg.kill();
     }
-    
+
     // Broadcast state with seek position
-    broadcastState(seconds);
+    broadcastState(target);
     return true;
   }
 
@@ -1309,11 +1412,7 @@ export class MusicQueue {
     // songStartTime is encoded as: start - seekOffset / speed * 1000
     // So: (now - songStartTime) / 1000 * speed = audio position
     const oldSpeed = globalSettings.mixerFilters.speed || 1.0;
-    let currentPosition = 0;
-    if (this.songStartTime) {
-      const wallElapsed = (Date.now() - this.songStartTime) / 1000;
-      currentPosition = wallElapsed * oldSpeed;
-    }
+    const currentPosition = this.getPlaybackElapsedMs() / 1000 * oldSpeed;
 
     clampMixerFilters(newFilters);
 
@@ -1327,7 +1426,8 @@ export class MusicQueue {
     console.log(`[Mixer] Applying filters at position ${currentPosition.toFixed(1)}s:`, globalSettings.mixerFilters);
 
     this.isSeeking = true;
-    this.songStartTime = null;
+    this.armSeekWatchdog();
+    this.resetPlaybackClock();
     const oldFFmpeg = this.currentFFmpeg;
 
     if (this.cachedAudioPath && existsSync(this.cachedAudioPath)) {
@@ -1336,6 +1436,7 @@ export class MusicQueue {
       this.playFromUrl(this.currentAudioUrl, currentPosition);
     } else {
       this.isSeeking = false;
+      this.clearSeekWatchdog();
       broadcastState();
       return false;
     }
@@ -1358,9 +1459,9 @@ export class MusicQueue {
     
     // Remove songs before the target index
     this.songs = this.songs.slice(queueIndex);
-    
-    // Stop current song to trigger playNext
-    this.player.stop();
+
+    // Stop current song to trigger playNext (jumping is a skip, so loop must not re-queue)
+    this.stopForUserAction();
     return true;
   }
 
@@ -1427,15 +1528,12 @@ export class MusicQueue {
   }
 
   stop() {
-    // Track listening time for current song before stopping
-    if (this.currentSong && this.songStartTime) {
-      const actualListenedMs = Date.now() - this.songStartTime;
-      const actualListenedSeconds = Math.floor(actualListenedMs / 1000);
-      trackListeningTime(this.currentSong, actualListenedSeconds);
-    }
-    
+    // Track listening time for current song before stopping. The Idle this triggers runs
+    // playNext(), which then finds the clock already cleared instead of counting it twice.
+    this.trackAndClearListening();
+
     this.songs = [];
-    this.player.stop();
+    this.stopForUserAction();
     // Reset logged song tracker since we're stopping
     if (resetLastLoggedSongCallback) {
       resetLastLoggedSongCallback();
@@ -1444,13 +1542,9 @@ export class MusicQueue {
   }
 
   leave() {
-    // Track listening time for current song before leaving
-    if (this.currentSong && this.songStartTime) {
-      const actualListenedMs = Date.now() - this.songStartTime;
-      const actualListenedSeconds = Math.floor(actualListenedMs / 1000);
-      trackListeningTime(this.currentSong, actualListenedSeconds);
-    }
-    
+    // Track listening time for current song before leaving (no-op if stop() already did)
+    this.trackAndClearListening();
+
     // destroy() throws on an already-destroyed connection, and leave() runs from a timer
     // callback where that would take down the process
     if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
@@ -1477,9 +1571,11 @@ export class MusicQueue {
 
     // After player.stop(), since the Idle -> playNext() above may have armed a fresh one
     this.clearAutoLeaveTimer();
+    this.clearSeekWatchdog();
 
     this.isPlaying = false;
     this.isSeeking = false;
+    this.skipRequested = false;
     this.currentSong = null;
     this.currentResource = null;
     this.connection = null;
