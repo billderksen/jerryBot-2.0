@@ -100,6 +100,11 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 // How long a seek/filter restart may stay pending before we assume the Playing
 // transition is never coming and unstick the player
 const SEEK_WATCHDOG_MS = 10000;
+// A ducked clip (wake beep, spoken reply) holds the music down while it plays, so
+// it is abandoned once it stops making playback progress for this long...
+const DUCK_STALL_MS = 10000;
+// ...or overruns this total, however healthy it looks
+const DUCK_MAX_MS = 120000;
 
 // Load recently played from file
 function loadRecentlyPlayed() {
@@ -702,6 +707,63 @@ function broadcastState(seekPosition = null) {
   }
 }
 
+// Wait for a ducked clip to finish playing. Resolves with why it ended: the music
+// is paused for as long as this takes, so a clip that errors, never starts, or runs
+// away must end the wait just as reliably as a clean finish does. Progress is read
+// from the player rather than timed from the start, so a 30-second spoken answer is
+// not cut off while a wedged one still gives up after DUCK_STALL_MS.
+function awaitClipEnd(player, resource) {
+  return new Promise(resolve => {
+    let settled = false;
+
+    const finish = (reason) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(progressTimer);
+      player.off(AudioPlayerStatus.Idle, onIdle);
+      player.off('error', onError);
+      resource.playStream.off('error', onStreamError);
+      resolve(reason);
+    };
+
+    const onIdle = () => finish('finished');
+    const onError = (error) => {
+      console.error('[MusicQueue] Clip player error:', error.message);
+      finish('error');
+    };
+    const onStreamError = (error) => {
+      console.error('[MusicQueue] Clip stream error:', error.message);
+      finish('error');
+    };
+
+    const startedAt = Date.now();
+    let lastProgress = -1;
+    let lastProgressAt = startedAt;
+    const progressTimer = setInterval(() => {
+      // Buffering carries no playbackDuration, and a clip stuck there is stalled too
+      const state = player.state;
+      const progress = state.status === AudioPlayerStatus.Idle ? -1 : (state.playbackDuration ?? -1);
+      if (progress !== lastProgress) {
+        lastProgress = progress;
+        lastProgressAt = Date.now();
+      }
+
+      if (Date.now() - lastProgressAt >= DUCK_STALL_MS) {
+        console.warn(`[MusicQueue] Clip made no progress for ${DUCK_STALL_MS}ms, giving up on it`);
+        finish('stalled');
+      } else if (Date.now() - startedAt >= DUCK_MAX_MS) {
+        console.warn(`[MusicQueue] Clip exceeded ${DUCK_MAX_MS}ms, cutting it off`);
+        finish('overran');
+      }
+    }, 1000);
+    if (progressTimer.unref) progressTimer.unref();
+
+    player.on(AudioPlayerStatus.Idle, onIdle);
+    player.on('error', onError);
+    resource.playStream.on('error', onStreamError);
+  });
+}
+
 export class MusicQueue {
   constructor(guildId, guildInfo = null) {
     this.guildId = guildId;
@@ -736,6 +798,8 @@ export class MusicQueue {
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
     this.listenerConnection = null; // Connection object we already attached lifecycle listeners to
     this.recentRadioUrls = []; // Last 5 server-side radio auto-adds, to avoid looping on the same tracks
+    this.ttsPlayer = null; // Dedicated player for ducked clips, created on first use (see duckAndPlay)
+    this.duckActive = false; // True while a ducked clip is playing over the music
     // Note: loopMode, is24_7, and sleepEndTime are now in globalSettings for persistence
 
     // Handle player state changes - use arrow function to preserve 'this'
@@ -1421,6 +1485,100 @@ export class MusicQueue {
     return resumed;
   }
 
+  // Play a short clip (wake beep, spoken reply) over the music, then put the music
+  // back exactly as it was.
+  //
+  // The clip must never be played on this.player: its Idle handler would fire when
+  // the clip ended and advance the queue. So the clip gets its own AudioPlayer and
+  // the connection's subscription is swapped for the duration. The music player is
+  // paused rather than stopped, which keeps its resource intact and, being paused
+  // rather than idle, keeps it from emitting Idle at all.
+  //
+  // @param resourceFactory - builds the clip's AudioResource. A factory rather than
+  //   a resource because a resource can only ever be played once, and this call may
+  //   have waited behind another clip.
+  // @returns {Promise<boolean>} whether the clip was actually audible - false when
+  //   it was refused, could not be built, produced no audio, or had to be cut off.
+  async duckAndPlay(resourceFactory) {
+    if (this.destroying) {
+      console.log('[MusicQueue] duckAndPlay: queue is being torn down, skipping clip');
+      return false;
+    }
+    if (!this.connection || this.connection.state.status !== VoiceConnectionStatus.Ready) {
+      console.log(`[MusicQueue] duckAndPlay: voice connection is ${this.connection?.state.status ?? 'missing'}, skipping clip`);
+      return false;
+    }
+    if (this.duckActive) {
+      console.warn('[MusicQueue] duckAndPlay: a clip is already playing, skipping this one');
+      return false;
+    }
+
+    // Claimed before anything can yield, so two callers can never both get past the
+    // guard above
+    this.duckActive = true;
+
+    let resource;
+    try {
+      resource = resourceFactory();
+    } catch (error) {
+      console.error('[MusicQueue] duckAndPlay: could not build the clip resource:', error.message);
+      this.duckActive = false;
+      return false;
+    }
+
+    if (!this.ttsPlayer) {
+      this.ttsPlayer = createAudioPlayer();
+      // Nothing else listens to this player - each clip awaits it individually - but
+      // an 'error' with no listener at all throws process-wide
+      this.ttsPlayer.on('error', error => {
+        console.error(`[MusicQueue] Clip player error in guild ${this.guildId}:`, error.message);
+      });
+    }
+
+    // pause() only reports true when it actually stopped playing music, so music the
+    // user paused themselves stays paused after the clip
+    let duckPaused = this.pause();
+
+    // A song that starts mid-clip - a /play whose yt-dlp lookup resolved while Jerry
+    // was still talking, or a manual resume - would otherwise be playing to a
+    // connection subscribed to the clip player. @discordjs/voice would auto-pause it
+    // (silently, holding the audio) while songStartTime kept running, leaving the
+    // position ahead of the sound. Pausing it properly instead keeps the playback
+    // clock honest, and the resume below covers it.
+    const onMusicPlaying = () => {
+      if (this.pause()) duckPaused = true;
+    };
+    this.player.on(AudioPlayerStatus.Playing, onMusicPlaying);
+
+    try {
+      this.connection.subscribe(this.ttsPlayer);
+      this.ttsPlayer.play(resource);
+      const reason = await awaitClipEnd(this.ttsPlayer, resource);
+      // A clip that stalled or overran is still holding its resource open
+      if (reason !== 'finished') this.ttsPlayer.stop(true);
+      // A clip whose ffmpeg died goes idle without ever yielding a packet, which
+      // otherwise looks exactly like a clean finish
+      if (reason === 'finished' && resource.playbackDuration === 0) {
+        console.warn('[MusicQueue] Clip ended without producing any audio');
+        return false;
+      }
+      return reason === 'finished';
+    } catch (error) {
+      console.error('[MusicQueue] duckAndPlay: clip playback failed:', error.message);
+      this.ttsPlayer.stop(true);
+      return false;
+    } finally {
+      // Before resume(), or resuming the music would trip the handler that pauses it
+      this.player.off(AudioPlayerStatus.Playing, onMusicPlaying);
+      // cleanup() can have run while the clip was playing
+      if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+        this.connection.subscribe(this.player);
+      }
+      if (duckPaused) this.resume();
+      this.duckActive = false;
+    }
+  }
+
   setVolume(volume) {
     // Store the linear volume for UI display
     this.volume = volume;
@@ -1677,6 +1835,9 @@ export class MusicQueue {
 
     // Stop playback and kill the encoder, otherwise ffmpeg keeps running headless
     this.player.stop(true);
+    // Same for a ducked clip: stopping it ends the wait in duckAndPlay right away
+    // instead of leaving its ffmpeg alive until the stall watchdog notices
+    if (this.ttsPlayer) this.ttsPlayer.stop(true);
     if (this.currentFFmpeg) {
       this.currentFFmpeg.kill('SIGKILL');
       this.currentFFmpeg = null;
@@ -1729,6 +1890,17 @@ export function createQueue(guildId, guildInfo = null) {
   const queue = new MusicQueue(guildId, guildInfo);
   queues.set(guildId, queue);
   return queue;
+}
+
+// Play a short clip (wake beep, spoken reply) over whatever this guild is playing.
+// No-ops when the guild has no queue, i.e. the bot isn't in a voice channel.
+export async function duckAndPlay(guildId, resourceFactory) {
+  const queue = queues.get(guildId);
+  if (!queue) {
+    console.log(`[MusicQueue] duckAndPlay: no queue for guild ${guildId}, skipping clip`);
+    return false;
+  }
+  return queue.duckAndPlay(resourceFactory);
 }
 
 export function deleteQueue(guildId) {
