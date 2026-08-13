@@ -1,4 +1,4 @@
-import { createAudioPlayer, createAudioResource, joinVoiceChannel, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } from '@discordjs/voice';
+import { createAudioPlayer, createAudioResource, joinVoiceChannel, getVoiceConnection, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } from '@discordjs/voice';
 import ytDlpPkg from 'yt-dlp-exec';
 import { platform } from 'os';
 import { spawn, execSync } from 'child_process';
@@ -1514,43 +1514,62 @@ export class MusicQueue {
     }
 
     // Claimed before anything can yield, so two callers can never both get past the
-    // guard above
+    // guard above. Everything from here on runs inside the try: pause() reaches the
+    // web dashboard through broadcastState(), and a callback throwing out there would
+    // otherwise strand this flag set and refuse every later clip.
     this.duckActive = true;
-
-    let resource;
-    try {
-      resource = resourceFactory();
-    } catch (error) {
-      console.error('[MusicQueue] duckAndPlay: could not build the clip resource:', error.message);
-      this.duckActive = false;
-      return false;
-    }
-
-    if (!this.ttsPlayer) {
-      this.ttsPlayer = createAudioPlayer();
-      // Nothing else listens to this player - each clip awaits it individually - but
-      // an 'error' with no listener at all throws process-wide
-      this.ttsPlayer.on('error', error => {
-        console.error(`[MusicQueue] Clip player error in guild ${this.guildId}:`, error.message);
-      });
-    }
-
-    // pause() only reports true when it actually stopped playing music, so music the
-    // user paused themselves stays paused after the clip
-    let duckPaused = this.pause();
-
-    // A song that starts mid-clip - a /play whose yt-dlp lookup resolved while Jerry
-    // was still talking, or a manual resume - would otherwise be playing to a
-    // connection subscribed to the clip player. @discordjs/voice would auto-pause it
-    // (silently, holding the audio) while songStartTime kept running, leaving the
-    // position ahead of the sound. Pausing it properly instead keeps the playback
-    // clock honest, and the resume below covers it.
-    const onMusicPlaying = () => {
-      if (this.pause()) duckPaused = true;
-    };
-    this.player.on(AudioPlayerStatus.Playing, onMusicPlaying);
+    let duckPaused = false;
+    let onMusicPlaying = null;
+    let swapped = false;
 
     try {
+      let resource;
+      try {
+        resource = resourceFactory();
+      } catch (error) {
+        console.error('[MusicQueue] duckAndPlay: could not build the clip resource:', error.message);
+        return false;
+      }
+
+      if (!this.ttsPlayer) {
+        this.ttsPlayer = createAudioPlayer();
+        // Nothing else listens to this player - each clip awaits it individually - but
+        // an 'error' with no listener at all throws process-wide
+        this.ttsPlayer.on('error', error => {
+          console.error(`[MusicQueue] Clip player error in guild ${this.guildId}:`, error.message);
+        });
+      }
+
+      // We owe a resume only if the clip is what stopped the music, so music the user
+      // paused themselves stays paused afterwards. Decided from the player's status
+      // rather than pause()'s return value because pause() reaches the dashboard through
+      // broadcastState(): a callback throwing there would leave the player paused with
+      // nothing recording that we did it, and the music would never come back.
+      const wasPaused = this.player.state.status === AudioPlayerStatus.Paused;
+      try {
+        this.pause();
+      } finally {
+        duckPaused = !wasPaused && this.player.state.status === AudioPlayerStatus.Paused;
+      }
+
+      // A song that starts mid-clip - a /play whose yt-dlp lookup resolved while Jerry
+      // was still talking, or a manual resume - would otherwise be playing to a
+      // connection subscribed to the clip player. @discordjs/voice would auto-pause it
+      // (silently, holding the audio) while songStartTime kept running, leaving the
+      // position ahead of the sound. Pausing it properly instead keeps the playback
+      // clock honest, and the resume in the finally covers it - which, as above, we
+      // owe whenever this handler leaves the player paused.
+      onMusicPlaying = () => {
+        try {
+          this.pause();
+        } finally {
+          if (this.player.state.status === AudioPlayerStatus.Paused) duckPaused = true;
+        }
+      };
+      this.player.on(AudioPlayerStatus.Playing, onMusicPlaying);
+
+      // Set before the swap, so a subscribe() that throws part-way still gets undone
+      swapped = true;
       this.connection.subscribe(this.ttsPlayer);
       this.ttsPlayer.play(resource);
       const reason = await awaitClipEnd(this.ttsPlayer, resource);
@@ -1565,17 +1584,25 @@ export class MusicQueue {
       return reason === 'finished';
     } catch (error) {
       console.error('[MusicQueue] duckAndPlay: clip playback failed:', error.message);
-      this.ttsPlayer.stop(true);
+      this.ttsPlayer?.stop(true);
       return false;
     } finally {
-      // Before resume(), or resuming the music would trip the handler that pauses it
-      this.player.off(AudioPlayerStatus.Playing, onMusicPlaying);
-      // cleanup() can have run while the clip was playing
-      if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
-        this.connection.subscribe(this.player);
+      // Putting the music back is the one step that must not fail silently, and
+      // resume() can throw the same way pause() can - so it neither escapes (it would
+      // replace the return value with a rejection) nor skips clearing the flag
+      try {
+        // Before resume(), or resuming the music would trip the handler that pauses it
+        if (onMusicPlaying) this.player.off(AudioPlayerStatus.Playing, onMusicPlaying);
+        // cleanup() can have run while the clip was playing
+        if (swapped && this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+          this.connection.subscribe(this.player);
+        }
+        if (duckPaused) this.resume();
+      } catch (error) {
+        console.error('[MusicQueue] duckAndPlay: restoring the music after the clip failed:', error.message);
+      } finally {
+        this.duckActive = false;
       }
-      if (duckPaused) this.resume();
-      this.duckActive = false;
     }
   }
 
@@ -1892,15 +1919,79 @@ export function createQueue(guildId, guildInfo = null) {
   return queue;
 }
 
-// Play a short clip (wake beep, spoken reply) over whatever this guild is playing.
-// No-ops when the guild has no queue, i.e. the bot isn't in a voice channel.
-export async function duckAndPlay(guildId, resourceFactory) {
-  const queue = queues.get(guildId);
-  if (!queue) {
-    console.log(`[MusicQueue] duckAndPlay: no queue for guild ${guildId}, skipping clip`);
+// Guilds with a clip in flight on the queueless path below
+const standaloneDucks = new Set();
+
+// Play a clip on a voice connection that has no music queue behind it. /record joins
+// the channel directly with joinVoiceChannel(), and the wake-word listener rides
+// whatever connection is there - without this, Jerry would be mute in any guild where
+// music was never started. There is no music player here, so nothing to pause or
+// resume: subscribe a throwaway player, play, unsubscribe.
+async function duckAndPlayOnConnection(guildId, resourceFactory) {
+  const connection = getVoiceConnection(guildId);
+  if (!connection || connection.state.status !== VoiceConnectionStatus.Ready) {
+    console.log(`[MusicQueue] duckAndPlay: no ready voice connection for guild ${guildId}, skipping clip`);
     return false;
   }
-  return queue.duckAndPlay(resourceFactory);
+  if (standaloneDucks.has(guildId)) {
+    console.warn(`[MusicQueue] duckAndPlay: a clip is already playing in guild ${guildId}, skipping this one`);
+    return false;
+  }
+
+  standaloneDucks.add(guildId);
+  let player = null;
+  let subscription;
+
+  try {
+    const resource = resourceFactory();
+
+    // Per clip rather than per guild: one shared player subscribed to two connections
+    // would play the same audio into both, and there is no queue lifecycle to hang a
+    // longer-lived one off
+    player = createAudioPlayer();
+    player.on('error', error => {
+      console.error(`[MusicQueue] Clip player error in guild ${guildId}:`, error.message);
+    });
+
+    subscription = connection.subscribe(player);
+    if (!subscription) {
+      console.log(`[MusicQueue] duckAndPlay: voice connection for guild ${guildId} went away before the clip started`);
+      return false;
+    }
+
+    player.play(resource);
+    const reason = await awaitClipEnd(player, resource);
+    if (reason !== 'finished') player.stop(true);
+    if (reason === 'finished' && resource.playbackDuration === 0) {
+      console.warn('[MusicQueue] Clip ended without producing any audio');
+      return false;
+    }
+    return reason === 'finished';
+  } catch (error) {
+    console.error('[MusicQueue] duckAndPlay: clip playback failed:', error.message);
+    player?.stop(true);
+    return false;
+  } finally {
+    // Safe even if the connection was destroyed mid-clip: unsubscribe() and the
+    // setSpeaking() it triggers both check the connection's state first
+    subscription?.unsubscribe();
+    if (connection.state.status !== VoiceConnectionStatus.Ready) {
+      console.log(`[MusicQueue] Clip ended with the voice connection ${connection.state.status} in guild ${guildId}`);
+    }
+    standaloneDucks.delete(guildId);
+  }
+}
+
+// Play a short clip (wake beep, spoken reply) over whatever this guild is doing.
+// No-ops when the bot has no ready voice connection there.
+export async function duckAndPlay(guildId, resourceFactory) {
+  // Only the queue's own path can duck music, so it wins whenever it holds the
+  // connection; without one, the clip goes straight onto the connection
+  const queue = queues.get(guildId);
+  if (queue && queue.connection) {
+    return queue.duckAndPlay(resourceFactory);
+  }
+  return duckAndPlayOnConnection(guildId, resourceFactory);
 }
 
 export function deleteQueue(guildId) {
