@@ -103,7 +103,21 @@ export default {
         });
       }
 
-      startRecording(connection, interaction.guild, target.id, interaction.user.id, interaction.channel);
+      const started = startRecording(connection, interaction.guild, target.id, interaction.user.id, interaction.channel);
+
+      // startRecording()'s return value is authoritative, not the isRecording() check above:
+      // two concurrent /record start calls can both pass that check before either reaches here
+      // (there's an await for the member fetch in between), but startRecording() claims the
+      // guildId synchronously with no await before its own guard, so only one caller can ever
+      // get `true`. Trusting the return value here — instead of the earlier check — is what
+      // closes the race; without it the loser would still post a start announcement for a
+      // recording it never actually started.
+      if (!started) {
+        return interaction.reply({
+          content: 'Already recording. Use `/record stop` to finish.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
 
       // Non-ephemeral and on purpose: recording someone without a visible notice is exactly
       // what this fix addresses, so everyone in the channel/thread sees this announcement.
