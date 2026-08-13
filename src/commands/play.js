@@ -34,6 +34,7 @@ if (systemYtDlpPath) {
 
 import { getQueue, createQueue } from '../utils/musicQueue.js';
 import { logCommandAction } from '../utils/activityLogger.js';
+import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
 import Spotify from 'spotify-url-info';
 import { fetch } from 'undici';
 
@@ -152,7 +153,7 @@ export default {
           requestedById: interaction.user.id,
           source: 'spotify'
         };
-      } else {
+      } else if (isAllowedMediaUrl(songUrl)) {
         // Get song info using yt-dlp for YouTube/other URLs
         const videoInfo = await ytDlpExec(songUrl, {
           dumpSingleJson: true,
@@ -161,10 +162,37 @@ export default {
           // Skip age-restricted videos check (requires cookies for some videos)
           skipDownload: true
         });
-        
+
         song = {
           title: videoInfo.title,
           url: videoInfo.webpage_url || songUrl,
+          duration: videoInfo.duration || 0,
+          thumbnail: videoInfo.thumbnail,
+          requestedBy: interaction.member.displayName,
+          requestedById: interaction.user.id,
+          source: 'youtube'
+        };
+      } else {
+        // Not a recognized media URL (or autocomplete was bypassed with free text) —
+        // treat it as a YouTube search query instead of handing it to yt-dlp raw.
+        const searchResult = await ytDlpExec(`ytsearch1:${sanitizeSearchQuery(songUrl)}`, {
+          dumpSingleJson: true,
+          noCheckCertificates: true,
+          noWarnings: true,
+          skipDownload: true
+        });
+
+        const videoInfo = searchResult.entries ? searchResult.entries[0] : searchResult;
+
+        if (!videoInfo) {
+          return await interaction.editReply({
+            content: `❌ Could not find "${songUrl}" on YouTube.`
+          });
+        }
+
+        song = {
+          title: videoInfo.title,
+          url: videoInfo.webpage_url || videoInfo.url || `https://www.youtube.com/watch?v=${videoInfo.id}`,
           duration: videoInfo.duration || 0,
           thumbnail: videoInfo.thumbnail,
           requestedBy: interaction.member.displayName,

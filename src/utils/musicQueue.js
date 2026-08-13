@@ -62,6 +62,7 @@ import { join, dirname } from 'path';
 import { unlinkSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
+import { isAllowedMediaUrl } from './urlValidation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -860,6 +861,10 @@ export class MusicQueue {
     }
 
     try {
+      if (!isAllowedMediaUrl(this.currentSong.url)) {
+        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${this.currentSong.url}`);
+      }
+
       // Get the audio URL for streaming
       // Format priority: opus (best quality) > m4a/aac > webm/vorbis > any audio > any format
       // Prefer 160kbps+ audio when available
@@ -959,6 +964,10 @@ export class MusicQueue {
     console.log(`Background caching audio to: ${cachePath}`);
     
     try {
+      if (!isAllowedMediaUrl(this.currentSong.url)) {
+        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${this.currentSong.url}`);
+      }
+
       // Cache at highest quality opus (quality 0 = best, ~256kbps VBR)
       // Use same format preference as streaming for consistency
       await ytDlpExec(this.currentSong.url, {

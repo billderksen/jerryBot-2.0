@@ -31,6 +31,7 @@ import { platform } from 'os';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { randomBytes } from 'node:crypto';
+import { isAllowedMediaUrl } from '../utils/urlValidation.js';
 
 // Detect system yt-dlp for Linux
 let ytDlpExec = ytDlpPkg;
@@ -1259,7 +1260,10 @@ app.get('/api/youtube/playlist', rateLimit('ytplaylist', 3, 60_000), async (req,
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
-  
+  if (!isAllowedMediaUrl(url)) {
+    return res.status(400).json({ error: 'Invalid or unsupported URL' });
+  }
+
   try {
     const results = await ytDlpExec(url, {
       ...ytCookieOpts,
@@ -1429,11 +1433,14 @@ app.get('/api/lyrics', async (req, res) => {
 // API endpoint to add song to queue
 app.post('/api/queue/add', rateLimit('queueadd', 20, 60_000), async (req, res) => {
   const { url, title, duration, thumbnail, guildId, requestedBy: customRequestedBy } = req.body;
-  
+
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
-  
+  if (!isAllowedMediaUrl(url)) {
+    return res.status(400).json({ error: 'Invalid or unsupported URL' });
+  }
+
   // Use custom requestedBy if provided (e.g., for Radio), otherwise use session username
   const requestedBy = customRequestedBy || req.session?.user?.username || 'Web Dashboard';
   const requestedById = req.session?.user?.id || null;
