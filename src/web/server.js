@@ -1090,7 +1090,7 @@ app.get('/api/search', rateLimit('search', 15, 60_000), async (req, res) => {
     // Check if query is a direct YouTube video URL
     const ytVideoMatch = query.match(/^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
 
-    if (ytVideoMatch) {
+    if (ytVideoMatch && isAllowedMediaUrl(query)) {
       // Fetch video info directly instead of searching
       const videoInfo = await ytDlpExec(query, {
         ...ytCookieOpts,
