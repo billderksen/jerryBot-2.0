@@ -444,6 +444,9 @@ app.get('/watch-together.js', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'watch-together.js'));
 });
 
+// Serve shared frontend scripts (e.g. common.js)
+app.use('/js', express.static(join(__dirname, 'public', 'js')));
+
 // API endpoint to get current state
 app.get('/api/state', (req, res) => {
   res.json(currentState);
