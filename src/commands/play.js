@@ -1,38 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import play from 'play-dl';
-import ytDlpPkg from 'yt-dlp-exec';
-import { platform } from 'os';
-import { execSync } from 'child_process';
-import { existsSync } from 'fs';
-
-// Use system yt-dlp if available
-let ytDlpExec = ytDlpPkg;
-let systemYtDlpPath = null;
-
-try {
-  if (platform() === 'win32') {
-    systemYtDlpPath = execSync('where yt-dlp.exe', { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
-  } else {
-    systemYtDlpPath = execSync('which yt-dlp', { encoding: 'utf8' }).trim();
-  }
-} catch (e) {
-  const commonPaths = platform() === 'win32' 
-    ? ['C:\\yt-dlp\\yt-dlp.exe', 'C:\\Program Files\\yt-dlp\\yt-dlp.exe']
-    : ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp'];
-  
-  for (const p of commonPaths) {
-    if (existsSync(p)) {
-      systemYtDlpPath = p;
-      break;
-    }
-  }
-}
-
-if (systemYtDlpPath) {
-  ytDlpExec = ytDlpPkg.create(systemYtDlpPath);
-}
-
-import { getQueue, createQueue } from '../utils/musicQueue.js';
+import { getQueue, createQueue, ytDlpExec, ytCookieOpts } from '../utils/musicQueue.js';
 import { logCommandAction } from '../utils/activityLogger.js';
 import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
 import Spotify from 'spotify-url-info';
@@ -45,9 +12,29 @@ function isSpotifyUrl(url) {
   return url.includes('spotify.com') || url.includes('spotify:');
 }
 
-// Helper to search YouTube for a song
+// Search YouTube via yt-dlp (replaces the unmaintained play-dl search). Reuses
+// musicQueue.js's already-configured, cookie-aware yt-dlp instance.
+async function searchYoutube(query, limit = 5) {
+  const results = await ytDlpExec(`ytsearch${limit}:${sanitizeSearchQuery(query)}`, {
+    ...ytCookieOpts,
+    dumpSingleJson: true,
+    noCheckCertificates: true,
+    noWarnings: true,
+    flatPlaylist: true,
+    skipDownload: true
+  });
+
+  const entries = results.entries || [];
+  return entries.map(video => ({
+    title: video.title || 'Unknown Title',
+    url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
+    duration: video.duration || 0
+  }));
+}
+
+// Helper to search YouTube for a song (used to match a Spotify track to a video)
 async function searchYouTube(query) {
-  const results = await play.search(query, { limit: 1, source: { youtube: 'video' } });
+  const results = await searchYoutube(query, 1);
   return results[0] || null;
 }
 
@@ -76,13 +63,13 @@ export default {
 
     try {
       // Add timeout to prevent slow autocomplete responses
-      const searchPromise = play.search(focusedValue, { limit: 5, source: { youtube: 'video' } });
-      const timeoutPromise = new Promise((_, reject) => 
+      const searchPromise = searchYoutube(focusedValue, 5);
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Search timeout')), 2000)
       );
-      
+
       const searchResults = await Promise.race([searchPromise, timeoutPromise]);
-      
+
       const choices = searchResults.slice(0, 10).map(video => ({
         name: video.title.length > 100 ? video.title.substring(0, 97) + '...' : video.title,
         value: video.url
@@ -156,10 +143,10 @@ export default {
       } else if (isAllowedMediaUrl(songUrl)) {
         // Get song info using yt-dlp for YouTube/other URLs
         const videoInfo = await ytDlpExec(songUrl, {
+          ...ytCookieOpts,
           dumpSingleJson: true,
           noCheckCertificates: true,
           noWarnings: true,
-          // Skip age-restricted videos check (requires cookies for some videos)
           skipDownload: true
         });
 
@@ -176,6 +163,7 @@ export default {
         // Not a recognized media URL (or autocomplete was bypassed with free text) —
         // treat it as a YouTube search query instead of handing it to yt-dlp raw.
         const searchResult = await ytDlpExec(`ytsearch1:${sanitizeSearchQuery(songUrl)}`, {
+          ...ytCookieOpts,
           dumpSingleJson: true,
           noCheckCertificates: true,
           noWarnings: true,
