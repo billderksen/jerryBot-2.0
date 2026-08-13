@@ -59,7 +59,9 @@ export default {
       .setTitle('⚔️ OSRS Player Tracker')
       .setColor(0xff981f);
 
+    const MAX_DESCRIPTION_LENGTH = 3900;
     let description = '';
+    let truncated = false;
     for (const entry of inactivity) {
       const player = players[entry.id];
       if (!player) continue;
@@ -76,20 +78,30 @@ export default {
 
       const womUrl = `https://wiseoldman.net/players/${encodeURIComponent(player.username)}`;
 
-      description += `${emoji} **[${player.displayName}](${womUrl})** — Cmb ${combat} — Total ${totalLevel}\n`;
-      description += `   Last active: ${activeText}\n`;
+      let section = `${emoji} **[${player.displayName}](${womUrl})** — Cmb ${combat} — Total ${totalLevel}\n`;
+      section += `   Last active: ${activeText}\n`;
 
       if (totalXPGained > 0) {
-        description += `   ${periodLabel} gains: **+${formatXP(totalXPGained)} XP**`;
+        section += `   ${periodLabel} gains: **+${formatXP(totalXPGained)} XP**`;
         if (topSkills.length > 0) {
-          description += ` (${topSkills.join(', ')})`;
+          section += ` (${topSkills.join(', ')})`;
         }
-        description += '\n';
+        section += '\n';
       } else {
-        description += `   ${periodLabel} gains: *None*\n`;
+        section += `   ${periodLabel} gains: *None*\n`;
       }
 
-      description += '\n';
+      section += '\n';
+
+      if (description.length + section.length > MAX_DESCRIPTION_LENGTH) {
+        truncated = true;
+        break;
+      }
+      description += section;
+    }
+
+    if (truncated) {
+      description += '\n…';
     }
 
     if (lastRefresh) {

@@ -223,9 +223,9 @@ function awardVoiceXp() {
   for (const [, channel] of guild.channels.cache) {
     if (!channel.isVoiceBased() || !channel.members) continue;
 
-    // Count non-bot, non-deafened humans
+    // Count non-bot, non-deafened, non-AFK humans
     const eligibleMembers = channel.members.filter(m =>
-      !m.user.bot && !m.voice.deaf && !m.voice.selfDeaf
+      !m.user.bot && !m.voice.deaf && !m.voice.selfDeaf && m.voice.channelId !== guild.afkChannelId
     );
 
     // Skip channels with only 1 human (prevents AFK farming)

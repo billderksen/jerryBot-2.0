@@ -102,7 +102,7 @@ export function removeSong(userId, playlistId, songIndex) {
     return { success: false, error: 'Playlist not found.' };
   }
   const playlist = user.playlists[playlistId];
-  if (songIndex < 0 || songIndex >= playlist.songs.length) {
+  if (!Number.isInteger(songIndex) || songIndex < 0 || songIndex >= playlist.songs.length) {
     return { success: false, error: 'Invalid song index.' };
   }
   playlist.songs.splice(songIndex, 1);
@@ -117,7 +117,7 @@ export function reorderSong(userId, playlistId, from, to) {
     return { success: false, error: 'Playlist not found.' };
   }
   const songs = user.playlists[playlistId].songs;
-  if (from < 0 || from >= songs.length || to < 0 || to >= songs.length) {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= songs.length || to < 0 || to >= songs.length) {
     return { success: false, error: 'Invalid index.' };
   }
   const [song] = songs.splice(from, 1);
@@ -131,7 +131,7 @@ export function reorderPlaylist(userId, from, to) {
   const user = data[userId];
   if (!user) return { success: false, error: 'No playlists found.' };
   const entries = Object.entries(user.playlists);
-  if (from < 0 || from >= entries.length || to < 0 || to >= entries.length) {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= entries.length || to < 0 || to >= entries.length) {
     return { success: false, error: 'Invalid index.' };
   }
   const [moved] = entries.splice(from, 1);

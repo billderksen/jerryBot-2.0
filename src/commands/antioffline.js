@@ -58,7 +58,7 @@ async function kickOfflineVoiceMembers(guild, enabledBy) {
     const generalChannel = guild.channels.cache.get(GENERAL_CHANNEL_ID);
     if (generalChannel) {
       const mentions = kicked.map(id => `<@${id}>`).join(', ');
-      generalChannel.send(`${mentions} ${kicked.length === 1 ? 'is' : 'zijn'} gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`);
+      await generalChannel.send(`${mentions} ${kicked.length === 1 ? 'is' : 'zijn'} gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door ${enabledBy}.`);
     }
   }
   return kicked.length;
@@ -71,6 +71,8 @@ export default {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
+    await interaction.deferReply();
+
     const guildId = interaction.guild.id;
     const current = getAntiOfflineState(guildId);
 
@@ -78,7 +80,7 @@ export default {
       // Turn off
       antiOfflineState.set(guildId, { enabled: false, enabledBy: null });
       save();
-      await interaction.reply('Anti-offline modus is **uitgeschakeld**.');
+      await interaction.editReply('Anti-offline modus is **uitgeschakeld**.');
     } else {
       // Turn on
       const displayName = interaction.member.displayName;
@@ -88,7 +90,7 @@ export default {
       // Kick anyone currently in voice who is offline
       const kickedCount = await kickOfflineVoiceMembers(interaction.guild, displayName);
       const extra = kickedCount > 0 ? ` ${kickedCount} ${kickedCount === 1 ? 'persoon' : 'personen'} uit voice gekickt.` : '';
-      await interaction.reply(`Anti-offline modus is **ingeschakeld** door ${displayName}.${extra}`);
+      await interaction.editReply(`Anti-offline modus is **ingeschakeld** door ${displayName}.${extra}`);
     }
   }
 };
