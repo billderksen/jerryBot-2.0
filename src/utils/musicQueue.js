@@ -65,6 +65,7 @@ import { unlinkSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 import { isAllowedMediaUrl } from './urlValidation.js';
+import { isRecording, stopRecording } from './voiceRecorder.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -788,6 +789,19 @@ export class MusicQueue {
   async join(voiceChannel) {
     this.voiceChannel = voiceChannel; // Store reference to voice channel
     this.voiceChannelName = voiceChannel.name;
+
+    // Joining (re)deafens the bot by default, which would silently kill an active recording
+    // (the receiver can't hear anything while self-deafened). Stop it gracefully first so the
+    // WAV gets saved and the channel gets a visible announcement, instead of recording just
+    // going dead with no explanation.
+    try {
+      if (isRecording(voiceChannel.guild.id)) {
+        await stopRecording(voiceChannel.guild.id, 'music playback started');
+      }
+    } catch (err) {
+      console.error(`[MusicQueue] Failed to stop recording before join in guild ${voiceChannel.guild.id}:`, err.message);
+    }
+
     this.connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: voiceChannel.guild.id,

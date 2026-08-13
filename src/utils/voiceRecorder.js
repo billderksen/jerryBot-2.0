@@ -125,13 +125,15 @@ export function startRecording(connection, guild, targetId, invokerId, channel) 
 }
 
 // Manual stop, called from /record stop. Returns the list of saved files.
-export async function stopRecording(guildId) {
-  return finalize(guildId);
+// `reason`, when given, is announced in state.channel (e.g. "music playback started") —
+// existing callers that omit it keep their current silent-finalize behavior.
+export async function stopRecording(guildId, reason = null) {
+  return finalize(guildId, reason);
 }
 
 // Tears down listeners/timers/subscriptions and converts every captured user's .pcm into a
 // playable .wav, streaming end-to-end (never buffering the whole recording in memory).
-async function finalize(guildId) {
+async function finalize(guildId, reason = null) {
   const state = recordings.get(guildId);
   if (!state) return [];
   // Claim the state immediately so a concurrent manual stop / auto-stop / connection-destroy
@@ -158,6 +160,11 @@ async function finalize(guildId) {
       console.error('[voiceRecorder] failed to finalize recording for', userData.username, err.message);
     }
   }
+
+  if (reason && state.channel) {
+    state.channel.send(`⏹️ Recording of <@${state.targetId}> stopped: ${reason}.`).catch(() => {});
+  }
+
   return files;
 }
 

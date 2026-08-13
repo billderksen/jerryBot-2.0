@@ -57,10 +57,14 @@
 
     // Fetches /api/me once and caches the promise; rejects on a non-OK response (e.g. 401).
     me: function () {
+      var self = this;
       if (!this._me) {
         this._me = fetch('/api/me').then(function (r) {
           if (!r.ok) throw new Error('auth');
           return r.json();
+        }).catch(function (err) {
+          self._me = null;
+          throw err;
         });
       }
       return this._me;

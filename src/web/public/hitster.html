@@ -1766,7 +1766,7 @@
             const container = document.getElementById('waiting-players');
             container.innerHTML = currentRoom.players.map(p => `
                 <div class="waiting-player">
-                    <img src="${p.avatar || `https://cdn.discordapp.com/embed/avatars/${parseInt(p.id) % 5}.png`}" alt="">
+                    <img src="${escapeHtml(p.avatar || `https://cdn.discordapp.com/embed/avatars/${parseInt(p.id) % 5}.png`)}" alt="">
                     <span>${escapeHtml(p.name)}</span>
                     ${p.id === currentRoom.hostId ? '<span class="host-badge">Host</span>' : ''}
                 </div>
@@ -2014,7 +2014,7 @@
 
                 return `
                     <div class="player-item ${isCurrent ? 'current-turn' : ''} ${isStealer ? 'stealer' : ''}">
-                        <img class="player-avatar" src="${avatarSrc}" alt="">
+                        <img class="player-avatar" src="${escapeHtml(avatarSrc)}" alt="">
                         <div class="player-details">
                             <div class="player-name">${escapeHtml(p.name)}</div>
                             <div class="player-cards">${p.timelineCount} cards</div>

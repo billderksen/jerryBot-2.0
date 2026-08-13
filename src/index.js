@@ -211,7 +211,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
           await newState.disconnect();
           const generalChannel = newState.guild.channels.cache.get(GENERAL_CHANNEL_ID);
           if (generalChannel) {
-            generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`).catch(console.error);
+            generalChannel.send(`<@${newState.member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door ${antiOffline.enabledBy || '<@183235848794406914>'}.`).catch(console.error);
           }
         } catch (e) {
           console.error('[AntiOffline] Voice kick error:', e.message);
@@ -339,7 +339,7 @@ client.on(Events.PresenceUpdate, async (oldPresence, newPresence) => {
         await member.voice.disconnect();
         const generalChannel = newPresence.guild.channels.cache.get(GENERAL_CHANNEL_ID);
         if (generalChannel) {
-          generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door <@183235848794406914>.`).catch(console.error);
+          generalChannel.send(`<@${member.id}> is gekickt uit het voice kanaal — anti-offline modus staat aan, aangezet door ${antiOffline.enabledBy || '<@183235848794406914>'}.`).catch(console.error);
         }
       } catch (e) {
         console.error('[AntiOffline] Presence kick error:', e.message);
@@ -461,7 +461,7 @@ client.on(Events.MessageCreate, async message => {
     if (!presence || presence.status === 'offline') {
       try {
         await message.delete();
-        await message.channel.send(`<@${message.author.id}> De Discord staat in anti offline modus, aangezet door <@183235848794406914>.`);
+        await message.channel.send(`<@${message.author.id}> De Discord staat in anti offline modus, aangezet door ${antiOffline.enabledBy || '<@183235848794406914>'}.`);
       } catch (e) {
         console.error('[AntiOffline] Error:', e.message);
       }

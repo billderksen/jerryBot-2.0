@@ -123,7 +123,7 @@ const getClientSecret = () => process.env.CLIENT_SECRET;
 const getRedirectUri = () => process.env.OAUTH_REDIRECT_URI || 'http://localhost:3001/auth/discord/callback';
 const getRequiredRoleId = () => process.env.REQUIRED_ROLE_ID || '1462395138776236134';
 const getRequiredGuildId = () => process.env.GUILD_ID || '918554414220972032';
-const DJ_ROLE_ID = '1467139293586653339'; // "Website DJ Extraordinaire"
+const DJ_ROLE_ID = process.env.DJ_ROLE_ID || '1467139293586653339'; // "Website DJ Extraordinaire"
 const CONTROL_PANEL_ROLE_ID = '1470048168543653919'; // "Control Panel"
 
 const app = express();
