@@ -1273,6 +1273,15 @@ export class MusicQueue {
   async tryRadioFill(seedUrl) {
     try {
       const tracks = await getRadioTracks(seedUrl);
+
+      // getRadioTracks() is a multi-second yt-dlp subprocess - this queue may have been
+      // stopped, replaced (a stale instance left over from a discarded queue, same as the
+      // auto-leave timer's check), or had a song added to it while we were waiting. Only
+      // proceed if it's still the live, genuinely-empty, idle queue for this guild.
+      if (queues.get(this.guildId) !== this || this.destroying || this.isPlaying || this.songs.length > 0) {
+        return false;
+      }
+
       const track = tracks.find(t => !this.recentRadioUrls.includes(t.url));
       if (!track) return false;
 

@@ -37,7 +37,8 @@ export default {
       let shown = 0;
 
       for (const song of queueData.upcoming) {
-        const title = song.title.length > 60 ? `${song.title.slice(0, 60)}…` : song.title;
+        const rawTitle = song.title || 'Unknown';
+        const title = rawTitle.length > 60 ? `${rawTitle.slice(0, 60)}…` : rawTitle;
         const entry = `${shown + 1}. **${title}**\n   Requested by: ${song.requestedBy}`;
         const candidate = upcomingList ? `${upcomingList}\n\n${entry}` : entry;
 
@@ -49,7 +50,7 @@ export default {
 
       const rest = queueData.upcoming.length - shown;
       if (rest > 0) {
-        upcomingList += `\n…en nog ${rest} nummers`;
+        upcomingList += `\n…and ${rest} more`;
       }
 
       embed.addFields({
