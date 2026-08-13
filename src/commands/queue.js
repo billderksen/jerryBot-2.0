@@ -32,14 +32,29 @@ export default {
     }
 
     if (queueData.upcoming.length > 0) {
-      const upcomingList = queueData.upcoming
-        .slice(0, 10)
-        .map((song, index) => `${index + 1}. **${song.title}**\n   Requested by: ${song.requestedBy}`)
-        .join('\n\n');
-      
+      const MAX_FIELD_LEN = 1000;
+      let upcomingList = '';
+      let shown = 0;
+
+      for (const song of queueData.upcoming) {
+        const title = song.title.length > 60 ? `${song.title.slice(0, 60)}…` : song.title;
+        const entry = `${shown + 1}. **${title}**\n   Requested by: ${song.requestedBy}`;
+        const candidate = upcomingList ? `${upcomingList}\n\n${entry}` : entry;
+
+        // Always show at least one entry, then stop before exceeding the field limit
+        if (shown > 0 && candidate.length > MAX_FIELD_LEN) break;
+        upcomingList = candidate;
+        shown++;
+      }
+
+      const rest = queueData.upcoming.length - shown;
+      if (rest > 0) {
+        upcomingList += `\n…en nog ${rest} nummers`;
+      }
+
       embed.addFields({
         name: `📋 Up Next (${queueData.upcoming.length} song${queueData.upcoming.length > 1 ? 's' : ''})`,
-        value: upcomingList + (queueData.upcoming.length > 10 ? `\n\n...and ${queueData.upcoming.length - 10} more` : ''),
+        value: upcomingList,
         inline: false
       });
     } else {

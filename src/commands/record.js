@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { getVoiceConnection, joinVoiceChannel } from '@discordjs/voice';
+import { joinVoiceChannel } from '@discordjs/voice';
 import { startRecording, stopRecording, isRecording } from '../utils/voiceRecorder.js';
 
 export default {
