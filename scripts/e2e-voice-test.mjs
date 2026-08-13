@@ -33,7 +33,11 @@
 import '../src/loadEnv.js';
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
+  renameSync, rmSync, unlinkSync, writeFileSync,
+} from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,12 +58,26 @@ const NL_VOICE_CONFIG = `${NL_VOICE}.json`;
 // of setup-voice.sh's assets, so this script fetches+caches its own copy
 // under the OS tmp dir on first run - never into tools/, never committed -
 // so the diagnostic stays runnable anywhere without touching repo assets.
+//
+// Pinned to a specific commit (not the mutable `main` ref) and checksummed:
+// the sha256 constants below were computed from a download of exactly this
+// commit's files on 2026-08-13 (verified independently: the .onnx value also
+// matches Hugging Face's own `x-linked-etag` response header for that
+// download, which is itself a sha256 of the file content). If upstream ever
+// serves different bytes at this same pinned commit+path, downloadFile()
+// refuses to use them rather than feeding an unverified model into Piper.
 const EN_VOICE_CACHE_DIR = path.join(tmpdir(), 'jerrybot-e2e-en-voice');
 const EN_VOICE = path.join(EN_VOICE_CACHE_DIR, 'en_US-lessac-medium.onnx');
 const EN_VOICE_CONFIG = `${EN_VOICE}.json`;
-const EN_VOICE_BASE_URL = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium';
+const EN_VOICE_COMMIT = 'ea046e8458f6acd997706d6e6066a022b42f6fb1';
+const EN_VOICE_BASE_URL = `https://huggingface.co/rhasspy/piper-voices/resolve/${EN_VOICE_COMMIT}/en/en_US/lessac/medium`;
+const EN_VOICE_ONNX_SHA256 = '5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f';
+const EN_VOICE_JSON_SHA256 = 'efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0';
 
-const WORK_DIR = path.join(tmpdir(), 'jerrybot-e2e-voice-test');
+// Fresh, unpredictable-name directory per run (not a fixed shared path) so a
+// scratch wav/raw file here can't be pre-planted or raced by another local
+// user. Removed at the end of main().
+const WORK_DIR = mkdtempSync(path.join(tmpdir(), 'jerrybot-e2e-voice-test-'));
 
 const PURE_DUTCH_PHRASE = 'herinner me over twintig minuten aan de pizza';
 const CANONICAL_PLAY_TEXT = 'speel beat it van michael jackson';
@@ -187,24 +205,68 @@ function rawPcmToInt16Array(buf) {
   return out;
 }
 
-async function downloadFile(url, destPath) {
+// Refuses to use EN_VOICE_CACHE_DIR unless it's either freshly created here
+// (mode 0o700) or an existing real directory (not a symlink) owned by the
+// current user - a predictable, world-writable-tmpdir-adjacent path is a
+// classic symlink-attack target otherwise.
+function ensureEnVoiceCacheDir() {
+  if (existsSync(EN_VOICE_CACHE_DIR)) {
+    const st = lstatSync(EN_VOICE_CACHE_DIR); // lstat, not stat: must not follow a symlink here
+    if (st.isSymbolicLink()) {
+      throw new Error(`${EN_VOICE_CACHE_DIR} is a symlink - refusing to use it`);
+    }
+    if (!st.isDirectory()) {
+      throw new Error(`${EN_VOICE_CACHE_DIR} exists and is not a directory`);
+    }
+    if (st.uid !== process.getuid()) {
+      throw new Error(`${EN_VOICE_CACHE_DIR} is not owned by the current user - refusing to use it`);
+    }
+  } else {
+    // mkdir fails with EEXIST rather than following/reusing anything an
+    // attacker plants at this path between the check above and this call.
+    mkdirSync(EN_VOICE_CACHE_DIR, { recursive: true, mode: 0o700 });
+  }
+}
+
+// Downloads url, verifies its sha256 against expectedSha256 BEFORE any bytes
+// touch disk (so a mismatch never leaves anything to clean up), then writes
+// it via a randomly-named sibling file opened with the exclusive-create flag
+// ('wx' - fails if anything, including a pre-planted symlink, already exists
+// at that exact name) and atomically renames it into place. rename(2) itself
+// never follows a symlink at the destination either, so even a predictable
+// final destPath can't be redirected by a symlink planted there.
+async function downloadFile(url, destPath, expectedSha256) {
   const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  const partPath = `${destPath}.part`;
-  writeFileSync(partPath, buf);
-  renameSync(partPath, destPath);
+
+  const actualSha256 = createHash('sha256').update(buf).digest('hex');
+  if (actualSha256 !== expectedSha256) {
+    throw new Error(`sha256 mismatch for ${path.basename(destPath)}: expected ${expectedSha256}, got ${actualSha256}`);
+  }
+
+  const partPath = path.join(path.dirname(destPath), `.${path.basename(destPath)}.${randomUUID()}.part`);
+  try {
+    writeFileSync(partPath, buf, { flag: 'wx' });
+    renameSync(partPath, destPath);
+  } catch (err) {
+    try { unlinkSync(partPath); } catch { /* nothing was written */ }
+    throw err;
+  }
 }
 
 async function ensureEnglishVoiceOrSkip() {
   try {
-    mkdirSync(EN_VOICE_CACHE_DIR, { recursive: true });
+    ensureEnVoiceCacheDir();
     if (existsSync(EN_VOICE) && existsSync(EN_VOICE_CONFIG)) return;
-    console.log(`  (downloading English Piper voice to ${EN_VOICE_CACHE_DIR} - one-time, ~60MB)`);
-    await downloadFile(`${EN_VOICE_BASE_URL}/en_US-lessac-medium.onnx`, EN_VOICE);
-    await downloadFile(`${EN_VOICE_BASE_URL}/en_US-lessac-medium.onnx.json`, EN_VOICE_CONFIG);
+    console.log(`  (downloading English Piper voice, pinned commit ${EN_VOICE_COMMIT.slice(0, 12)}, sha256-verified, to ${EN_VOICE_CACHE_DIR} - one-time, ~60MB)`);
+    await downloadFile(`${EN_VOICE_BASE_URL}/en_US-lessac-medium.onnx`, EN_VOICE, EN_VOICE_ONNX_SHA256);
+    await downloadFile(`${EN_VOICE_BASE_URL}/en_US-lessac-medium.onnx.json`, EN_VOICE_CONFIG, EN_VOICE_JSON_SHA256);
   } catch (err) {
-    throw new StageSkip(`could not obtain the English Piper voice for the wake phrase (${err.message})`);
+    // SKIP-with-error, not FAIL: a checksum mismatch or download failure
+    // means "could not verify this box's environment", not "the pipeline is
+    // broken" - and stage1_wake must never proceed with an unverified model.
+    throw new StageSkip(`could not obtain a verified English Piper voice for the wake phrase (${err.message})`);
   }
 }
 
@@ -473,27 +535,37 @@ function printResults(results) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  mkdirSync(WORK_DIR, { recursive: true });
+  // WORK_DIR already exists - created by mkdtempSync at module load.
+  try {
+    const results = [];
+    results.push(await runStage('STAGE 1: Wake detection (English voice, real sidecar)', true, stage1_wake));
+    // hard=true here: this only requires the real Groq call to SUCCEED (a
+    // non-empty transcript comes back) - it is NOT graded on transcript
+    // accuracy against PURE_DUTCH_PHRASE, which is recorded as data instead
+    // (see stage2_stt's own comment). Keeping it a hard, exit-code-gating
+    // stage is deliberate: a diagnostic that exits 0 while STT is actually
+    // down (network/API/auth failure) would be worse than useless. Ruled
+    // accepted in Task 7 fix round 1.
+    results.push(await runStage('STAGE 2: Speech-to-text (Dutch voice, real Groq Whisper)', true, stage2_stt));
+    results.push(await runStage('STAGE 3: Intent parsing (real OpenRouter)', true, stage3_intent));
+    results.push(await runStage('STAGE 4: Intent-on-transcript (bonus, full chain)', false, stage4_bonus));
+    results.push(await runStage('STAGE 5: Text-to-speech (real Piper, ffprobe-verified)', true, stage5_tts));
 
-  const results = [];
-  results.push(await runStage('STAGE 1: Wake detection (English voice, real sidecar)', true, stage1_wake));
-  results.push(await runStage('STAGE 2: Speech-to-text (Dutch voice, real Groq Whisper)', true, stage2_stt));
-  results.push(await runStage('STAGE 3: Intent parsing (real OpenRouter)', true, stage3_intent));
-  results.push(await runStage('STAGE 4: Intent-on-transcript (bonus, full chain)', false, stage4_bonus));
-  results.push(await runStage('STAGE 5: Text-to-speech (real Piper, ffprobe-verified)', true, stage5_tts));
+    printResults(results);
 
-  printResults(results);
+    const hardFailures = results.filter((r) => r.hard && r.status !== 'PASS');
+    console.log('');
+    if (hardFailures.length === 0) {
+      console.log('RESULT: all hard stages PASSED (exit 0)');
+    } else {
+      console.log(`RESULT: ${hardFailures.length} hard stage(s) did not pass (exit 1): ${hardFailures.map((r) => r.label).join(', ')}`);
+    }
+    console.log(`Wake-word threshold: ${WAKEWORD_THRESHOLD_ENV !== undefined ? WAKEWORD_THRESHOLD_ENV : '0.5 (default, with 0.3 fallback if needed)'}`);
 
-  const hardFailures = results.filter((r) => r.hard && r.status !== 'PASS');
-  console.log('');
-  if (hardFailures.length === 0) {
-    console.log('RESULT: all hard stages PASSED (exit 0)');
-  } else {
-    console.log(`RESULT: ${hardFailures.length} hard stage(s) did not pass (exit 1): ${hardFailures.map((r) => r.label).join(', ')}`);
+    process.exitCode = hardFailures.length === 0 ? 0 : 1;
+  } finally {
+    try { rmSync(WORK_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   }
-  console.log(`Wake-word threshold: ${WAKEWORD_THRESHOLD_ENV !== undefined ? WAKEWORD_THRESHOLD_ENV : '0.5 (default, with 0.3 fallback if needed)'}`);
-
-  process.exitCode = hardFailures.length === 0 ? 0 : 1;
 }
 
 main().catch((err) => {
