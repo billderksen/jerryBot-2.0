@@ -40,17 +40,20 @@ function getRequestDelay() {
   const playerCount = trackerData.trackedPlayers.length;
   const totalRequests = playerCount * 5; // 1 update POST + 1 detail fallback + 3 gain periods
   if (totalRequests <= 20) return BASE_REQUEST_DELAY_MS;
-  // Scale delay to stay under 20 req/60s
-  return Math.ceil(60000 / totalRequests) + 100;
+  // Scale delay up to stay under 20 req/60s, but never below the hard floor
+  return Math.max(BASE_REQUEST_DELAY_MS, Math.ceil(60000 / totalRequests) + 100);
 }
 
 async function womFetch(path) {
   const url = `${WOM_BASE}${path}`;
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'JerryBot/2.0' }
+    headers: { 'User-Agent': 'JerryBot/2.0' },
+    signal: AbortSignal.timeout(10_000)
   });
   if (!response.ok) {
-    throw new Error(`WOM API ${response.status}: ${response.statusText}`);
+    const error = new Error(`WOM API ${response.status}: ${response.statusText}`);
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }
@@ -59,10 +62,13 @@ async function womPost(path) {
   const url = `${WOM_BASE}${path}`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'User-Agent': 'JerryBot/2.0' }
+    headers: { 'User-Agent': 'JerryBot/2.0' },
+    signal: AbortSignal.timeout(10_000)
   });
   if (!response.ok) {
-    throw new Error(`WOM API POST ${response.status}: ${response.statusText}`);
+    const error = new Error(`WOM API POST ${response.status}: ${response.statusText}`);
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }
@@ -161,51 +167,54 @@ async function refreshAllPlayers() {
   if (isRefreshing) return;
   isRefreshing = true;
 
-  const playerIds = trackerData.trackedPlayers;
-  const requestDelay = getRequestDelay();
+  try {
+    const playerIds = trackerData.trackedPlayers;
+    const requestDelay = getRequestDelay();
 
-  for (const playerId of playerIds) {
-    try {
-      // First, get the player's username from cached data or fetch it
-      let username = trackerData.players[playerId]?.username;
-      if (!username) {
-        const playerInfo = await womFetch(`/players/id/${playerId}`);
-        username = playerInfo.username;
-        await delay(requestDelay);
-      }
-
-      // POST to update the player on WOM (pulls fresh stats from OSRS hiscores)
+    for (const playerId of playerIds) {
       try {
-        const updated = await womPost(`/players/${encodeURIComponent(username)}`);
-        trackerData.players[playerId] = extractPlayerData(updated);
-      } catch (updateError) {
-        // Update may fail due to rate limits (429) or cooldown — fall back to GET
-        console.warn(`[OSRS Tracker] Update POST failed for ${username}: ${updateError.message}, falling back to GET`);
-        const player = await womFetch(`/players/id/${playerId}`);
-        trackerData.players[playerId] = extractPlayerData(player);
-      }
-      await delay(requestDelay);
+        // First, get the player's username from cached data or fetch it
+        let username = trackerData.players[playerId]?.username;
+        if (!username) {
+          const playerInfo = await womFetch(`/players/id/${playerId}`);
+          username = playerInfo.username;
+          await delay(requestDelay);
+        }
 
-      const encodedName = encodeURIComponent(username);
-      for (const period of ['day', 'week', 'month']) {
+        // POST to update the player on WOM (pulls fresh stats from OSRS hiscores)
         try {
-          const gains = await womFetch(`/players/${encodedName}/gained?period=${period}`);
-          if (!trackerData.gains[playerId]) trackerData.gains[playerId] = {};
-          trackerData.gains[playerId][period] = extractGainsData(gains);
-        } catch (error) {
-          console.error(`[OSRS Tracker] Error fetching ${period} gains for ${username}:`, error.message);
+          const updated = await womPost(`/players/${encodeURIComponent(username)}`);
+          trackerData.players[playerId] = extractPlayerData(updated);
+        } catch (updateError) {
+          // Update may fail due to rate limits (429) or cooldown — fall back to GET
+          console.warn(`[OSRS Tracker] Update POST failed for ${username}: ${updateError.message}, falling back to GET`);
+          const player = await womFetch(`/players/id/${playerId}`);
+          trackerData.players[playerId] = extractPlayerData(player);
         }
         await delay(requestDelay);
-      }
-    } catch (error) {
-      console.error(`[OSRS Tracker] Error refreshing player ${playerId}:`, error.message);
-    }
-  }
 
-  trackerData.lastRefresh = new Date().toISOString();
-  saveData();
-  isRefreshing = false;
-  console.log(`[OSRS Tracker] Refreshed ${playerIds.length} players at ${trackerData.lastRefresh}`);
+        const encodedName = encodeURIComponent(username);
+        for (const period of ['day', 'week', 'month']) {
+          try {
+            const gains = await womFetch(`/players/${encodedName}/gained?period=${period}`);
+            if (!trackerData.gains[playerId]) trackerData.gains[playerId] = {};
+            trackerData.gains[playerId][period] = extractGainsData(gains);
+          } catch (error) {
+            console.error(`[OSRS Tracker] Error fetching ${period} gains for ${username}:`, error.message);
+          }
+          await delay(requestDelay);
+        }
+      } catch (error) {
+        console.error(`[OSRS Tracker] Error refreshing player ${playerId}:`, error.message);
+      }
+    }
+
+    trackerData.lastRefresh = new Date().toISOString();
+    saveData();
+    console.log(`[OSRS Tracker] Refreshed ${playerIds.length} players at ${trackerData.lastRefresh}`);
+  } finally {
+    isRefreshing = false;
+  }
 }
 
 // --- Inactivity helpers ---
@@ -310,7 +319,10 @@ export async function addPlayerByUsername(username) {
 
     return { success: true, player: { id, displayName: player.displayName } };
   } catch (error) {
-    return { success: false, error: `Player "${username}" not found on WiseOldMan` };
+    if (error.status === 404) {
+      return { success: false, error: `Player "${username}" not found on WiseOldMan` };
+    }
+    return { success: false, error: `Temporary error from WiseOldMan (try again later): ${error.status ?? error.message}` };
   }
 }
 

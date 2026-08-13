@@ -161,7 +161,9 @@ export async function fetchAndScoreResults(round) {
   const race = RACES.find(r => r.round === Number(round));
   if (!race) throw new Error('Invalid round');
 
-  const res = await fetch(`https://api.jolpi.ca/ergast/f1/2026/${round}/results/?format=json`);
+  const res = await fetch(`https://api.jolpi.ca/ergast/f1/2026/${round}/results/?format=json`, {
+    signal: AbortSignal.timeout(10_000)
+  });
   if (!res.ok) throw new Error(`Jolpica API error: HTTP ${res.status}`);
   const apiData = await res.json();
 

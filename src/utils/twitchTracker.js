@@ -52,7 +52,8 @@ async function getAppAccessToken() {
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: 'client_credentials'
-    })
+    }),
+    signal: AbortSignal.timeout(10_000)
   });
 
   if (!response.ok) {
@@ -74,7 +75,8 @@ async function twitchFetch(path) {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Client-Id': clientId
-    }
+    },
+    signal: AbortSignal.timeout(10_000)
   });
 
   if (response.status === 401) {
@@ -86,7 +88,8 @@ async function twitchFetch(path) {
       headers: {
         'Authorization': `Bearer ${newToken}`,
         'Client-Id': clientId
-      }
+      },
+      signal: AbortSignal.timeout(10_000)
     });
     if (!retry.ok) throw new Error(`Twitch API ${retry.status}: ${retry.statusText}`);
     return retry.json();
@@ -127,11 +130,15 @@ async function checkStreams() {
       liveMap.set(stream.user_id, stream);
     }
 
-    // Check each tracked streamer
+    // Check each tracked streamer, tracking whether anything worth persisting changed
+    let changed = false;
+    const newSessions = [];
+
     for (const [username, streamer] of Object.entries(trackerData.streamers)) {
       const stream = liveMap.get(streamer.twitchId);
       if (stream) {
         // Streamer is live
+        if (!streamer.isLive) changed = true;
         streamer.isLive = true;
         streamer.streamTitle = stream.title;
         streamer.gameName = stream.game_name;
@@ -139,22 +146,27 @@ async function checkStreams() {
         streamer.startedAt = stream.started_at;
 
         if (stream.id !== streamer.lastNotifiedStreamId) {
-          // New stream session - send notification
+          // New stream session - queue notification
           streamer.lastNotifiedStreamId = stream.id;
-          saveData();
-          await sendLiveNotification(username, streamer, stream);
+          changed = true;
+          newSessions.push([username, streamer, stream]);
         }
-      } else {
-        // Streamer is offline
+      } else if (streamer.isLive) {
+        // Streamer just went offline
         streamer.isLive = false;
         streamer.streamTitle = null;
         streamer.gameName = null;
         streamer.viewerCount = null;
         streamer.startedAt = null;
+        changed = true;
       }
     }
 
-    saveData();
+    if (changed) saveData();
+
+    for (const [username, streamer, stream] of newSessions) {
+      await sendLiveNotification(username, streamer, stream);
+    }
   } catch (error) {
     console.error('[Twitch Tracker] Error checking streams:', error.message);
   }
@@ -176,8 +188,11 @@ async function sendLiveNotification(username, streamer, stream) {
         { name: 'Category', value: stream.game_name || 'Unknown', inline: true },
         { name: 'Viewers', value: String(stream.viewer_count || 0), inline: true }
       )
-      .setImage(`https://static-cdn.jtvnbs.net/previews-ttv/live_user_${username}-640x360.jpg?t=${Date.now()}`)
       .setTimestamp();
+
+    if (stream.thumbnail_url) {
+      embed.setImage(`${stream.thumbnail_url.replace('{width}x{height}', '1280x720')}?t=${Date.now()}`);
+    }
 
     if (streamer.profileImage) {
       embed.setThumbnail(streamer.profileImage);
@@ -200,13 +215,16 @@ async function sendLiveNotification(username, streamer, stream) {
 // --- Exported API ---
 
 export async function initTwitchTracker(client) {
-  if (!process.env.TWITCH_CLIENT_ID || !process.env.TWITCH_CLIENT_SECRET) {
-    console.log('[Twitch Tracker] Skipping init - TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not set');
-    return;
-  }
-
+  // Load tracker data unconditionally so /streamer subcommands and autocomplete
+  // work even without Twitch credentials configured.
   discordClient = client;
   trackerData = loadData();
+  console.log('[Twitch Tracker] Loaded', Object.keys(trackerData.streamers).length, 'tracked streamers');
+
+  if (!process.env.TWITCH_CLIENT_ID || !process.env.TWITCH_CLIENT_SECRET) {
+    console.log('[Twitch Tracker] TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET not set - skipping live polling');
+    return;
+  }
 
   // Resolve Twitch user IDs for any streamers that don't have one yet
   await resolveUserIds();
@@ -222,8 +240,6 @@ export async function initTwitchTracker(client) {
       console.error('[Twitch Tracker] Poll failed:', err.message);
     });
   }, POLL_INTERVAL_MS);
-
-  console.log('[Twitch Tracker] Initialized with', Object.keys(trackerData.streamers).length, 'tracked streamers');
 }
 
 export function stopTwitchTracker() {
