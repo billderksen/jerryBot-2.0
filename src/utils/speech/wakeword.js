@@ -77,6 +77,8 @@ export class WakewordEngine extends EventEmitter {
     this.child = null;
     this.stopping = false;
     this.stdoutBuffer = '';
+    this.stdinErrored = false;
+    this.stdinBackpressured = false;
 
     this.respawnAttempt = 0;
     this.respawnTimer = null;
@@ -116,17 +118,23 @@ export class WakewordEngine extends EventEmitter {
 
   /**
    * Feed audio samples for a given slot into the sidecar. Never throws:
-   * if the sidecar is down or the write fails, the frame is dropped and
+   * if the sidecar is down, its stdin has errored (e.g. EPIPE from a dead
+   * child), or its stdin is backpressured, the frame is dropped and
    * counted, logging the outage once (not per-frame).
    */
   feedAudio(slot, samples) {
-    if (!this.child || !this.child.stdin.writable) {
+    if (!this.child || !this.child.stdin.writable || this.stdinErrored) {
       this._dropFrame('sidecar unavailable, dropping audio frames');
+      return;
+    }
+    if (this.stdinBackpressured) {
+      this._dropFrame('sidecar stdin backpressured, dropping audio frames');
       return;
     }
     try {
       const buf = encodeFrame(slot, samples);
-      this.child.stdin.write(buf);
+      const ok = this.child.stdin.write(buf);
+      if (!ok) this.stdinBackpressured = true;
       this.droppedOutageLogged = false;
     } catch (err) {
       this._dropFrame(`failed to feed audio frame: ${err.message}`);
@@ -135,9 +143,10 @@ export class WakewordEngine extends EventEmitter {
 
   /** Tell the sidecar to drop a slot's model state and buffered audio. */
   releaseSlot(slot) {
-    if (!this.child || !this.child.stdin.writable) return;
+    if (!this.child || !this.child.stdin.writable || this.stdinErrored) return;
     try {
-      this.child.stdin.write(encodeFrame(slot, new Int16Array(0)));
+      const ok = this.child.stdin.write(encodeFrame(slot, new Int16Array(0)));
+      if (!ok) this.stdinBackpressured = true;
     } catch (err) {
       console.error('[Wakeword] failed to release slot', slot, err.message);
     }
@@ -162,6 +171,19 @@ export class WakewordEngine extends EventEmitter {
 
     this.child = child;
     this.stdoutBuffer = '';
+    this.stdinErrored = false;
+    this.stdinBackpressured = false;
+
+    // Without this listener, an EPIPE (e.g. writing to a dead child's stdin
+    // in the window before the 'exit' event fires) is an unhandled 'error'
+    // on a Writable stream, which throws process-wide and kills the bot.
+    child.stdin.on('error', (err) => {
+      console.error('[Wakeword] sidecar stdin error:', err.message);
+      this.stdinErrored = true;
+    });
+    child.stdin.on('drain', () => {
+      this.stdinBackpressured = false;
+    });
 
     child.stdout.on('data', (data) => this._handleStdout(data));
     child.stderr.on('data', (data) => {
