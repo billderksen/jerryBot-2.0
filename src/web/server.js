@@ -11,7 +11,7 @@ import { dirname, join } from 'path';
 import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
-import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer, applyMixerFilters, getMusicSettings } from '../utils/musicQueue.js';
+import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer, applyMixerFilters, getMusicSettings, getRadioTracks } from '../utils/musicQueue.js';
 import { createRoom, getRoom, deleteRoom, getRoomList, getLeaderboard, Player, setActivityLogger as setPictionaryActivityLogger } from '../utils/pictionaryGame.js';
 import { createRoom as createHitsterRoom, getRoom as getHitsterRoom, deleteRoom as deleteHitsterRoom, getRoomList as getHitsterRoomList, getLeaderboard as getHitsterLeaderboard } from '../utils/hitsterGame.js';
 import { createRoom as createPestenRoom, getRoom as getPestenRoom, deleteRoom as deletePestenRoom, getRoomList as getPestenRoomList, getLeaderboard as getPestenLeaderboard } from '../utils/pestenGame.js';
@@ -31,7 +31,7 @@ import { platform } from 'os';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { randomBytes } from 'node:crypto';
-import { isAllowedMediaUrl } from '../utils/urlValidation.js';
+import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
 
 // Detect system yt-dlp for Linux
 let ytDlpExec = ytDlpPkg;
@@ -215,9 +215,11 @@ function requireAuth(req, res, next) {
   if (req.session && req.session.user && req.session.user.hasAccess) {
     return next();
   }
-  // For API routes, return JSON error
-  if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // For API routes, return JSON error. Must check originalUrl, not path: when this runs
+  // via app.use('/api', requireAuth), req.path is mount-relative (the '/api' prefix is
+  // stripped), so it never starts with '/api/' - originalUrl keeps the full request path.
+  if (req.originalUrl.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Not authenticated' });
   }
   // For page routes, redirect to login
   res.redirect('/login');
@@ -1081,7 +1083,7 @@ app.post('/api/playlists/:id/shuffle', async (req, res) => {
 // API endpoint to search for songs
 app.get('/api/search', rateLimit('search', 15, 60_000), async (req, res) => {
   const query = req.query.q;
-  const count = Math.min(parseInt(req.query.count) || 10, 50); // Default 10, max 50
+  const count = Math.max(1, Math.min(parseInt(req.query.count) || 10, 50)); // Default 10, max 50
   if (!query || query.length < 2) {
     return res.json([]);
   }
@@ -1109,7 +1111,7 @@ app.get('/api/search', rateLimit('search', 15, 60_000), async (req, res) => {
     }
 
     // Use yt-dlp for searching (more reliable than play-dl)
-    const results = await ytDlpExec(`ytsearch${count}:${query}`, {
+    const results = await ytDlpExec(`ytsearch${count}:${sanitizeSearchQuery(query)}`, {
       ...ytCookieOpts,
       dumpSingleJson: true,
       noCheckCertificates: true,
@@ -1211,7 +1213,7 @@ app.get('/api/youtube/search', async (req, res) => {
   
   try {
     // Add "official audio" to search for better matching on Spotify conversions
-    const searchQuery = `${query} official audio`;
+    const searchQuery = `${sanitizeSearchQuery(query)} official audio`;
     const results = await ytDlpExec(`ytsearch3:${searchQuery}`, {
       ...ytCookieOpts,
       dumpSingleJson: true,
@@ -1312,49 +1314,14 @@ app.get('/api/youtube/radio', async (req, res) => {
   if (!videoUrl) {
     return res.status(400).json({ error: 'Video URL is required' });
   }
-  
-  try {
-    // Extract video ID from URL
-    const videoIdMatch = videoUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    if (!videoIdMatch) {
-      return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
-    const videoId = videoIdMatch[1];
-    
-    // YouTube Mix playlist URL format: list=RD<videoId>
-    const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
-    
-    const results = await ytDlpExec(mixUrl, {
-      ...ytCookieOpts,
-      dumpSingleJson: true,
-      noCheckCertificates: true,
-      noWarnings: true,
-      flatPlaylist: true,
-      skipDownload: true,
-      playlistEnd: 25 // Get up to 25 songs from the mix
-    });
-    
-    if (!results.entries || results.entries.length === 0) {
-      return res.status(404).json({ error: 'No radio mix found for this video' });
-    }
-    
-    // Filter out the current video and return the rest
-    const tracks = results.entries
-      .filter(video => video.id !== videoId)
-      .slice(0, 20)
-      .map(video => ({
-        title: video.title || 'Unknown Title',
-        url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
-        duration: video.duration || 0,
-        thumbnail: getHighQualityThumbnail(video),
-        channel: video.channel || video.uploader || 'Unknown'
-      }));
-    
-    res.json({ tracks });
-  } catch (error) {
-    console.error('YouTube radio error:', error);
-    res.status(500).json({ error: 'Failed to get radio mix' });
+
+  // Delegates to musicQueue.js's helper - the same lookup server-side radio
+  // auto-fill uses when playNext() runs with no dashboard connected.
+  const tracks = await getRadioTracks(videoUrl);
+  if (tracks.length === 0) {
+    return res.status(404).json({ error: 'No radio mix found for this video' });
   }
+  res.json({ tracks });
 });
 
 // API endpoint to get lyrics for a song

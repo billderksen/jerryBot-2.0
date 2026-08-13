@@ -1,7 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { chatWithAI } from '../utils/openrouter.js';
-
-const GROK_MODEL = 'x-ai/grok-4.1-fast';
+import { chatWithAI, getChatConfig } from '../utils/openrouter.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -19,18 +17,17 @@ export default {
 
     // Log question to terminal
     console.log(`\n[${new Date().toISOString()}] Question from ${interaction.user.tag} (${interaction.user.id}):`);
-    console.log(`Model: ${GROK_MODEL}`);
+    console.log(`Model: ${getChatConfig().model}`);
     console.log(`Question: ${question}\n`);
 
     // Defer reply since AI might take a moment
     await interaction.deferReply();
 
     try {
-      // Get AI response from Grok
+      // Get AI response - model comes from the persisted admin-panel config
       const { content: aiResponse, modelUsed, usage } = await chatWithAI(
         question,
-        process.env.OPENROUTER_API_KEY,
-        GROK_MODEL
+        process.env.OPENROUTER_API_KEY
       );
 
       // Discord has a 2000 character limit for messages

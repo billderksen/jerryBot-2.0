@@ -11,9 +11,9 @@ const __dirname = dirname(__filename);
 
 import { readdirSync, appendFileSync } from 'fs';
 import { loadJsonSync, saveJsonSync } from './utils/jsonStore.js';
-import { chatWithAI } from './utils/openrouter.js';
+import { chatWithAI, getChatConfig } from './utils/openrouter.js';
 import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, setMemberFetcher, setDiscordClient as setWebDiscordClient, broadcastListeners } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast } from './utils/musicQueue.js';
+import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast, flushStats } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 import { initTracker } from './utils/osrsTracker.js';
 import { initTwitchTracker } from './utils/twitchTracker.js';
@@ -88,23 +88,23 @@ setCommandHandler((command, guildId) => {
     queue.leave();
   } else if (command.startsWith('volume:')) {
     const level = parseInt(command.split(':')[1]);
-    queue.setVolume(level / 100);
+    if (Number.isFinite(level)) queue.setVolume(level / 100);
   } else if (command.startsWith('skipto:')) {
     const index = parseInt(command.split(':')[1]);
-    queue.skipTo(index);
+    if (Number.isFinite(index)) queue.skipTo(index);
   } else if (command.startsWith('remove:')) {
     const index = parseInt(command.split(':')[1]);
-    queue.removeFromQueue(index);
+    if (Number.isFinite(index)) queue.removeFromQueue(index);
   } else if (command.startsWith('seek:')) {
     const seconds = parseFloat(command.split(':')[1]);
-    queue.seek(seconds);
+    if (Number.isFinite(seconds)) queue.seek(seconds);
   } else if (command === 'shuffle') {
     queue.shuffle();
   } else if (command.startsWith('reorder:')) {
     const parts = command.split(':');
     const fromIndex = parseInt(parts[1]);
     const toIndex = parseInt(parts[2]);
-    queue.reorder(fromIndex, toIndex);
+    if (Number.isFinite(fromIndex) && Number.isFinite(toIndex)) queue.reorder(fromIndex, toIndex);
   } else if (command === 'loop') {
     queue.cycleLoopMode();
   } else if (command === '24/7') {
@@ -524,21 +524,21 @@ client.on(Events.MessageCreate, async message => {
       }
 
       // Send the follow-up question with conversation context
-      const GROK_MODEL = 'x-ai/grok-4.1-fast';
       const followUpQuestion = message.content;
 
       console.log(`\n[${new Date().toISOString()}] Follow-up from ${message.author.tag} (${message.author.id}):`);
-      console.log(`Model: ${GROK_MODEL}`);
+      console.log(`Model: ${getChatConfig().model}`);
       console.log(`Question: ${followUpQuestion}`);
       console.log(`Conversation history: ${history.length} messages`);
 
       // Show typing indicator while waiting for AI
       await message.channel.sendTyping();
 
+      // Model comes from the persisted admin-panel config, not hardcoded here
       const { content: aiResponse, modelUsed, usage } = await chatWithAI(
         followUpQuestion,
         process.env.OPENROUTER_API_KEY,
-        GROK_MODEL,
+        null,
         history
       );
 
@@ -736,6 +736,7 @@ function flushState() {
   try { stopLevelSystem(); } catch (e) { console.error('[Shutdown] levelSystem:', e); }
   try { stopDiscordTracker(); } catch (e) { console.error('[Shutdown] discordTracker:', e); }
   try { flushLastSeen(); } catch (e) { console.error('[Shutdown] lastSeen:', e); }
+  try { flushStats(); } catch (e) { console.error('[Shutdown] musicStats:', e); }
 }
 
 async function shutdown(signal) {

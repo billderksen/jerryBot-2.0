@@ -2,7 +2,9 @@ import { createAudioPlayer, createAudioResource, joinVoiceChannel, AudioPlayerSt
 import ytDlpPkg from 'yt-dlp-exec';
 import { platform } from 'os';
 import { spawn, execSync } from 'child_process';
-let ytDlpExec;
+// Exported so other modules (play.js search/autocomplete, server.js radio route) can reuse
+// this same system-binary-aware, cookie-aware instance instead of keeping their own copy.
+export let ytDlpExec;
 
 // Use system yt-dlp(.exe) if available, otherwise fallback to yt-dlp-exec default
 let systemYtDlpPath = null;
@@ -49,7 +51,7 @@ if (systemYtDlpPath) {
 // YouTube cookies for authenticated access (improves radio variety, age-gated content, etc.)
 // YOUTUBE_COOKIES_BROWSER=firefox  → extracts cookies from browser at runtime (simplest)
 // YOUTUBE_COOKIES=path/to/file.txt → uses a Netscape-format cookies file
-const ytCookieOpts = process.env.YOUTUBE_COOKIES_BROWSER
+export const ytCookieOpts = process.env.YOUTUBE_COOKIES_BROWSER
   ? { cookiesFromBrowser: process.env.YOUTUBE_COOKIES_BROWSER }
   : process.env.YOUTUBE_COOKIES && existsSync(process.env.YOUTUBE_COOKIES)
     ? { cookies: process.env.YOUTUBE_COOKIES }
@@ -247,13 +249,23 @@ async function trackListeningTime(song, actualSecondsListened) {
   scheduleSaveStats();
 }
 
-// Debounced save
+// Debounced save - at most once per 30s while stats keep changing during playback
 function scheduleSaveStats() {
   if (!saveStatsTimeout) {
     saveStatsTimeout = setTimeout(() => {
       saveStats();
       saveStatsTimeout = null;
-    }, 5000);
+    }, 30000);
+  }
+}
+
+// Force an immediate synchronous write of any pending listening-stats changes.
+// Called from index.js's shutdown flush so stats aren't lost to the debounce window.
+export function flushStats() {
+  if (saveStatsTimeout) {
+    clearTimeout(saveStatsTimeout);
+    saveStatsTimeout = null;
+    saveStats();
   }
 }
 
@@ -462,6 +474,48 @@ export function getRecentlyPlayed() {
   return globalRecentlyPlayed;
 }
 
+// Look up related "YouTube Mix" tracks for a video - shared by server-side radio
+// auto-fill in playNext() and the /api/youtube/radio route (which delegates here
+// instead of keeping its own copy). Reuses this module's already-configured,
+// cookie-aware yt-dlp instance. Returns [] on any failure or unrecognized URL -
+// never throws, so callers can fall through to their normal behavior.
+export async function getRadioTracks(seedUrl, limit = 20) {
+  const videoIdMatch = typeof seedUrl === 'string' && seedUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (!videoIdMatch) return [];
+  const videoId = videoIdMatch[1];
+
+  // YouTube Mix playlist URL format: list=RD<videoId>
+  const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+
+  try {
+    const results = await ytDlpExec(mixUrl, {
+      ...ytCookieOpts,
+      dumpSingleJson: true,
+      noCheckCertificates: true,
+      noWarnings: true,
+      flatPlaylist: true,
+      skipDownload: true,
+      playlistEnd: 25
+    });
+
+    if (!results.entries || results.entries.length === 0) return [];
+
+    return results.entries
+      .filter(video => video.id !== videoId)
+      .slice(0, limit)
+      .map(video => ({
+        title: video.title || 'Unknown Title',
+        url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
+        duration: video.duration || 0,
+        thumbnail: video.id ? `https://img.youtube.com/vi/${video.id}/hqdefault.jpg` : null,
+        channel: video.channel || video.uploader || 'Unknown'
+      }));
+  } catch (error) {
+    console.error('[MusicQueue] Radio lookup failed:', error.message);
+    return [];
+  }
+}
+
 // Store queue per guild
 const queues = new Map();
 
@@ -594,10 +648,6 @@ function broadcastState(seekPosition = null) {
   const firstQueue = queues.values().next().value;
 
   if (firstQueue) {
-    // Debug: log current song thumbnail
-    if (firstQueue.currentSong) {
-      console.log('Current song thumbnail:', firstQueue.currentSong.thumbnail || 'NO THUMBNAIL');
-    }
     // Calculate current playback position in seconds (paused time excluded)
     const isPaused = firstQueue.player.state.status === AudioPlayerStatus.Paused;
     const speed = globalSettings.mixerFilters?.speed || 1.0;
@@ -684,6 +734,7 @@ export class MusicQueue {
     this.consecutiveFailures = 0; // Consecutive play() failures - trips a breaker at 3
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
     this.listenerConnection = null; // Connection object we already attached lifecycle listeners to
+    this.recentRadioUrls = []; // Last 5 server-side radio auto-adds, to avoid looping on the same tracks
     // Note: loopMode, is24_7, and sleepEndTime are now in globalSettings for persistence
 
     // Handle player state changes - use arrow function to preserve 'this'
@@ -1216,8 +1267,41 @@ export class MusicQueue {
     return true;
   }
 
+  // Try to auto-queue one related track when radio mode is on and the queue just ran
+  // dry. Returns true (and has already started playback) on success, false if no
+  // suitable track was found - callers fall back to their normal empty-queue behavior.
+  async tryRadioFill(seedUrl) {
+    try {
+      const tracks = await getRadioTracks(seedUrl);
+      const track = tracks.find(t => !this.recentRadioUrls.includes(t.url));
+      if (!track) return false;
+
+      this.recentRadioUrls.push(track.url);
+      if (this.recentRadioUrls.length > 5) this.recentRadioUrls.shift();
+
+      this.addSong({
+        title: track.title,
+        url: track.url,
+        duration: track.duration,
+        thumbnail: track.thumbnail,
+        requestedBy: '📻 Radio',
+        requestedById: null,
+        source: 'youtube'
+      });
+      await this.play();
+      return true;
+    } catch (error) {
+      console.error('[MusicQueue] Radio auto-fill failed:', error.message);
+      return false;
+    }
+  }
+
   async playNext() {
     console.log('playNext called, songs in queue:', this.songs.length);
+
+    // Capture the song that just ended before it's cleared below - the radio auto-fill
+    // seeds its lookup from it once we know the queue is actually empty
+    const endedSong = this.currentSong;
 
     // Consume the skip flag: it only ever suppresses the loop re-queue for the song that
     // the user just ended, never for the one after it
@@ -1261,6 +1345,15 @@ export class MusicQueue {
       await new Promise(resolve => setTimeout(resolve, 500));
       await this.play();
     } else {
+      // Server-side radio auto-fill: the existing radio flow only runs client-side
+      // (browser fetches /api/youtube/radio), so with no dashboard open the queue
+      // just used to end here. Never throws into this path - any failure falls
+      // through to the normal empty-queue behavior below.
+      if (globalSettings.radioEnabled && !this.destroying && endedSong?.url) {
+        const filled = await this.tryRadioFill(endedSong.url);
+        if (filled) return;
+      }
+
       // Clear Discord presence when queue is empty
       if (updatePresenceCallback) {
         updatePresenceCallback(null);

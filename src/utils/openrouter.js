@@ -1,11 +1,44 @@
 import axios from 'axios';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { loadJsonSync, saveJsonSync } from './jsonStore.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const AI_SETTINGS_FILE = join(__dirname, '..', '..', 'data', 'aiSettings.json');
 
-// Configurable runtime settings
-let defaultModel = 'openai/gpt-4o';
-let systemPrompt = 'You are a concise assistant for a Discord bot. Keep answers brief and under 1800 characters so they fit in one reply. Use tight bullet points when helpful. Only go long if the user explicitly asks for a long or detailed answer.';
-let maxTokens = 800;
+// In-code defaults - used as the fallback when data/aiSettings.json doesn't exist yet.
+// Matches the model chat.js/index.js used to hardcode before they deferred to this
+// config, so switching to persisted config doesn't silently change the live model.
+const DEFAULT_MODEL = 'x-ai/grok-4.1-fast';
+const DEFAULT_SYSTEM_PROMPT = 'You are a concise assistant for a Discord bot. Keep answers brief and under 1800 characters so they fit in one reply. Use tight bullet points when helpful. Only go long if the user explicitly asks for a long or detailed answer.';
+const DEFAULT_MAX_TOKENS = 800;
+
+function loadAiSettings() {
+  const data = loadJsonSync(AI_SETTINGS_FILE, {
+    model: DEFAULT_MODEL,
+    systemPrompt: DEFAULT_SYSTEM_PROMPT,
+    maxTokens: DEFAULT_MAX_TOKENS
+  });
+  return {
+    model: data.model || DEFAULT_MODEL,
+    systemPrompt: data.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+    maxTokens: data.maxTokens || DEFAULT_MAX_TOKENS
+  };
+}
+
+function saveAiSettings() {
+  saveJsonSync(AI_SETTINGS_FILE, { model: defaultModel, systemPrompt, maxTokens });
+}
+
+// Configurable runtime settings, persisted to data/aiSettings.json so admin-panel
+// changes (server.js /api/admin/chat/*) survive a restart
+const initialSettings = loadAiSettings();
+let defaultModel = initialSettings.model;
+let systemPrompt = initialSettings.systemPrompt;
+let maxTokens = initialSettings.maxTokens;
 
 /**
  * Get current chat configuration
@@ -21,6 +54,7 @@ export function getChatConfig() {
  */
 export function setChatModel(model) {
   defaultModel = model;
+  saveAiSettings();
 }
 
 /**
@@ -29,6 +63,7 @@ export function setChatModel(model) {
  */
 export function setChatSystemPrompt(prompt) {
   systemPrompt = prompt;
+  saveAiSettings();
 }
 
 /**
@@ -37,6 +72,7 @@ export function setChatSystemPrompt(prompt) {
  */
 export function setChatMaxTokens(tokens) {
   maxTokens = tokens;
+  saveAiSettings();
 }
 
 /**
@@ -70,10 +106,11 @@ export async function chatWithAI(message, apiKey, model = null, conversationHist
         messages
       },
       {
+        timeout: 60_000,
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/your-repo', // Optional: Your site URL
+          'HTTP-Referer': 'https://github.com/billderksen/jerryBot-2.0', // Optional: Your site URL
           'X-Title': 'Discord Bot' // Optional: Your app name
         }
       }
