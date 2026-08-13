@@ -48,6 +48,11 @@ setAddSongHandler(fn)           // Web dashboard adds songs to queue
 - `src/utils/lastSeenTracker.js` - Tracks user last-seen timestamps (messages, presence, voice)
 - `src/utils/f1Predictions.js` - F1 fantasy predictions (driver/race data, scoring, Jolpica API integration)
 - `src/utils/teamspeakStatus.js` - TeamSpeak 6 user count → Discord voice channel name (currently disabled on this host — see [TeamSpeak Status Channel](#teamspeak-status-channel))
+- `src/utils/voiceAssistant.js` - "Hey Jerry" orchestrator: opt-in store, receiver subscriptions, wake pipeline, intent dispatch (see [Hey Jerry Voice Assistant](#hey-jerry-voice-assistant))
+- `src/utils/speech/wakeword.js` - Node wrapper around the openWakeWord Python sidecar (`scripts/wakeword_sidecar.py`), 16 audio slots, auto-respawn
+- `src/utils/speech/transcribe.js` - Speech-to-text via Groq's hosted Whisper; throws `TranscribeError` with a `.stage`
+- `src/utils/speech/intent.js` - Transcript → intent: offline Dutch fast path, then an OpenRouter JSON-mode fallback; never rejects
+- `src/utils/speech/tts.js` - Piper text-to-speech + the wake beep, serialized per guild and ducked over the music
 - `src/web/public/js/common.js` - Shared frontend module (escapeHtml, nav, reconnecting WebSocket, toasts) used by all 13 dashboard pages
 
 ### Data Flow
@@ -69,6 +74,7 @@ JSON files in `data/` directory:
 - `lastSeen.json` - User last-seen timestamps (messages, presence, voice)
 - `f1Predictions.json` - F1 fantasy predictions, results cache, season standings
 - `aiSettings.json` - AI chat model/system prompt/max tokens, editable via the admin panel (persisted here, not env vars)
+- `voiceAssistant.json` - "Hey Jerry" opt-in consent list (`{ optedIn: { [userId]: { since } } }`)
 - `commandLog.txt` - Slash command usage log
 - `sessions/` - Express session files
 
@@ -95,6 +101,10 @@ Optional:
 - `YOUTUBE_COOKIES` / `YOUTUBE_COOKIES_BROWSER` - Improves radio variety with authenticated YouTube access
 - `TS6_API_KEY`, `TS6_STATUS_CHANNEL_ID` - TeamSpeak status voice channel (currently unset/disabled on this host)
 - `GENERAL_CHANNEL_ID`, `ACTIVITY_LOG_CHANNEL_ID`, `DJ_ROLE_ID`, `BOT_ADMIN_USER_ID` - Overrides for IDs that otherwise fall back to in-code literals (level-up/anti-offline announcements, activity log channel, streamer/recap DJ role gate, OSRS tracker admin gate)
+- `GROQ_API_KEY` - Speech-to-text for "Hey Jerry". Without it the whole voice assistant is skipped at startup
+- `WAKEWORD_MODEL_PATH`, `WAKEWORD_THRESHOLD` - Wake-word model override (default `tools/models/hey_jarvis_v0.1.onnx`) and detection threshold 0.0-1.0 (default 0.5)
+
+Piper TTS deliberately has **no** env overrides: `scripts/setup-voice.sh` installs it at the fixed paths `tools/piper/piper` and `tools/piper/nl_voice.onnx`, and `tts.js` looks only there.
 
 ## Web Dashboard Routes
 
@@ -244,6 +254,86 @@ Commands:
 - `/record stop` - Stop recording and save the `.wav` file
 
 Implementation: `src/commands/record.js`, `src/utils/voiceRecorder.js`
+
+## Hey Jerry Voice Assistant
+
+Say **"Hey Jerry"** in a voice channel the bot is already in, wait for the beep, then give a command in Dutch. Everything except speech-to-text and intent parsing runs locally.
+
+### The consent invariant
+
+**Jerry only ever subscribes to the audio of users who ran `/heyjerry on`.** This is the rule the whole feature is built around, so it is worth stating precisely:
+
+- Every `receiver.subscribe()` call in `voiceAssistant.js` is immediately preceded by an `isOptedIn()` check in the same function. There are exactly two: the wake-word monitor in `startMonitoring()` and the utterance capture in `captureUtterance()`.
+- The set of people to listen to is decided in **one** place — `doSync()`, reached only via `syncSubscriptions(guildId)` — as "non-bot members of the bot's current voice channel who are opted in". Anyone else is unsubscribed and has their wake-word slot released.
+- `syncSubscriptions()` runs on voice connection state changes, on every `VoiceStateUpdate`, on `/heyjerry on|off`, and from a 30s reconcile timer. All of it is serialized on a per-guild promise chain so concurrent triggers can't double-subscribe.
+- Consent is re-checked **again** after the utterance is recorded. Someone who runs `/heyjerry off` mid-sentence has their audio discarded before it would reach any API.
+- The bot self-deafens by default (it receives no audio at all). It rejoins **undeafened** only while at least one opted-in member is in the channel, and re-deafens when the last one leaves or opts out. Re-deafening is deferred while an interaction or a `/record` session is in flight.
+
+Opt-in state lives in `data/voiceAssistant.json` and is written synchronously on every change — consent must survive a crash.
+
+### Commands
+
+- `/heyjerry on` - Let Jerry listen to you
+- `/heyjerry off` - Stop Jerry from listening (takes effect before the reply is sent)
+- `/heyjerry status` - Your opt-in state, whether the assistant is running, and who else in your voice channel is opted in
+
+Listed under the **utility** category in `/help`.
+
+### Pipeline
+
+```
+opted-in member speaks
+  → receiver subscription → opus decode (48k stereo) → downsample to 16k mono
+  → openWakeWord sidecar → 'wake' event
+  → rate limit (10/min per guild, max 2 concurrent, one at a time per user)
+  → beep → record until 1000ms of silence (10s hard cap)
+  → Groq Whisper → parseIntent → dispatch
+  → spoken Dutch reply (Piper, ducked over the music) + an embed in the activity-log channel
+```
+
+Every stage is individually try/caught. Any failure speaks `"Sorry, dat verstond ik niet."` and posts an embed naming the stage that failed (transcription failures are reported as `transcribe:<stage>` from `TranscribeError.stage`).
+
+### Intents and spoken replies
+
+| Intent | Dispatches to | Says |
+|---|---|---|
+| `play <query>` | the same add-song handler the web dashboard uses, after `sanitizeSearchQuery` | `Oké, ik speel <title>` |
+| `skip` / `pause` / `resume` | the same music command handler the web dashboard uses | `Oké` |
+| `stop` | ditto — but speaks *before* disconnecting, since the command leaves the channel | `Oké` |
+| `volume <0-100>` | `volume:<n>` on the command handler | `Oké` |
+| `nowplaying` / `queue` | reads the guild's `MusicQueue` | the title / how many tracks are queued |
+| `remind <n> <message>` | `reminderTracker.addReminder` (`fireAt = now + n·60000`, general channel) | `Ik herinner je over <N> minuten` |
+| `ask <question>` | OpenRouter chat with `getChatConfig()`'s model | the answer, truncated to 400 chars — the full text goes in the embed |
+
+Music commands go through the *same* `handleMusicCommand` / `handleAddSong` functions in `index.js` that the web dashboard is wired to, so voice and dashboard share exactly one code path.
+
+### Setup
+
+```bash
+scripts/setup-voice.sh   # Piper + Dutch voice, openWakeWord venv, wake-word models (idempotent)
+```
+
+Everything is installed under `tools/`, which is gitignored. Then set `GROQ_API_KEY` in `.env` and restart.
+
+The assistant logs `[VoiceAssistant] Initialized (wake word: hey_jarvis)` on startup, or `[VoiceAssistant] Disabled: <reason>` and skips itself entirely when `GROQ_API_KEY` is missing, the wake-word model/venv is absent, or Piper is not installed. The rest of the bot boots normally either way.
+
+### Swapping in a custom `hey_jerry.onnx`
+
+The stock model is openWakeWord's pretrained **hey_jarvis**, which is why the bot answers to "Hey Jarvis" out of the box. To use a real "Hey Jerry" phrase, train one with [openWakeWord's automatic model training notebook](https://github.com/dscripka/openWakeWord#training-new-models), drop the resulting `hey_jerry.onnx` into `tools/models/`, and point the bot at it:
+
+```bash
+WAKEWORD_MODEL_PATH=tools/models/hey_jerry.onnx
+```
+
+No code changes are needed — the sidecar loads whatever model that path names, and the startup log line reports the model actually loaded. Tune `WAKEWORD_THRESHOLD` (default `0.5`) if the new model wakes too easily or not easily enough.
+
+### Notes and limitations
+
+- Jerry never joins a voice channel on its own; it rides whatever connection is already there (music playback or `/record`). If the bot isn't in a channel, there is nothing to wake.
+- Starting music creates the voice connection self-deafened, so the assistant performs one extra rejoin to undeafen itself. That causes a brief audio hiccup at the moment music starts in a channel with an opted-in member.
+- The wake-word sidecar has 16 audio slots shared across all guilds; a 17th simultaneous listener evicts the least recently assigned one.
+
+Implementation: `src/utils/voiceAssistant.js` (orchestrator), `src/utils/speech/*` (wake word, transcription, intent, TTS), `src/commands/heyjerry.js`, `scripts/wakeword_sidecar.py`, `scripts/setup-voice.sh`. Started by `initVoiceAssistant(client, handlers)` in the `ClientReady` handler (after the music/web wiring it dispatches through) and torn down by `stopVoiceAssistant()` in `flushState()`.
 
 ## TeamSpeak Status Channel
 
