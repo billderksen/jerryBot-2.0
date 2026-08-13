@@ -4,17 +4,22 @@
 // Flow:
 //   opted-in member speaks -> receiver subscription -> opus decode (48k stereo)
 //   -> downsample to 16k mono -> wake-word sidecar -> 'wake' event
-//   -> beep -> record the utterance -> Groq Whisper -> intent -> dispatch
-//   -> spoken Dutch reply (Piper, ducked over the music) + an embed in the
-//      activity-log channel.
+//   -> tee that same decoded stream into a capture buffer AND beep (concurrently)
+//   -> Groq Whisper -> intent -> dispatch -> an embed in the activity-log
+//      channel, plus a spoken Dutch reply when voice.spokenReplies is on.
+//
+// The capture is a tee of the monitor stream rather than a second subscription,
+// and it starts the instant the wake fires. That ordering is the whole point:
+// the beep ducks the music for ~0.5s, and people say "hey jarvis, skip" in one
+// breath - waiting for the beep before starting to record threw away the command
+// itself and left Whisper hallucinating on the leftover silence.
 //
 // THE CONSENT INVARIANT: the bot only ever subscribes to the audio of members
 // who explicitly opted in with /heyjerry on, and only while they are in the
-// channel the bot is sitting in. Every subscription in this module is created
-// by syncSubscriptions() (and the capture that a wake event triggers for the
-// user who woke it) - nothing else may call receiver.subscribe(). Opt-in state
-// is re-checked at wake time and again after capture, so someone who opts out
-// mid-utterance never has their audio sent to a transcription API.
+// channel the bot is sitting in. startMonitoring() holds the module's ONLY call
+// to receiver.subscribe() - nothing else may call it. Opt-in state is re-checked
+// at wake time and again after capture, so someone who opts out mid-utterance
+// never has their audio sent to a transcription API.
 //
 // The bot self-deafens by default (musicQueue's joinVoiceChannel leaves
 // selfDeaf at its `true` default), which means it receives no audio at all.
@@ -35,10 +40,10 @@ import prism from 'prism-media';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 import { WakewordEngine } from './speech/wakeword.js';
 import { transcribe } from './speech/transcribe.js';
-import { parseIntent } from './speech/intent.js';
+import { parseIntent, isLikelyHallucination } from './speech/intent.js';
 import { speak, playBeep, isTtsAvailable } from './speech/tts.js';
 import { addReminder } from './reminderTracker.js';
-import { chatWithAI, getChatConfig } from './openrouter.js';
+import { chatWithAI, getChatConfig, getVoiceConfig } from './openrouter.js';
 import { getLogChannelId } from './activityLogger.js';
 import { sanitizeSearchQuery } from './urlValidation.js';
 import { isRecording, getActiveRecordingTarget, onRecordingEnd } from './voiceRecorder.js';
@@ -61,6 +66,22 @@ const CAPTURE_SILENCE_MS = 1000; // end the utterance after this much silence
 const CAPTURE_MAX_MS = 10_000; // hard cap: a stream that never goes silent must still end
 const CAPTURE_MAX_BYTES = (CAPTURE_MAX_MS / 1000) * IN_SAMPLE_RATE * IN_CHANNELS * 2;
 const MIN_CAPTURE_BYTES = OUT_SAMPLE_RATE * 2 * 0.3; // <0.3s of speech is not worth an API call
+
+// How long to wait for the command to *begin* before giving up on a wake. It
+// covers the people who wait for the beep and think about it for a moment; the
+// CAPTURE_SILENCE_MS rule only takes over once they have actually started.
+const FIRST_SPEECH_GRACE_MS = 3500;
+// The wake fires around the end of "hey jarvis", so the first slice of audio
+// after it is the tail of the wake word rather than the command. It is still
+// buffered (Whisper copes fine with a stray syllable), but it must not count as
+// "the user has started speaking" - that would arm the silence timer and hang up
+// one second later on someone who is still waiting for the beep.
+const WAKE_TAIL_MS = 250;
+// Mean absolute sample (of 32767) above which a decoded chunk counts as speech.
+// Deliberately low: a false positive only means the capture runs a little long,
+// while a false negative can cut a quiet speaker off.
+const SPEECH_ENERGY_THRESHOLD = 300;
+const CAPTURE_POLL_MS = 100; // how often the capture checks its own end conditions
 
 const SPOKEN_ANSWER_MAX_CHARS = 400;
 const AUTO_LEAVE_DEFER_MS = 60_000;
@@ -165,6 +186,18 @@ function bufferToInt16(buf) {
   return out;
 }
 
+// Mean absolute sample of a 48k stereo chunk, 0..32768. This is a loudness
+// threshold, not a VAD: it exists to tell "the user is saying something" from
+// "the client is transmitting silence", which matters because some Discord
+// clients keep sending packets through a pause instead of stopping.
+function chunkEnergy(buf) {
+  const samples = buf.length >> 1;
+  if (samples === 0) return 0;
+  let total = 0;
+  for (let i = 0; i < samples; i++) total += Math.abs(buf.readInt16LE(i * 2));
+  return total / samples;
+}
+
 function int16ToBuffer(samples) {
   const buf = Buffer.allocUnsafe(samples.length * 2);
   for (let i = 0; i < samples.length; i++) buf.writeInt16LE(samples[i], i * 2);
@@ -232,8 +265,8 @@ function getGuildState(guildId) {
       guildId,
       connection: null,
       stateHandler: null,
-      monitors: new Map(), // userId -> { slot, opusStream, decoder, onData, stopped }
-      capturing: new Set(), // users whose monitor is on hold while we record them
+      monitors: new Map(), // userId -> { slot, opusStream, decoder, onData, stopped, capture }
+      capturing: new Set(), // users whose monitor is currently being teed for a capture
       active: new Set(), // users with a pipeline in flight
       wakeTimes: [], // wake timestamps, for the per-guild rate limit
       chain: Promise.resolve(), // serializes subscription bookkeeping
@@ -298,6 +331,10 @@ function acquireSlot(guildId, userId) {
 function startMonitoring(state, userId) {
   const connection = state.connection;
   if (!connection || connection.state.status !== VoiceConnectionStatus.Ready) return;
+  // A user being captured normally still HAS their monitor (the capture is a tee
+  // of it), so the first clause covers them. The capturing check only bites when
+  // that monitor went away mid-capture: re-subscribing would not revive the tee,
+  // and handleWake's finally re-syncs as soon as the interaction ends.
   if (state.monitors.has(userId) || state.capturing.has(userId)) return;
   if (engineDead) return; // nothing would ever read the audio
   // doSync only ever passes opted-in users, but the guard sits here too so that
@@ -312,10 +349,15 @@ function startMonitoring(state, userId) {
   const slot = acquireSlot(state.guildId, userId);
   const opusStream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.Manual } });
   const decoder = createDecoder();
-  const monitor = { slot, opusStream, decoder, stopped: false };
+  const monitor = { slot, opusStream, decoder, stopped: false, capture: null };
 
   const onData = (chunk) => {
-    if (monitor.stopped || !engine) return;
+    if (monitor.stopped) return;
+    // Tee first, and independently of the engine: once a wake has fired, the
+    // capture is what the user is waiting on, and it must not be starved by a
+    // sidecar that has gone away underneath us.
+    monitor.capture?.push(chunk);
+    if (!engine) return;
     engine.feedAudio(slot, downsample48kStereoTo16kMono(bufferToInt16(chunk)));
   };
   monitor.onData = onData;
@@ -338,6 +380,7 @@ function startMonitoring(state, userId) {
   opusStream.once('close', () => {
     if (monitor.stopped || state.monitors.get(userId) !== monitor) return;
     monitor.stopped = true;
+    monitor.capture?.finish('stream-closed'); // no more audio is coming; don't make the caller wait out the grace window
     state.monitors.delete(userId);
     monitor.decoder.off('data', monitor.onData);
     try { monitor.decoder.destroy(); } catch { /* already torn down */ }
@@ -357,6 +400,7 @@ async function stopMonitoring(guildId, userId, { keepSlot = false, keepStream = 
   // Synchronous first, so no already-queued chunk can still be fed to a slot
   // that may already belong to someone else.
   monitor.stopped = true;
+  monitor.capture?.finish('monitor-stopped'); // a capture teeing this monitor gets what it has, now
   state.monitors.delete(userId);
   monitor.decoder.off('data', monitor.onData);
 
@@ -558,10 +602,11 @@ async function handleWake({ slot, score }) {
   const state = guildStates.get(guildId);
   if (!started || engineDead || !state) return;
   if (!isOptedIn(userId)) return; // opted out between speaking and detection
-  // Can't wake Jerry while /record is capturing them: captureUtterance would have
-  // to contend with voiceRecorder.js for the same receive stream (see the
-  // recordingTarget comment in doSync). Narrow and acceptable - a recorded
-  // session is short and this is a documented limitation, not a silent failure.
+  // Can't wake Jerry while /record is capturing them: doSync hands their stream
+  // to voiceRecorder.js and drops our monitor (see the recordingTarget comment
+  // there), so there is nothing to tee - and their audio is the recorder's, not
+  // ours to transcribe. Narrow and acceptable - a recorded session is short and
+  // this is a documented limitation, not a silent failure.
   if (getActiveRecordingTarget(guildId) === userId) return;
   if (state.active.has(userId)) return; // already handling this user
   if (state.active.size >= MAX_CONCURRENT_PER_GUILD) {
@@ -581,36 +626,122 @@ async function handleWake({ slot, score }) {
 
   console.log(`[VoiceAssistant] Wake from ${userId} in ${guildId} (score ${score.toFixed(2)})`);
   state.active.add(userId);
+
+  // Before anything that can await, and before the beep: from here on every
+  // decoded chunk from this user's monitor is also going into the capture
+  // buffer, so a command spoken straight after the wake word is recorded
+  // instead of being lost behind the beep's duck.
+  const capture = beginCapture(state, userId);
+  if (capture) state.capturing.add(userId);
+
+  // Fired, not awaited - it is an acknowledgement, and the ~0.5s it takes is
+  // exactly the window in which people say the command. A silent beep isn't
+  // worth abandoning the interaction over either; the capture works regardless.
+  playBeep(guildId)
+    .then((played) => {
+      if (!played) console.warn(`[VoiceAssistant] wake beep did not play in guild ${guildId}`);
+    })
+    .catch((err) => console.error('[VoiceAssistant] wake beep failed:', err.message));
+
   await deferAutoLeave(guildId);
 
   try {
-    await runInteraction(state, userId);
+    await runInteraction(state, userId, capture);
   } finally {
+    capture?.finish('interaction-ended'); // no-op once it ended on its own; stops the poll on any early return
+    state.capturing.delete(userId);
     state.active.delete(userId);
     await deferAutoLeave(guildId); // restart the 60s clock now that Jerry is done talking
     syncSubscriptions(guildId);
   }
 }
 
-async function runInteraction(state, userId) {
+/**
+ * Starts teeing an already-subscribed monitor's decoded audio into a capture
+ * buffer. This creates NO subscription - it hangs a sink off the stream the
+ * consent-checked monitor is already receiving - which is why the module has
+ * exactly one receiver.subscribe() call.
+ * @returns {object|null} the capture, or null when there is no monitor to tee.
+ */
+function beginCapture(state, userId) {
+  const monitor = state.monitors.get(userId);
+  if (!monitor || monitor.stopped) return null;
+  // Same rule as everywhere else: voiceRecorder.js may own this user's stream,
+  // and their audio is not ours to ship to a transcription API while it does.
+  if (getActiveRecordingTarget(state.guildId) === userId) return null;
+  if (monitor.capture) return monitor.capture; // handleWake dedupes per user, so this is belt and braces
+
+  const startedAt = Date.now();
+  let poll = null;
+  let resolveEnded;
+  const ended = new Promise((resolve) => { resolveEnded = resolve; });
+
+  const capture = {
+    startedAt,
+    ended,
+    chunks: [],
+    bytes: 0,
+    speechStarted: false,
+    lastVoiceAt: startedAt,
+    endReason: null,
+
+    push(chunk) {
+      if (capture.endReason) return;
+      const voiced = chunkEnergy(chunk) >= SPEECH_ENERGY_THRESHOLD;
+      if (voiced) {
+        capture.lastVoiceAt = Date.now();
+        if (Date.now() - startedAt >= WAKE_TAIL_MS) capture.speechStarted = true;
+      } else if (!capture.speechStarted) {
+        // Leading silence is exactly what Whisper invents words over, and a
+        // pause before the command produces nothing but. Drop it; the buffer
+        // then holds the command with no dead air in front of it.
+        return;
+      }
+      capture.chunks.push(chunk);
+      capture.bytes += chunk.length;
+      if (capture.bytes >= CAPTURE_MAX_BYTES) capture.finish('max-bytes');
+    },
+
+    finish(reason) {
+      if (capture.endReason) return;
+      capture.endReason = reason;
+      if (poll) clearInterval(poll);
+      if (monitor.capture === capture) monitor.capture = null;
+      resolveEnded();
+    },
+  };
+
+  // The monitor subscription is EndBehaviorType.Manual and stays open across the
+  // pause, so nothing will tell us the utterance ended - we time it ourselves.
+  poll = setInterval(() => {
+    const now = Date.now();
+    if (now - startedAt >= CAPTURE_MAX_MS) return capture.finish('max-duration');
+    if (!capture.speechStarted) {
+      if (now - startedAt >= FIRST_SPEECH_GRACE_MS) capture.finish('no-speech');
+      return;
+    }
+    if (now - capture.lastVoiceAt >= CAPTURE_SILENCE_MS) capture.finish('silence');
+  }, CAPTURE_POLL_MS);
+  if (typeof poll.unref === 'function') poll.unref();
+
+  monitor.capture = capture;
+  return capture;
+}
+
+async function runInteraction(state, userId, capture) {
   const { guildId } = state;
   const member = state.connection?.joinConfig.channelId
     ? client.channels.cache.get(state.connection.joinConfig.channelId)?.members?.get(userId)
     : null;
   const displayName = member?.displayName ?? `Gebruiker ${userId}`;
+  // Read once, up front: the catch below needs it too.
+  const { spokenReplies } = getVoiceConfig();
 
-  let stage = 'beep';
+  let stage = 'capture';
   let transcript = null;
 
   try {
-    // A silent beep isn't worth abandoning the interaction over - the capture
-    // still works, the user just doesn't get the audible "go ahead".
-    if (!await playBeep(guildId)) {
-      console.warn(`[VoiceAssistant] wake beep did not play in guild ${guildId}`);
-    }
-
-    stage = 'capture';
-    const pcm = await captureUtterance(state, userId);
+    const pcm = await captureUtterance(userId, capture);
 
     // Consent re-check: someone who ran /heyjerry off while speaking must not
     // have that audio leave the process.
@@ -626,23 +757,46 @@ async function runInteraction(state, userId) {
     transcript = await transcribe(pcm, { sampleRate: OUT_SAMPLE_RATE, language: 'nl' });
     console.log(`[VoiceAssistant] ${displayName}: "${transcript}"`);
 
+    // Whisper never returns nothing - it invents punctuation or a subtitle-style
+    // music tag when the clip held no speech. Catching that here saves an
+    // intent-parsing API call that could only ever come back 'unknown'.
+    if (isLikelyHallucination(transcript)) {
+      stage = 'transcribe-empty';
+      console.warn(`[VoiceAssistant] discarding non-speech transcript "${transcript}"`);
+      if (spokenReplies) await speak(guildId, ERROR_REPLY);
+      await logInteraction({
+        displayName,
+        transcript,
+        summary: 'alleen muziek of ruis gehoord',
+        detail: 'Heard only music/noise — try speaking right after the beep.',
+        ok: false,
+        stage,
+      });
+      return;
+    }
+
     stage = 'intent';
     const intent = await parseIntent(transcript); // never rejects; runs its own fast path
 
     stage = 'dispatch';
-    const result = await dispatch(state, { userId, displayName, intent });
+    const result = await dispatch(state, { userId, displayName, intent, spokenReplies });
 
-    stage = 'speak';
-    // deferAutoLeave was last called at wake start (with the 60s default); a
-    // long spoken answer or a maximally-ducked clip can outlive that, so push it
-    // back again with the larger window right before actually speaking.
-    await deferAutoLeave(guildId, SPEAK_AUTO_LEAVE_DEFER_MS);
-    // speak() resolves false instead of rejecting when a clip can't be played
-    // (tts.js deliberately swallows job errors so no caller is forced to handle
-    // them), so a throw is not how TTS failure arrives here - this boolean is.
-    // A null reply means dispatch already did the speaking and reported how it went.
-    const spoken = result.reply === null ? result.spoken !== false : await speak(guildId, result.reply);
-    if (!spoken) console.error(`[VoiceAssistant] could not speak the reply in guild ${guildId}`);
+    // With spoken replies off there is nothing to say, nothing to duck, and so
+    // nothing that can fail to be said: the embed is the whole report.
+    let spoken = true;
+    if (spokenReplies) {
+      stage = 'speak';
+      // deferAutoLeave was last called at wake start (with the 60s default); a
+      // long spoken answer or a maximally-ducked clip can outlive that, so push it
+      // back again with the larger window right before actually speaking.
+      await deferAutoLeave(guildId, SPEAK_AUTO_LEAVE_DEFER_MS);
+      // speak() resolves false instead of rejecting when a clip can't be played
+      // (tts.js deliberately swallows job errors so no caller is forced to handle
+      // them), so a throw is not how TTS failure arrives here - this boolean is.
+      // A null reply means dispatch already did the speaking and reported how it went.
+      spoken = result.reply === null ? result.spoken !== false : await speak(guildId, result.reply);
+      if (!spoken) console.error(`[VoiceAssistant] could not speak the reply in guild ${guildId}`);
+    }
 
     await logInteraction({
       displayName,
@@ -656,82 +810,34 @@ async function runInteraction(state, userId) {
   } catch (err) {
     const detailedStage = stage === 'transcribe' && err.stage ? `transcribe:${err.stage}` : stage;
     console.error(`[VoiceAssistant] interaction failed at ${detailedStage}:`, err.message);
-    try {
-      await speak(guildId, ERROR_REPLY);
-    } catch (speakErr) {
-      console.error('[VoiceAssistant] could not speak the error reply:', speakErr.message);
+    // The apology is speech too, so it goes the same way as every other reply.
+    if (spokenReplies) {
+      try {
+        await speak(guildId, ERROR_REPLY);
+      } catch (speakErr) {
+        console.error('[VoiceAssistant] could not speak the error reply:', speakErr.message);
+      }
     }
     await logInteraction({ displayName, transcript, summary: `mislukt (${detailedStage})`, ok: false, stage: detailedStage, detail: err.message });
   }
 }
 
-// Records one utterance from a user who just woke the bot. The wake-word
-// monitor for them is torn down first: the receiver returns the existing
-// subscription per user, so the capture has to own it outright. The caller's
-// syncSubscriptions() puts the monitor back.
-async function captureUtterance(state, userId) {
-  state.capturing.add(userId);
-  try {
-    // handleWake already refuses to reach here for an active recording target;
-    // this recheck closes the gap between that check and this one (a recording
-    // starting mid-wake, e.g. during the awaited playBeep()) before we touch
-    // their wake monitor - let alone open our own stream - at all.
-    if (getActiveRecordingTarget(state.guildId) === userId) throw new Error('user is being recorded');
+// Waits for the capture that beginCapture() started at wake time to decide the
+// utterance is over, then hands back 16k mono PCM for Whisper. All the audio
+// arrived through the monitor subscription - nothing is opened here.
+async function captureUtterance(userId, capture) {
+  if (!capture) throw new Error('no monitor subscription to capture from');
 
-    await stopMonitoring(state.guildId, userId);
+  await capture.ended;
 
-    const connection = getVoiceConnection(state.guildId);
-    if (!connection || connection.state.status !== VoiceConnectionStatus.Ready) {
-      throw new Error('voice connection went away before capture started');
-    }
-    // Same rule as startMonitoring: never open a stream without a live consent check.
-    if (!isOptedIn(userId)) throw new Error('user is not opted in');
+  const raw = Buffer.concat(capture.chunks);
+  capture.chunks.length = 0; // the 48k stereo copy is six times the size of what we return
+  console.log(
+    `[VoiceAssistant] capture for ${userId} ended (${capture.endReason}) after ` +
+    `${Date.now() - capture.startedAt}ms, ${raw.length} bytes`
+  );
 
-    const opusStream = connection.receiver.subscribe(userId, {
-      end: { behavior: EndBehaviorType.AfterSilence, duration: CAPTURE_SILENCE_MS },
-    });
-    const decoder = createDecoder();
-    opusStream.on('error', (err) => console.error('[VoiceAssistant] capture stream error:', err.message));
-    decoder.on('error', (err) => console.error('[VoiceAssistant] capture decode error:', err.message));
-
-    const chunks = [];
-    let bytes = 0;
-
-    try {
-      await new Promise((resolve) => {
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(capTimer);
-          resolve();
-        };
-        // A stream that never receives a packet never times out on its own
-        // (the AfterSilence timer only starts once audio arrives).
-        const capTimer = setTimeout(finish, CAPTURE_MAX_MS);
-
-        decoder.on('data', (chunk) => {
-          chunks.push(chunk);
-          bytes += chunk.length;
-          if (bytes >= CAPTURE_MAX_BYTES) finish();
-        });
-        decoder.on('end', finish);
-        decoder.on('error', finish);
-        opusStream.on('error', finish);
-        opusStream.on('close', finish);
-
-        opusStream.pipe(decoder);
-      });
-    } finally {
-      try { opusStream.unpipe(decoder); } catch { /* already torn down */ }
-      await destroyStream(opusStream);
-      try { decoder.destroy(); } catch { /* already torn down */ }
-    }
-
-    return int16ToBuffer(downsample48kStereoTo16kMono(bufferToInt16(Buffer.concat(chunks))));
-  } finally {
-    state.capturing.delete(userId);
-  }
+  return int16ToBuffer(downsample48kStereoTo16kMono(bufferToInt16(raw)));
 }
 
 // ---------------------------------------------------------------------------
@@ -773,7 +879,7 @@ function runCommand(command, guildId) {
  * generic error); "I understood you but there was nothing to do" comes back as
  * a normal spoken reply.
  */
-async function dispatch(state, { userId, displayName, intent }) {
+async function dispatch(state, { userId, displayName, intent, spokenReplies }) {
   const { guildId } = state;
 
   switch (intent.action) {
@@ -793,8 +899,9 @@ async function dispatch(state, { userId, displayName, intent }) {
     case 'stop': {
       // 'stop' disconnects the bot, so the confirmation has to be spoken while
       // there is still a voice connection to speak it on. reply:null then tells
-      // the caller the speaking is already done, and `spoken` how it went.
-      const spoken = await speak(guildId, 'Oké');
+      // the caller the speaking is already done, and `spoken` how it went - which
+      // with spoken replies off is vacuously true, since nothing was to be said.
+      const spoken = spokenReplies ? await speak(guildId, 'Oké') : true;
       runCommand('stop', guildId);
       return { reply: null, spoken, summary: 'stop' };
     }
@@ -885,13 +992,22 @@ async function logInteraction({ displayName, transcript, summary, detail, ok, st
     if (!channel) return;
 
     const spoken = transcript ? `"${transcript}"` : '_(nothing understood)_';
+    const heading = `🎤 **${displayName}**: ${spoken} → ${summary}`;
     const embed = new EmbedBuilder()
-      .setDescription(`🎤 **${displayName}**: ${spoken} → ${summary}`)
       .setColor(ok ? 0x57f287 : 0xed4245)
       .setTimestamp();
 
+    // A successful answer goes in the description rather than a field: with
+    // voice.spokenReplies off this embed is the only place the user ever sees
+    // it, so it has to read as the reply - and the description holds 4096
+    // characters where a field caps out at 1024.
+    if (detail && ok) {
+      embed.setDescription(`${heading}\n\n${String(detail).slice(0, 3800)}`);
+    } else {
+      embed.setDescription(heading);
+    }
     if (stage) embed.addFields({ name: 'Failed at', value: stage, inline: true });
-    if (detail) embed.addFields({ name: ok ? 'Answer' : 'Details', value: String(detail).slice(0, 1024) });
+    if (detail && !ok) embed.addFields({ name: 'Details', value: String(detail).slice(0, 1024) });
 
     await channel.send({ embeds: [embed] });
   } catch (err) {
@@ -1018,6 +1134,7 @@ export function stopVoiceAssistant() {
     }
     for (const monitor of state.monitors.values()) {
       monitor.stopped = true;
+      monitor.capture?.finish('shutdown'); // clears its poll timer and unblocks whoever is awaiting it
       try { monitor.opusStream.destroy(); } catch { /* already gone */ }
       try { monitor.decoder.destroy(); } catch { /* already gone */ }
     }

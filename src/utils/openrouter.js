@@ -21,23 +21,37 @@ const DEFAULT_MAX_TOKENS = 800;
 // present on OpenRouter (GET /api/v1/models) as of 2026-08-13.
 const DEFAULT_VOICE_MODEL = 'google/gemini-2.5-flash-lite';
 const DEFAULT_VOICE_MAX_TOKENS = 200;
+// Jerry answers in the activity-log embed only. Speaking every reply out loud
+// ducks the music for each one, which the owner did not want; the wake beep
+// stays as the audible acknowledgement.
+const DEFAULT_VOICE_SPOKEN_REPLIES = false;
 
 function loadAiSettings() {
   const data = loadJsonSync(AI_SETTINGS_FILE, {
     model: DEFAULT_MODEL,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
     maxTokens: DEFAULT_MAX_TOKENS,
-    voice: { model: DEFAULT_VOICE_MODEL, maxTokens: DEFAULT_VOICE_MAX_TOKENS }
+    voice: {
+      model: DEFAULT_VOICE_MODEL,
+      maxTokens: DEFAULT_VOICE_MAX_TOKENS,
+      spokenReplies: DEFAULT_VOICE_SPOKEN_REPLIES
+    }
   });
   return {
     model: data.model || DEFAULT_MODEL,
     systemPrompt: data.systemPrompt || DEFAULT_SYSTEM_PROMPT,
     maxTokens: data.maxTokens || DEFAULT_MAX_TOKENS,
-    // Non-destructive: files saved before the voice section existed won't
-    // have data.voice, so fall back to defaults without touching the rest.
+    // Merged key by key, not wholesale: a file written before any one of these
+    // fields existed has a voice section that is missing it, and must still come
+    // back with the default rather than undefined.
     voice: {
       model: data.voice?.model || DEFAULT_VOICE_MODEL,
-      maxTokens: data.voice?.maxTokens || DEFAULT_VOICE_MAX_TOKENS
+      maxTokens: data.voice?.maxTokens || DEFAULT_VOICE_MAX_TOKENS,
+      // Booleans can't use `||`: it would rewrite a deliberate `false` back to
+      // the default, which for a true default would silently re-enable speech.
+      spokenReplies: typeof data.voice?.spokenReplies === 'boolean'
+        ? data.voice.spokenReplies
+        : DEFAULT_VOICE_SPOKEN_REPLIES
     }
   };
 }
@@ -47,7 +61,7 @@ function saveAiSettings() {
     model: defaultModel,
     systemPrompt,
     maxTokens,
-    voice: { model: voiceModel, maxTokens: voiceMaxTokens }
+    voice: { model: voiceModel, maxTokens: voiceMaxTokens, spokenReplies: voiceSpokenReplies }
   });
 }
 
@@ -59,6 +73,7 @@ let systemPrompt = initialSettings.systemPrompt;
 let maxTokens = initialSettings.maxTokens;
 let voiceModel = initialSettings.voice.model;
 let voiceMaxTokens = initialSettings.voice.maxTokens;
+let voiceSpokenReplies = initialSettings.voice.spokenReplies;
 
 /**
  * Get current chat configuration
@@ -69,11 +84,13 @@ export function getChatConfig() {
 }
 
 /**
- * Get current voice-assistant (Hey Jerry) intent-parsing configuration
- * @returns {{model: string, maxTokens: number}}
+ * Get current voice-assistant (Hey Jerry) configuration.
+ * `spokenReplies` false means Jerry acts on commands and reports in the
+ * activity-log embed without saying anything out loud.
+ * @returns {{model: string, maxTokens: number, spokenReplies: boolean}}
  */
 export function getVoiceConfig() {
-  return { model: voiceModel, maxTokens: voiceMaxTokens };
+  return { model: voiceModel, maxTokens: voiceMaxTokens, spokenReplies: voiceSpokenReplies };
 }
 
 /**

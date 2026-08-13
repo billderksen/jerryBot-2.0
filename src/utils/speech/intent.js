@@ -9,9 +9,13 @@
 //      for anything the fast path doesn't recognize, e.g. "speel <song>",
 //      "herinner me over 20 minuten aan de pizza", or free-form questions.
 //
+// isLikelyHallucination(text) sits in front of both: a capture that caught no
+// speech still comes back from Whisper as *something*, and there is no point
+// paying for an LLM call to learn that "***" means nothing.
+//
 // parseIntent() never rejects: any failure (missing key, network, bad JSON,
 // malformed shape) resolves to { action: 'unknown', error: <stage> }, since
-// callers speak the result back to the user and can't do anything with a
+// callers report the result back to the user and can't do anything with a
 // rejected promise.
 
 import axios from 'axios';
@@ -27,18 +31,31 @@ const VALID_ACTIONS = new Set([
 
 // Whole-utterance exact matches (after normalize()). Keep this table in sync
 // with test/intent.test.js's fast-path cases.
+// Single-word entries like 'verder' and 'overslaan' are safe here precisely
+// because matching is whole-utterance: a bare "verder" is unambiguously the
+// command, while "verder weet ik het niet" never reaches this table. Anything
+// that would need context to disambiguate belongs in the LLM path instead.
 const EXACT_PHRASES = {
   'skip': 'skip',
   'volgende': 'skip',
+  'volgend': 'skip',
   'volgend nummer': 'skip',
+  'overslaan': 'skip',
+  'sla over': 'skip',
+  'sla dit over': 'skip',
 
   'pauze': 'pause',
   'pauzeer': 'pause',
   'pauzeren': 'pause',
+  'wacht even': 'pause',
 
   'ga door': 'resume',
+  'ga verder': 'resume',
+  'verder': 'resume',
   'hervat': 'resume',
+  'hervatten': 'resume',
   'doorgaan': 'resume',
+  'speel verder': 'resume',
   'resume': 'resume',
 
   'stop': 'stop',
@@ -50,10 +67,27 @@ const EXACT_PHRASES = {
 };
 
 // Anchored (whole-utterance) volume patterns. Capture group 1 is the number.
+// 'vol' is accepted alongside 'volume' because that is how Whisper tends to
+// come back from a clipped "volume 10".
 const VOLUME_PATTERNS = [
-  /^volume (\d{1,3})$/,
-  /^zet (?:het )?volume op (\d{1,3})$/,
+  /^vol(?:ume)? (\d{1,3})$/,
+  /^(?:zet )?(?:het )?vol(?:ume)? op (\d{1,3})$/,
 ];
+
+// Whisper does not return an empty string for an empty clip - it invents
+// something. These are the markers seen in practice on near-silent captures:
+// punctuation-only output, and the music/noise tags it borrows from subtitle
+// training data. Matched after normalize(), so casing and brackets don't matter.
+const HALLUCINATION_MARKERS = /^[\s*.…\-_~]+$/;
+const HALLUCINATION_PHRASES = new Set([
+  'muziek',
+  'zang en muziek',
+  'zang',
+  'music',
+  'applaus',
+  'ondertiteling',
+  'ondertiteld door de amaraorg gemeenschap',
+]);
 
 const SYSTEM_PROMPT = `Je bent de intent-parser voor Jerry, een Nederlandstalige Discord voice-assistant.
 Zet de uitspraak van de gebruiker om in EXACT een JSON-object, zonder uitleg, markdown of extra tekst.
@@ -106,6 +140,27 @@ function normalize(text) {
     .replace(/[.,!?;:'"()]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Whether a transcript is Whisper talking to itself rather than the user
+ * talking to Jerry. A capture that caught (almost) no speech still comes back
+ * with text, and running that through the LLM costs an API call to learn
+ * nothing - callers use this to bail out first.
+ * @param {*} text - the raw transcript
+ * @returns {boolean} true when there is nothing worth parsing
+ */
+export function isLikelyHallucination(text) {
+  if (typeof text !== 'string') return true;
+  const raw = text.trim();
+  if (!raw) return true;
+  if (HALLUCINATION_MARKERS.test(raw)) return true;
+
+  // Reduce to letters, digits and single spaces so brackets or asterisks can't
+  // hide a bare tag ("[Muziek]", "*muziek*") from the phrase list.
+  const words = normalize(raw).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!words) return true;
+  return HALLUCINATION_PHRASES.has(words);
 }
 
 /**
