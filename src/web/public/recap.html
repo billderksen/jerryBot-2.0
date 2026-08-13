@@ -806,7 +806,7 @@
       btn.textContent = 'Generating...';
       showLoading('Generating recap...');
       try {
-        const res = await fetch('/api/recap/generate');
+        const res = await fetch('/api/recap/generate', { method: 'POST' });
         generatedRecap = await res.json();
         currentRecap = generatedRecap;
         currentIndex = -1;

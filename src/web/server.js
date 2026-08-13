@@ -3,6 +3,15 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import dotenv from 'dotenv';
+
+// This module reads several process.env values at top-level (module evaluation)
+// time — e.g. the SESSION_SECRET check below. Static imports (including this one,
+// as imported by index.js) are evaluated before any of the importing module's own
+// top-level code runs, which means index.js's own `dotenv.config()` call hasn't
+// executed yet by the time this file's top-level code does. Load .env here too so
+// those reads see real values instead of undefined.
+dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../.env') });
 import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
@@ -25,6 +34,7 @@ import cookie from 'cookie';
 import { platform } from 'os';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
+import { randomBytes } from 'node:crypto';
 
 // Detect system yt-dlp for Linux
 let ytDlpExec = ytDlpPkg;
@@ -121,10 +131,13 @@ const CONTROL_PANEL_ROLE_ID = '1470048168543653919'; // "Control Panel"
 
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 1_048_576 });
 
 // Session middleware with file-based store for persistence across restarts
-const sessionSecret = process.env.SESSION_SECRET || 'jerrybot_default_secret';
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret || sessionSecret.length < 32) {
+  throw new Error('SESSION_SECRET missing or shorter than 32 chars — set it in .env (e.g. `openssl rand -hex 32`)');
+}
 import FileStoreFactory from 'session-file-store';
 const FileStore = FileStoreFactory(session);
 const sessionStore = new FileStore({
@@ -135,19 +148,48 @@ const sessionStore = new FileStore({
   logFn: () => {} // Suppress session-file-store logging
 });
 
+const cookieSecure = process.env.OAUTH_REDIRECT_URI?.startsWith('https') || false;
+if (cookieSecure) {
+  app.set('trust proxy', 1);
+}
+
 const sessionMiddleware = session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   store: sessionStore,
-  cookie: { 
-    secure: false, // Set to true in production with HTTPS
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: cookieSecure,
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   }
 });
 
 app.use(cookieParser());
 app.use(sessionMiddleware);
+
+// Baseline security headers on every response
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
+
+// Tiny in-memory sliding-window rate limiter, keyed per user (or IP if logged out)
+const rateBuckets = new Map(); // key -> [timestamps]
+function rateLimit(name, maxHits, windowMs) {
+  return (req, res, next) => {
+    const key = `${name}:${req.session?.user?.id || req.ip}`;
+    const now = Date.now();
+    const hits = (rateBuckets.get(key) || []).filter(t => now - t < windowMs);
+    if (hits.length >= maxHits) return res.status(429).json({ error: 'Rate limit exceeded' });
+    hits.push(now);
+    rateBuckets.set(key, hits);
+    next();
+  };
+}
 
 // Store connected clients
 const clients = new Set();
@@ -191,7 +233,8 @@ app.get('/login', (req, res) => {
 
 app.get('/auth/discord', (req, res) => {
   const scope = 'identify guilds.members.read';
-  const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${getClientId()}&redirect_uri=${encodeURIComponent(getRedirectUri())}&response_type=code&scope=${encodeURIComponent(scope)}`;
+  req.session.oauthState = randomBytes(16).toString('hex');
+  const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${getClientId()}&redirect_uri=${encodeURIComponent(getRedirectUri())}&response_type=code&scope=${encodeURIComponent(scope)}&state=${req.session.oauthState}`;
   res.redirect(authUrl);
 });
 
@@ -199,6 +242,14 @@ app.get('/auth/discord/callback', async (req, res) => {
   const code = req.query.code;
   if (!code) {
     return res.redirect('/login?error=no_code');
+  }
+
+  // Validate OAuth state to prevent CSRF (Express 5 may hand back arrays for repeated query keys)
+  const receivedState = req.query.state;
+  const expectedState = req.session.oauthState;
+  delete req.session.oauthState;
+  if (typeof receivedState !== 'string' || typeof expectedState !== 'string' || receivedState !== expectedState) {
+    return res.status(403).send('OAuth state mismatch');
   }
 
   try {
@@ -255,8 +306,9 @@ app.get('/auth/discord/callback', async (req, res) => {
     // Display name priority: server nickname > global display name > username
     const displayName = serverNickname || userData.global_name || userData.username;
 
-    // Store user in session
-    req.session.user = {
+    // Build user data, then regenerate the session before storing it so the
+    // pre-login (pre-auth) session ID is discarded and can't be fixated.
+    const sessionUser = {
       id: userData.id,
       username: userData.username,
       displayName: displayName,
@@ -267,11 +319,25 @@ app.get('/auth/discord/callback', async (req, res) => {
       hasControlPanel: hasControlPanel
     };
 
-    if (hasAccess) {
-      res.redirect('/');
-    } else {
-      res.redirect('/access-denied');
-    }
+    req.session.regenerate((regenerateErr) => {
+      if (regenerateErr) {
+        console.error('Session regenerate error:', regenerateErr);
+        return res.redirect('/login?error=session_error');
+      }
+
+      req.session.user = sessionUser;
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Session save error:', saveErr);
+          return res.redirect('/login?error=session_error');
+        }
+        if (hasAccess) {
+          res.redirect('/');
+        } else {
+          res.redirect('/access-denied');
+        }
+      });
+    });
 
   } catch (error) {
     console.error('OAuth error:', error);
@@ -499,7 +565,9 @@ app.post('/api/twitch/streamers/add', async (req, res) => {
     try {
       const memberData = await memberFetcher(req.session.user.id);
       hasDJ = memberData?.roles?.includes(DJ_ROLE_ID) || false;
-    } catch (e) { /* fall back to session value */ }
+    } catch (e) {
+      return res.status(403).json({ error: 'DJ role required' });
+    }
   }
   if (!hasDJ) {
     return res.status(403).json({ error: 'DJ role required' });
@@ -515,7 +583,9 @@ app.post('/api/twitch/streamers/remove', async (req, res) => {
     try {
       const memberData = await memberFetcher(req.session.user.id);
       hasDJ = memberData?.roles?.includes(DJ_ROLE_ID) || false;
-    } catch (e) { /* fall back to session value */ }
+    } catch (e) {
+      return res.status(403).json({ error: 'DJ role required' });
+    }
   }
   if (!hasDJ) {
     return res.status(403).json({ error: 'DJ role required' });
@@ -545,7 +615,9 @@ app.post('/api/twitch/channel', async (req, res) => {
     try {
       const memberData = await memberFetcher(req.session.user.id);
       hasDJ = memberData?.roles?.includes(DJ_ROLE_ID) || false;
-    } catch (e) { /* fall back to session value */ }
+    } catch (e) {
+      return res.status(403).json({ error: 'DJ role required' });
+    }
   }
   if (!hasDJ) {
     return res.status(403).json({ error: 'DJ role required' });
@@ -604,6 +676,12 @@ app.get('/api/channels', async (req, res) => {
 
 // Admin settings API
 app.get('/api/admin/settings', async (req, res) => {
+  let hasCP = req.session?.user?.hasControlPanel;
+  if (memberFetcher && req.session?.user?.id) {
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
+  }
+  if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
+
   const guildId = getRequiredGuildId();
   const recapSettings = getRecapSettings();
   const twitchData = getTwitchTrackerData();
@@ -649,7 +727,7 @@ app.get('/api/admin/settings', async (req, res) => {
 app.post('/api/admin/birthday/channel', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { channelId } = req.body;
@@ -661,7 +739,7 @@ app.post('/api/admin/birthday/channel', async (req, res) => {
 app.post('/api/admin/recap/channel', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { channelId } = req.body;
@@ -672,7 +750,7 @@ app.post('/api/admin/recap/channel', async (req, res) => {
 app.post('/api/admin/recap/schedule', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { day, hour } = req.body;
@@ -684,7 +762,7 @@ app.post('/api/admin/recap/schedule', async (req, res) => {
 app.post('/api/admin/activitylog/channel', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { channelId } = req.body;
@@ -695,7 +773,7 @@ app.post('/api/admin/activitylog/channel', async (req, res) => {
 app.post('/api/admin/chat/model', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { model } = req.body;
@@ -707,7 +785,7 @@ app.post('/api/admin/chat/model', async (req, res) => {
 app.post('/api/admin/chat/systemprompt', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { prompt } = req.body;
@@ -719,7 +797,7 @@ app.post('/api/admin/chat/systemprompt', async (req, res) => {
 app.post('/api/admin/chat/maxtokens', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { tokens } = req.body;
@@ -732,7 +810,7 @@ app.post('/api/admin/chat/maxtokens', async (req, res) => {
 app.post('/api/admin/osrs/add', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { username } = req.body;
@@ -745,7 +823,7 @@ app.post('/api/admin/osrs/add', async (req, res) => {
 app.post('/api/admin/osrs/remove', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   const { username } = req.body;
@@ -766,7 +844,7 @@ app.get('/api/recap/list', (req, res) => {
   res.json(getRecaps());
 });
 
-app.get('/api/recap/generate', (req, res) => {
+app.post('/api/recap/generate', rateLimit('recap', 2, 60_000), (req, res) => {
   const recap = generateCurrentRecap();
   res.json(recap);
 });
@@ -844,7 +922,7 @@ app.post('/api/f1/predict', (req, res) => {
 app.post('/api/f1/fetchresults/:round', async (req, res) => {
   let hasCP = req.session?.user?.hasControlPanel;
   if (memberFetcher && req.session?.user?.id) {
-    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) {}
+    try { const memberData = await memberFetcher(req.session.user.id); hasCP = memberData?.roles?.includes(CONTROL_PANEL_ROLE_ID) || false; } catch (e) { return res.status(403).json({ error: 'Control Panel role required' }); }
   }
   if (!hasCP) return res.status(403).json({ error: 'Control Panel role required' });
   try {
@@ -1004,7 +1082,7 @@ app.post('/api/playlists/:id/shuffle', async (req, res) => {
 });
 
 // API endpoint to search for songs
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', rateLimit('search', 15, 60_000), async (req, res) => {
   const query = req.query.q;
   const count = Math.min(parseInt(req.query.count) || 10, 50); // Default 10, max 50
   if (!query || query.length < 2) {
@@ -1180,7 +1258,7 @@ app.get('/api/youtube/search', async (req, res) => {
 });
 
 // API endpoint to get YouTube playlist info
-app.get('/api/youtube/playlist', async (req, res) => {
+app.get('/api/youtube/playlist', rateLimit('ytplaylist', 3, 60_000), async (req, res) => {
   const url = req.query.url;
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
@@ -1353,7 +1431,7 @@ app.get('/api/lyrics', async (req, res) => {
 });
 
 // API endpoint to add song to queue
-app.post('/api/queue/add', async (req, res) => {
+app.post('/api/queue/add', rateLimit('queueadd', 20, 60_000), async (req, res) => {
   const { url, title, duration, thumbnail, guildId, requestedBy: customRequestedBy } = req.body;
   
   if (!url) {
@@ -1419,6 +1497,28 @@ app.post('/api/queue/add', async (req, res) => {
 
 // WebSocket connection handling with authentication
 wss.on('connection', (ws, req) => {
+  // Reject cross-origin WebSocket connections before registering any handlers.
+  // Browsers send an Origin header on WS upgrades; non-browser clients (or same-origin
+  // requests without one) simply won't have it, so only check when it's present.
+  const origin = req.headers.origin;
+  if (origin) {
+    let originHost = null;
+    try {
+      originHost = new URL(origin).host;
+    } catch (e) { /* malformed Origin header — treat as mismatch below */ }
+
+    let redirectHost = null;
+    try {
+      redirectHost = new URL(getRedirectUri()).host;
+    } catch (e) { /* fall through */ }
+
+    if (originHost !== req.headers.host && originHost !== redirectHost) {
+      console.log(`WebSocket connection rejected: Origin mismatch (${origin})`);
+      ws.close(4403, 'Unauthorized: Origin mismatch');
+      return;
+    }
+  }
+
   // Parse session cookie to verify authentication
   const cookies = cookie.parse(req.headers.cookie || '');
   const sessionId = cookies['connect.sid'];
@@ -1497,7 +1597,10 @@ wss.on('connection', (ws, req) => {
                 const memberData = await memberFetcher(ws.user.id);
                 hasDJ = memberData?.roles?.includes(DJ_ROLE_ID) || false;
                 ws.user.hasDJRole = hasDJ;
-              } catch (e) { /* fall back to session value */ }
+              } catch (e) {
+                // Fail closed: deny if the live role refresh throws
+                hasDJ = false;
+              }
             }
             if (!hasDJ) {
               ws.send(JSON.stringify({
