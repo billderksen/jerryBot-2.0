@@ -1,21 +1,38 @@
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { joinVoiceChannel } from '@discordjs/voice';
+import { SlashCommandBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { joinVoiceChannel, getVoiceConnection } from '@discordjs/voice';
 import { startRecording, stopRecording, isRecording } from '../utils/voiceRecorder.js';
+import { getQueue } from '../utils/musicQueue.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('record')
-    .setDescription('Record voice channel audio')
+    .setDescription('Record a user\'s voice channel audio (requires Manage Server)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
-      sub.setName('start').setDescription('Start recording the voice channel')
+      sub.setName('start')
+        .setDescription('Start recording a user in your voice channel')
+        .addUserOption(opt =>
+          opt.setName('target')
+            .setDescription('The user to record')
+            .setRequired(true)
+        )
     )
     .addSubcommand(sub =>
-      sub.setName('stop').setDescription('Stop recording and save .wav files')
+      sub.setName('stop').setDescription('Stop recording and save the .wav file')
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
+
+    // Defense in depth: setDefaultMemberPermissions hides the command from members without
+    // Manage Server in Discord's UI, but doesn't stop it being invoked if that gets misconfigured.
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({
+        content: 'You need the **Manage Server** permission to use this command.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
 
     if (sub === 'start') {
       const voiceChannel = interaction.member.voice.channel;
@@ -33,20 +50,64 @@ export default {
         });
       }
 
-      // Join (or rejoin) with selfDeaf: false so the bot can receive audio
-      const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: voiceChannel.guild.id,
-        adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-        selfDeaf: false,
-      });
+      const target = interaction.options.getUser('target', true);
+      const targetMember = interaction.guild.members.cache.get(target.id)
+        ?? await interaction.guild.members.fetch(target.id).catch(() => null);
 
-      startRecording(connection, interaction.guild);
+      if (!targetMember || targetMember.voice.channelId !== voiceChannel.id) {
+        return interaction.reply({
+          content: `${target} needs to be in **${voiceChannel.name}** with you to be recorded.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
 
-      return interaction.reply({
-        content: `Recording started in **${voiceChannel.name}**.`,
-        flags: MessageFlags.Ephemeral,
-      });
+      // Connection ownership: never yank the connection out from under the music queue, and
+      // never blindly rejoin over an existing connection that's active in another channel.
+      const existingConnection = getVoiceConnection(guildId);
+      let connection;
+
+      if (existingConnection && existingConnection.joinConfig.channelId !== voiceChannel.id) {
+        const otherChannel = interaction.guild.channels.cache.get(existingConnection.joinConfig.channelId);
+        return interaction.reply({
+          content: `I'm already active in **${otherChannel?.name ?? 'another channel'}**. Join me there, or wait until that session ends.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (existingConnection) {
+        // Same channel - reuse the connection instead of rejoining.
+        if (existingConnection.joinConfig.selfDeaf) {
+          const musicQueue = getQueue(guildId);
+          if (musicQueue?.isPlaying) {
+            return interaction.reply({
+              content: `Music is playing in **${voiceChannel.name}** and I'm self-deafened, so I can't hear anything to record. Stop the music first, then try again.`,
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+          // Nothing is playing, so it's safe to rejoin undeafened so the receiver can hear audio.
+          connection = joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: voiceChannel.guild.id,
+            adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+            selfDeaf: false,
+          });
+        } else {
+          connection = existingConnection;
+        }
+      } else {
+        connection = joinVoiceChannel({
+          channelId: voiceChannel.id,
+          guildId: voiceChannel.guild.id,
+          adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+          selfDeaf: false,
+        });
+      }
+
+      startRecording(connection, interaction.guild, target.id, interaction.user.id, interaction.channel);
+
+      // Non-ephemeral and on purpose: recording someone without a visible notice is exactly
+      // what this fix addresses, so everyone in the channel/thread sees this announcement.
+      return interaction.reply(`🔴 Recording started for ${target} by ${interaction.user}.`);
     }
 
     if (sub === 'stop') {
@@ -57,12 +118,12 @@ export default {
         });
       }
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await interaction.deferReply();
 
-      const files = stopRecording(guildId);
+      const files = await stopRecording(guildId);
 
       if (files.length === 0) {
-        return interaction.editReply('Recording stopped. No audio was captured.');
+        return interaction.editReply(`⏹️ Recording stopped by ${interaction.user}. No audio was captured.`);
       }
 
       const summary = files
@@ -70,7 +131,7 @@ export default {
         .join('\n');
 
       return interaction.editReply(
-        `Recording stopped. Saved ${files.length} file(s) to \`data/recordings/\`:\n${summary}`
+        `⏹️ Recording stopped by ${interaction.user}. Saved ${files.length} file(s) to \`data/recordings/\`:\n${summary}`
       );
     }
   },
