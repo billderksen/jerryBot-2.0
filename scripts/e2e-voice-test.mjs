@@ -8,10 +8,12 @@
 //   STAGE 3  intent parsing    - real OpenRouter call via parseIntent()
 //   STAGE 4  intent-on-transcript (bonus) - full wake->STT->intent chain
 //   STAGE 5  text-to-speech    - real Piper call via synthesize()
+//   STAGE 6  prompt A/B (bonus) - one short command transcribed with and
+//                                 without the Whisper domain prompt
 //
 // Run: node scripts/e2e-voice-test.mjs
-// Exit code 0 only if every HARD stage (1, 2, 3, 5) PASSes. Stage 4 is
-// informational (PASS/DATA only, never FAIL) and never affects the exit code.
+// Exit code 0 only if every HARD stage (1, 2, 3, 5) PASSes. Stages 4 and 6 are
+// informational (PASS/DATA only, never FAIL) and never affect the exit code.
 //
 // Why the layering: Task 2 found the pretrained hey_jarvis model triggers
 // reliably on an English Piper voice but not on the bot's Dutch voice
@@ -43,7 +45,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { WakewordEngine } from '../src/utils/speech/wakeword.js';
-import { transcribe } from '../src/utils/speech/transcribe.js';
+import { transcribe, DEFAULT_TRANSCRIBE_PROMPT } from '../src/utils/speech/transcribe.js';
 import { parseIntent } from '../src/utils/speech/intent.js';
 import { synthesize, isTtsAvailable } from '../src/utils/speech/tts.js';
 
@@ -80,6 +82,10 @@ const EN_VOICE_JSON_SHA256 = 'efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb
 const WORK_DIR = mkdtempSync(path.join(tmpdir(), 'jerrybot-e2e-voice-test-'));
 
 const PURE_DUTCH_PHRASE = 'herinner me over twintig minuten aan de pizza';
+// Stage 6's A/B word: one short Dutch command, the exact shape live testing saw
+// Whisper invent words over ("pauze" -> "oh, is het" / "maalige").
+const SHORT_COMMAND_PHRASE = 'pauze';
+const AB_REPEATS = 3; // Whisper runs at temperature 0, but not bit-identically
 const CANONICAL_PLAY_TEXT = 'speel beat it van michael jackson';
 const CONFIRMATION_TEXT = 'Oké, ik speel Beat It van Michael Jackson.';
 
@@ -504,6 +510,64 @@ async function stage5_tts() {
 }
 
 // ---------------------------------------------------------------------------
+// STAGE 6 - domain-prompt A/B on a single short command (bonus)
+// ---------------------------------------------------------------------------
+//
+// One word, transcribed twice: once with the Whisper domain prompt that
+// transcribe() now sends by default, once with none. A short clip is where the
+// decoder has least to go on and where the prompt should help most - and where
+// a bad prompt would show up as a confident wrong word. Informational: this is
+// a measurement of a hosted model's behaviour, not a contract the pipeline
+// guarantees, so it prints both transcripts and never gates the exit code.
+
+async function transcribeOrReport(pcm, prompt) {
+  try {
+    return await transcribe(pcm, { sampleRate: 16000, language: 'nl', prompt });
+  } catch (err) {
+    return `<${err.stage ?? 'error'}: ${err.message.slice(0, 120)}>`;
+  }
+}
+
+const isPauseCommand = (text) => /^\s*pauz?[e|s]?\.?\s*$|^\s*pause\.?\s*$/i.test(text);
+
+async function stage6_promptAB() {
+  requirePiperOrSkip();
+  if (!existsSync(NL_VOICE) || !existsSync(NL_VOICE_CONFIG)) {
+    throw new StageSkip('Dutch Piper voice not found under tools/piper (run scripts/setup-voice.sh)');
+  }
+  if (!process.env.GROQ_API_KEY) {
+    throw new StageSkip('GROQ_API_KEY is not set');
+  }
+
+  const wavPath = await synthesize(SHORT_COMMAND_PHRASE); // real tts.js module, Dutch voice
+  const rawPath = path.join(WORK_DIR, 'stage6-short-command-16k.raw');
+  try {
+    await convertTo16kMonoRaw(wavPath, rawPath);
+    const pcm = readFileSync(rawPath);
+    const clipMs = Math.round(pcm.length / 32); // 16k mono, 2 B/sample
+
+    const withPrompt = [];
+    const withoutPrompt = [];
+    for (let i = 0; i < AB_REPEATS; i++) {
+      withPrompt.push(await transcribeOrReport(pcm, DEFAULT_TRANSCRIBE_PROMPT));
+      withoutPrompt.push(await transcribeOrReport(pcm, null));
+    }
+
+    const hits = (arr) => arr.filter(isPauseCommand).length;
+    const detail = `"${SHORT_COMMAND_PHRASE}" (${clipMs}ms raw, silence-padded by transcribe()) x${AB_REPEATS}`
+      + ` | with prompt: ${withPrompt.map((t) => `"${t}"`).join(', ')} [${hits(withPrompt)}/${AB_REPEATS} correct]`
+      + ` | no prompt: ${withoutPrompt.map((t) => `"${t}"`).join(', ')} [${hits(withoutPrompt)}/${AB_REPEATS} correct]`;
+
+    // PASS only when the prompt is at least not making things worse - which is
+    // the whole question being asked here.
+    return { status: hits(withPrompt) >= hits(withoutPrompt) ? 'PASS' : 'DATA', detail };
+  } finally {
+    try { unlinkSync(wavPath); } catch { /* swept by tts.js's own GC anyway */ }
+    try { unlinkSync(rawPath); } catch { /* nothing to clean up */ }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Reporting
 // ---------------------------------------------------------------------------
 
@@ -550,6 +614,7 @@ async function main() {
     results.push(await runStage('STAGE 3: Intent parsing (real OpenRouter)', true, stage3_intent));
     results.push(await runStage('STAGE 4: Intent-on-transcript (bonus, full chain)', false, stage4_bonus));
     results.push(await runStage('STAGE 5: Text-to-speech (real Piper, ffprobe-verified)', true, stage5_tts));
+    results.push(await runStage('STAGE 6: Whisper domain prompt A/B on "pauze" (bonus)', false, stage6_promptAB));
 
     printResults(results);
 

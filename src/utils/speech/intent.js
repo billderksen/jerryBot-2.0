@@ -45,6 +45,7 @@ const EXACT_PHRASES = {
   'sla dit over': 'skip',
 
   'pauze': 'pause',
+  'pause': 'pause', // Whisper sometimes anglicizes the Dutch word
   'pauzeer': 'pause',
   'pauzeren': 'pause',
   'wacht even': 'pause',

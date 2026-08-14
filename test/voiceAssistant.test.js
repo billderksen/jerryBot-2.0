@@ -46,24 +46,27 @@ const FRAME_MS = 20;                       // one Discord voice frame
 const FRAME_BYTES = 48000 * 2 * 2 * 0.02;  // 3840 B of 48k stereo
 const LOUD = 4000;                         // mean |sample| of speech (or beep echo)
 const QUIET = 20;                          // a silence frame from a client that keeps transmitting
+const FRICATIVE = 120;                     // an /s/: real audio, but under SPEECH_ENERGY_THRESHOLD
 const OUT_BYTES_PER_MS = 32;               // 16k mono, 2 bytes/sample
 const SOURCE_PER_OUT = 6;
 
 /**
- * Runs a whole capture: 20ms frames, `voiced` intervals loud and the rest quiet,
- * beep in flight from T=0 until `beepSettledAt` (null = never settles).
+ * Runs a whole capture: 20ms frames, `voiced` intervals loud and the rest quiet
+ * (or `energyAt(t)` for anything in between), beep in flight from T=0 until
+ * `beepSettledAt` (null = never settles).
  */
-function runCapture({ voiced, beepSettledAt, beep = true }) {
+function runCapture({ voiced = [], beepSettledAt, beep = true, energyAt = null }) {
   const machine = new CaptureMachine(0);
   if (beep) machine.beepStarted();
-  let buffered = 0, armedAt = null, settled = false;
+  let offered = 0, buffered = 0, armedAt = null, settled = false;
 
   for (let t = 0; t <= 12_000; t += FRAME_MS) {
     if (beep && !settled && beepSettledAt !== null && t >= beepSettledAt) {
       machine.beepSettled(beepSettledAt);
       settled = true;
     }
-    const energy = voiced.some(([a, b]) => t >= a && t < b) ? LOUD : QUIET;
+    const energy = energyAt ? energyAt(t) : (voiced.some(([a, b]) => t >= a && t < b) ? LOUD : QUIET);
+    offered += FRAME_BYTES;
     if (machine.chunk(t, energy, FRAME_BYTES) === 'buffer') buffered += FRAME_BYTES;
     if (machine.speechStarted && armedAt === null) armedAt = t;
 
@@ -73,8 +76,9 @@ function runCapture({ voiced, beepSettledAt, beep = true }) {
       const voicedOut = Math.floor(machine.voicedBytes / SOURCE_PER_OUT);
       return {
         reason, armedAt, endedAt: t, outBytes, voicedOut,
+        offeredOutBytes: Math.floor(offered / SOURCE_PER_OUT),
         voicedMs: Math.round(voicedOut / OUT_BYTES_PER_MS),
-        transcribed: CaptureMachine.isWorthTranscribing(outBytes, voicedOut),
+        transcribed: CaptureMachine.isWorthTranscribing(voicedOut),
       };
     }
   }
@@ -144,7 +148,7 @@ test('capture (e): silence after the wake fails without a transcription call', (
 // the wake word", so it has to sit clear of both with room to spare.
 test('capture: the voiced floor clears the wake-word tail and admits a short command', () => {
   const floorMs = Math.round(
-    [...Array(400).keys()].find((ms) => CaptureMachine.isWorthTranscribing(0, ms * OUT_BYTES_PER_MS))
+    [...Array(400).keys()].find((ms) => CaptureMachine.isWorthTranscribing(ms * OUT_BYTES_PER_MS))
   );
   assert.ok(floorMs - 140 >= 50, `floor ${floorMs}ms is only ${floorMs - 140}ms above a 140ms wake tail`);
   assert.ok(250 - floorMs >= 50, `floor ${floorMs}ms leaves only ${250 - floorMs}ms under a 250ms "skip"`);
@@ -156,16 +160,45 @@ test('capture: a user who never stops still ends at the hard cap', () => {
   assert.ok(r.endedAt <= 10_000);
 });
 
-test('capture: silence frames before the command are dropped, not buffered', () => {
-  // A client that transmits through the pause would otherwise hand Whisper two
-  // seconds of dead air to invent words over.
+test('capture: the pause before the command is buffered too, not dropped', () => {
+  // The buffer used to start at the first voiced frame, which cost the soft
+  // onset of the command itself (see the fricative test below). Now everything
+  // from the wake onwards is kept: 2s of pause + 1s of speech + the 1s silence
+  // that ends the utterance. Whisper's leading dead air is the price, and the
+  // voiced floor - not the buffer size - is what decides whether to call it.
   const r = runCapture({ voiced: [[2000, 3000]], beepSettledAt: 250 });
-  // 1s of speech + at most CAPTURE_SILENCE_MS of trailing silence. Had the 2s
-  // pause been buffered too, this would be ~4s of audio.
   const bufferedMs = Math.round(r.outBytes / OUT_BYTES_PER_MS);
-  assert.ok(bufferedMs <= 2100, `buffered ${bufferedMs}ms - the leading pause was kept`);
+  assert.equal(r.endedAt, 3980); // last voiced frame at T+2980 + CAPTURE_SILENCE_MS
+  assert.ok(bufferedMs >= 3900, `buffered only ${bufferedMs}ms of a ${r.endedAt}ms capture`);
   assert.equal(r.voicedMs, 1000);
   assert.equal(r.armedAt, 2000);
+});
+
+test('capture (f): a soft fricative onset is kept, not eaten by the energy gate', () => {
+  // "hey jarvis, speel muziek af". The /s/ of "speel" carries a fraction of the
+  // energy of the vowel behind it, so the classifier calls it unvoiced - and an
+  // unvoiced frame before the utterance armed used to be dropped outright.
+  // Whisper then heard "veel muziek af", which is what this test exists to stop.
+  const onset = [2000, 2120];   // the /s/ - real speech, classified unvoiced
+  const rest = [2120, 3200];    // "-peel muziek af"
+  const r = runCapture({
+    beepSettledAt: 250,
+    energyAt: (t) => {
+      if (t >= onset[0] && t < onset[1]) return FRICATIVE;
+      if (t >= rest[0] && t < rest[1]) return LOUD;
+      return QUIET;
+    },
+  });
+
+  assert.equal(r.reason, 'silence');
+  // Nothing at all was dropped: every byte offered after the wake is in the buffer.
+  assert.equal(r.outBytes, r.offeredOutBytes,
+    `buffered ${r.outBytes} of ${r.offeredOutBytes} post-wake bytes`);
+  // ...and the onset really was classified unvoiced - it is retained despite
+  // that, not because the classifier happened to like it.
+  assert.equal(r.voicedMs, 1080, 'only the loud part counts as voiced');
+  assert.equal(r.armedAt, 2120, 'the fricative does not arm the utterance');
+  assert.ok(r.transcribed);
 });
 
 // EmbedBuilder throws above 4096, from inside logInteraction's try - where the

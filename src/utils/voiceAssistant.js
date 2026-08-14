@@ -65,10 +65,10 @@ const MAX_CONCURRENT_PER_GUILD = 2;
 const CAPTURE_SILENCE_MS = 1000; // end the utterance after this much silence
 const CAPTURE_MAX_MS = 10_000; // hard cap: a stream that never goes silent must still end
 const CAPTURE_MAX_BYTES = (CAPTURE_MAX_MS / 1000) * IN_SAMPLE_RATE * IN_CHANNELS * 2;
-const MIN_CAPTURE_BYTES = OUT_SAMPLE_RATE * 2 * 0.3; // <0.3s of speech is not worth an API call
-// ...unless what little we have is all speech: a short command that beat the
-// arming gate (see CaptureMachine) rides the grace window out and lands here
-// well under MIN_CAPTURE_BYTES while still being a real word.
+// How much VOICED audio a capture must hold to be worth an API call. Total
+// captured bytes are no longer a usable proxy for that: every post-wake chunk
+// is buffered now (see CaptureMachine.chunk), so a capture that heard nothing
+// at all still comes back with the full grace window's worth of dead air.
 //
 // 0.2s is picked to sit in the gap between the two things that arrive at this
 // length. The tail of "hey jarvis" left over after the wake fires runs to about
@@ -795,12 +795,16 @@ export class CaptureMachine {
       // Gated audio is still kept and still counted - only the arming is held
       // back - so a command spoken over the beep survives to be transcribed.
       if (this.armGateOpen(now)) this.speechStarted = true;
-    } else if (!this.speechStarted) {
-      // Leading silence is exactly what Whisper invents words over, and a pause
-      // before the command produces nothing but. Drop it; the buffer then holds
-      // the command with no dead air in front of it.
-      return 'drop';
     }
+    // Every chunk from the wake onwards is kept, voiced or not. The energy
+    // classification decides when the utterance starts and ends; it must not
+    // decide what Whisper gets to hear. Unvoiced-classified audio was being
+    // dropped before the utterance armed, and an unvoiced onset is exactly what
+    // a fricative is: the /s/ of "speel" carries far less mean-abs energy than
+    // the vowel behind it, so it fell under the threshold and was thrown away -
+    // live testing had "speel muziek af" coming back as "veel muziek af". The
+    // cost is leading dead air, which the voiced floor below and Whisper's
+    // domain prompt now cover instead.
     this.bytes += byteLength;
     if (voiced) this.voicedBytes += byteLength;
     if (this.bytes >= CAPTURE_MAX_BYTES) this.endReason = 'max-bytes';
@@ -823,13 +827,15 @@ export class CaptureMachine {
   }
 
   /**
-   * Whether what was captured is worth a transcription call, in output (16k
-   * mono) bytes. Voiced audio is the real signal; total bytes were only ever a
-   * proxy for it, and a short command that never armed rides the grace window
-   * out and arrives well under the total floor while still being a real word.
+   * Whether what was captured is worth a transcription call, measured in voiced
+   * output (16k mono) bytes. Voiced audio is the only signal left: the buffer
+   * holds every chunk since the wake, so its total size says how long the
+   * capture ran, not whether anyone spoke. A short command that never armed
+   * still clears this floor - "skip" is about 250ms of voiced audio, the tail
+   * of "hey jarvis" left over after the wake is about 150ms.
    */
-  static isWorthTranscribing(outBytes, voicedOutBytes) {
-    return outBytes >= MIN_CAPTURE_BYTES || voicedOutBytes >= MIN_VOICED_BYTES;
+  static isWorthTranscribing(voicedOutBytes) {
+    return voicedOutBytes >= MIN_VOICED_BYTES;
   }
 }
 
@@ -920,16 +926,17 @@ async function runInteraction(state, userId, capture) {
       console.log(`[VoiceAssistant] ${userId} opted out mid-capture, discarding ${pcm.length} bytes`);
       return;
     }
-    // A command short enough to finish inside the arming gate never starts the
-    // silence timer, so it rides the grace window out and arrives here well
-    // under MIN_CAPTURE_BYTES - "skip" is exactly that command, and failing it
-    // would defeat the point of the whole capture rework. Voiced audio is what
-    // actually decides whether a Whisper call is worth making; total bytes were
-    // only ever a proxy for it. Residue that turns out to be beep echo or half a
-    // syllable gets caught by the hallucination guard a few lines down.
+    // Voiced audio is what decides whether a Whisper call is worth making - the
+    // buffer itself now holds every chunk since the wake, dead air included, so
+    // its size no longer says anything about whether the user spoke. A command
+    // short enough to finish inside the arming gate never starts the silence
+    // timer and rides the grace window out; "skip" is exactly that command, and
+    // failing it would defeat the point of the whole capture rework. Residue
+    // that turns out to be beep echo or half a syllable gets caught by the
+    // hallucination guard a few lines down.
     const voicedBytes = Math.floor(capture.machine.voicedBytes / SOURCE_BYTES_PER_OUT_BYTE);
-    if (!CaptureMachine.isWorthTranscribing(pcm.length, voicedBytes)) {
-      throw new Error(`captured only ${pcm.length} bytes of audio (${voicedBytes} voiced)`);
+    if (!CaptureMachine.isWorthTranscribing(voicedBytes)) {
+      throw new Error(`captured only ${voicedBytes} bytes of voiced audio (${pcm.length} total)`);
     }
 
     stage = 'transcribe';

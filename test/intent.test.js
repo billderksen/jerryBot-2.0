@@ -6,6 +6,7 @@ const cases = [
   ['skip', 'skip'], ['volgende', 'skip'], ['volgend nummer', 'skip'],
   ['overslaan', 'skip'], ['sla over', 'skip'], ['sla dit over', 'skip'], ['volgend', 'skip'],
   ['pauze', 'pause'], ['pauzeer', 'pause'], ['pauzeren', 'pause'], ['wacht even', 'pause'],
+  ['pause', 'pause'], // Whisper anglicizes the Dutch word often enough to matter
   ['ga door', 'resume'], ['hervat', 'resume'], ['doorgaan', 'resume'], ['resume', 'resume'],
   ['ga verder', 'resume'], ['verder', 'resume'], ['hervatten', 'resume'], ['speel verder', 'resume'],
   ['stop', 'stop'], ['stoppen', 'stop'],
