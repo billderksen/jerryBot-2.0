@@ -109,8 +109,10 @@ const DUCK_STALL_MS = 10000;
 // ...or overruns this total, however healthy it looks
 const DUCK_MAX_MS = 120000;
 // How long a voice connection that raised an 'error' gets to come back to Ready before the
-// queue gives up on it. Matches the window the Disconnected handler allows its own reconnect
-// race, so both failure paths give Discord the same amount of rope.
+// queue gives up on it. The same 5s the Disconnected handler allows, but a materially stricter
+// bar: Disconnected forgives as soon as a reconnect has *started* (Signalling or Connecting)
+// and leaves the rest to the library, while an error is only forgiven by a connection that is
+// actually Ready again - there is no transition on the way that would tell us any different.
 const CONNECTION_RECOVERY_MS = 5000;
 // A connection 'error' usually arrives a beat before the WebSocket close that explains it, so
 // the connection's status is never read until it has had this long to settle.
@@ -891,6 +893,15 @@ export class MusicQueue {
       broadcastState();
     });
 
+    // @discordjs/voice parks the player here by itself as soon as no subscribed connection is
+    // Ready. Nothing else announces it: the position interval notices on its next tick and
+    // just stops, without a final broadcast, so the dashboard's last word on the song stays
+    // "playing" and every browser keeps running its progress bar over silence.
+    this.player.on(AudioPlayerStatus.AutoPaused, () => {
+      console.log('Player auto-paused - no voice connection ready to receive audio');
+      broadcastState();
+    });
+
     this.player.on('error', error => {
       console.error(`Error in audio player for guild ${guildId}:`, error);
       this.isSeeking = false;
@@ -967,10 +978,14 @@ export class MusicQueue {
       connection.destroy();
     }
 
-    // A failure from a connection this queue has already moved off takes that connection with
-    // it, but must not stop the playback running on its replacement
-    if (this.connection && this.connection !== connection) {
-      console.warn(`[MusicQueue] Ignoring voice connection ${reason} from a replaced connection`);
+    // A failure from a connection this queue no longer holds takes that connection with it and
+    // stops there. It must not stop the playback running on a replacement, and it must not run
+    // a second cleanup() behind an earlier teardown: cleanup() fires the presence and
+    // now-playing-log callbacks, which are global, so a late one would clear the presence and
+    // re-log whatever a newer queue is playing. `this.connection` is only ever nulled by
+    // cleanup(), so null here means the teardown has already happened.
+    if (this.connection !== connection) {
+      console.warn(`[MusicQueue] Ignoring voice connection ${reason} from a connection this queue no longer holds`);
       return;
     }
 

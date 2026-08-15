@@ -310,6 +310,55 @@ test('connection error: a failure from a replaced connection does not stop the l
 
 // --- teardown ordering -----------------------------------------------------
 
+test('teardownConnection: a queue that already tore down is not cleaned up twice', () => {
+  // The Disconnected race can still be running when an error teardown completes, and expires
+  // a few seconds later against a connection the queue has since let go of. cleanup() fires
+  // the presence and now-playing-log callbacks, which are global - a second run would clear
+  // the presence and re-log whatever a newer queue had started playing by then.
+  const { queue, connection } = buildQueue('teardown-twice');
+  queue.isPlaying = true;
+  queue.currentSong = { title: 'Summertime Sadness', url: 'https://example.com/x' };
+  queue.songStartTime = Date.now() - 4_000;
+
+  let cleanups = 0;
+  const runCleanup = queue.cleanup.bind(queue);
+  queue.cleanup = () => { cleanups++; runCleanup(); };
+
+  queue.teardownConnection('error unrecoverable', connection);
+  assert.equal(cleanups, 1);
+  assert.equal(queue.connection, null);
+
+  // The Disconnected race expires afterwards, on the same (now destroyed) connection
+  queue.teardownConnection('disconnected', connection);
+  assert.equal(cleanups, 1, 'the late failure did not run a second cleanup');
+  assert.equal(queue.credited, 1, 'nor booked listening time a second time');
+  assert.equal(connection.destroyCalls, 1, 'nor destroyed an already-destroyed connection');
+});
+
+test('the player parking itself tells the dashboard, rather than going quiet', () => {
+  // Without this the last thing the browser hears is "playing", and it runs its own progress
+  // bar on from there - the position interval stops on its next tick without a final update.
+  const guildId = 'autopause-broadcast';
+  const queue = createQueue(guildId);
+  queue.isPlaying = true;
+  queue.currentSong = { title: 'Summertime Sadness', url: 'https://example.com/x', duration: 200 };
+  queue.songStartTime = Date.now() - 8_000;
+
+  const states = [];
+  setWebUpdateCallback(state => states.push(state));
+  try {
+    // Driven through the real player's state setter, which is what emits the status event
+    queue.player.state = { status: AudioPlayerStatus.AutoPaused };
+  } finally {
+    setWebUpdateCallback(null);
+    queue.cleanup();
+  }
+
+  assert.equal(states.length, 1, 'parking the player broadcast exactly once');
+  assert.equal(states[0].isPlaying, true);
+  assert.equal(states[0].isPaused, true, 'reported as paused, not as playing');
+});
+
 test('teardownConnection: credits listening before cleanup clears the clock', () => {
   const { queue, connection } = buildQueue('teardown-order');
   queue.isPlaying = true;
