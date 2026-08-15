@@ -8,6 +8,14 @@ import {
   isPlayerPaused,
   waitForReadyConnection,
   setWebUpdateCallback,
+  DownloadGate,
+  DOWNLOAD_PRIORITY,
+  DOWNLOAD_403_BACKOFF_MS,
+  is403,
+  downloadErrorText,
+  planDownloadRetry,
+  runGatedDownload,
+  describeDownloadFailure,
 } from '../src/utils/musicQueue.js';
 
 // A voice connection is, as far as this module's lifecycle code is concerned, an EventEmitter
@@ -375,4 +383,244 @@ test('teardownConnection: credits listening before cleanup clears the clock', ()
   assert.equal(queue.songStartTime, null, 'and cleared afterwards');
   assert.equal(connection.destroyCalls, 1);
   assert.equal(queue.isPlaying, false);
+});
+
+// --- serialized, 403-tolerant downloads -------------------------------------
+
+// Lets every pending microtask settle, so "did this job get the slot?" can be asked
+// without racing the promise plumbing
+const tick = () => new Promise(resolve => setImmediate(resolve));
+
+// What a rate-limited fetch actually looks like coming out of yt-dlp-exec: an execa error
+// whose message is about the exit code and whose stderr carries the reason
+const forbidden = () => Object.assign(
+  new Error('Command failed with exit code 1: yt-dlp https://www.youtube.com/watch?v=qrCRgIu2QtU'),
+  { stderr: 'ERROR: unable to download video data: HTTP Error 403: Forbidden' }
+);
+
+test('is403: recognises the rate-limit yt-dlp reports on video data', () => {
+  assert.equal(is403('ERROR: unable to download video data: HTTP Error 403: Forbidden'), true);
+  assert.equal(is403('HTTP Error 403: Forbidden'), true);
+  assert.equal(is403('urlopen error 403 Forbidden'), true);
+});
+
+test('is403: a bare 403 in an id or a title is not a rate-limit', () => {
+  // The retry is three attempts and ten seconds of waiting - spending it on a dead video
+  // because its id happens to contain three digits is exactly what this guards
+  assert.equal(is403('ERROR: [youtube] a403bcdefgh: Video unavailable'), false);
+  assert.equal(is403('ERROR: HTTP Error 429: Too Many Requests'), false);
+  assert.equal(is403(''), false);
+  assert.equal(is403(null), false);
+});
+
+test('downloadErrorText: reads the reason wherever execa left it', () => {
+  assert.match(downloadErrorText(forbidden()), /403/);
+  assert.match(downloadErrorText(new Error('HTTP Error 403: Forbidden')), /403/);
+  assert.equal(downloadErrorText(null), '');
+});
+
+test('planDownloadRetry: three attempts on a 403, waiting 3s then 7s', () => {
+  const text = 'HTTP Error 403: Forbidden';
+  assert.deepEqual(DOWNLOAD_403_BACKOFF_MS, [3000, 7000]);
+  assert.deepEqual(planDownloadRetry(1, text), { retry: true, delayMs: 3000 });
+  assert.deepEqual(planDownloadRetry(2, text), { retry: true, delayMs: 7000 });
+  assert.deepEqual(planDownloadRetry(3, text), { retry: false, delayMs: 0 }, 'the schedule is exhausted');
+});
+
+test('planDownloadRetry: anything that is not a 403 keeps the single-attempt behaviour', () => {
+  assert.deepEqual(planDownloadRetry(1, 'ERROR: Video unavailable'), { retry: false, delayMs: 0 });
+});
+
+test('DownloadGate: a second job waits for the first to let go', async () => {
+  const gate = new DownloadGate(1);
+  const releaseFirst = await gate.acquire();
+
+  let secondRan = false;
+  const second = gate.acquire().then(release => { secondRan = true; release(); });
+
+  await tick();
+  assert.equal(secondRan, false, 'the one slot is taken');
+  releaseFirst();
+  await second;
+  assert.equal(secondRan, true);
+  assert.equal(gate.active, 0);
+});
+
+test('DownloadGate: starting a song jumps the queued cache jobs, which keep their order', async () => {
+  const gate = new DownloadGate(1);
+  const order = [];
+  const release = await gate.acquire(DOWNLOAD_PRIORITY.CACHE);
+
+  const jobs = [
+    gate.acquire(DOWNLOAD_PRIORITY.CACHE).then(r => { order.push('cache-1'); r(); }),
+    gate.acquire(DOWNLOAD_PRIORITY.CACHE).then(r => { order.push('cache-2'); r(); }),
+    gate.acquire(DOWNLOAD_PRIORITY.PLAY).then(r => { order.push('play'); r(); }),
+  ];
+
+  release();
+  await Promise.all(jobs);
+  assert.deepEqual(order, ['play', 'cache-1', 'cache-2']);
+  assert.equal(gate.active, 0);
+});
+
+test('DownloadGate: a job that throws still frees the slot', async () => {
+  const gate = new DownloadGate(1);
+  await assert.rejects(gate.run(async () => { throw new Error('boom'); }), /boom/);
+  assert.equal(gate.active, 0, 'a failed download does not wedge every later one');
+  assert.equal(await gate.run(async () => 'ran'), 'ran');
+});
+
+test('DownloadGate: releasing twice hands the slot over once', async () => {
+  const gate = new DownloadGate(1);
+  const releaseFirst = await gate.acquire();
+  const second = gate.acquire();
+
+  releaseFirst();
+  releaseFirst();
+
+  const releaseSecond = await second;
+  assert.equal(gate.active, 1, 'the slot was handed over, not duplicated');
+  releaseSecond();
+  assert.equal(gate.active, 0);
+});
+
+test('runGatedDownload: a 403 is retried on the schedule, then reported as rate-limited', async () => {
+  const gate = new DownloadGate(1);
+  const attemptsSeen = [];
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    runGatedDownload(attempt => { attemptsSeen.push(attempt); throw forbidden(); },
+      { gate, schedule: [20, 40], label: 'test fetch' }),
+    error => {
+      assert.equal(error.rateLimited, true, 'tagged, so the skip can say why');
+      assert.equal(error.attempts, 3);
+      return true;
+    }
+  );
+
+  assert.deepEqual(attemptsSeen, [1, 2, 3], 'three attempts, and only three');
+  assert.ok(Date.now() - startedAt >= 50, 'it actually waited between them');
+  assert.equal(gate.active, 0);
+});
+
+test('runGatedDownload: a dead video fails on the first attempt, as before', async () => {
+  const gate = new DownloadGate(1);
+  let calls = 0;
+
+  await assert.rejects(
+    runGatedDownload(() => { calls++; throw new Error('ERROR: Video unavailable'); },
+      { gate, schedule: [5, 5] }),
+    error => {
+      assert.equal(error.rateLimited, undefined, 'not a rate-limit, so not reported as one');
+      return /Video unavailable/.test(error.message);
+    }
+  );
+  assert.equal(calls, 1);
+});
+
+test('runGatedDownload: the backoff waits outside the gate, so the slot stays useful', async () => {
+  const gate = new DownloadGate(1);
+  let attempts = 0;
+  const flaky = runGatedDownload(() => {
+    attempts++;
+    if (attempts === 1) throw forbidden();
+    return 'audio';
+  }, { gate, schedule: [60, 60] });
+
+  await tick(); // the first attempt has failed and is now backing off
+  let attemptsWhenProbeRan = null;
+  await gate.run(async () => { attemptsWhenProbeRan = attempts; });
+
+  assert.equal(attemptsWhenProbeRan, 1, 'the probe got the slot while the retry was still waiting');
+  assert.equal(await flaky, 'audio');
+});
+
+test('runGatedDownload: a job whose song is already gone never fetches anything', async () => {
+  const gate = new DownloadGate(1);
+  let calls = 0;
+
+  await assert.rejects(
+    runGatedDownload(() => { calls++; }, { gate, abortReason: () => 'the song changed' }),
+    error => error.aborted === true
+  );
+  assert.equal(calls, 0);
+  assert.equal(gate.active, 0, 'and it did not take the slot to find that out');
+});
+
+test('runGatedDownload: a cache job queued behind a download drops itself if its song is skipped', async () => {
+  const gate = new DownloadGate(1);
+  const held = await gate.acquire(DOWNLOAD_PRIORITY.PLAY);
+  let songChanged = false;
+  let calls = 0;
+
+  const cacheJob = runGatedDownload(() => { calls++; return 'audio'; }, {
+    gate,
+    priority: DOWNLOAD_PRIORITY.CACHE,
+    abortReason: () => (songChanged ? 'the song changed' : null)
+  });
+
+  await tick();
+  assert.equal(calls, 0, 'it is queued behind the play-path download');
+
+  // The song it was caching gets skipped while it waits - without the re-check after
+  // acquiring, this would spend a serialized slot downloading a file to delete
+  songChanged = true;
+  held();
+
+  await assert.rejects(cacheJob, error => error.aborted === true);
+  assert.equal(calls, 0, 'the slot came free and nothing was downloaded');
+  assert.equal(gate.active, 0);
+});
+
+test('runGatedDownload: a teardown during the backoff stops the retries there', async () => {
+  const gate = new DownloadGate(1);
+  let tornDown = false;
+  let calls = 0;
+
+  await assert.rejects(
+    runGatedDownload(() => { calls++; tornDown = true; throw forbidden(); }, {
+      gate,
+      schedule: [10, 10],
+      abortReason: () => (tornDown ? 'the queue is being torn down' : null)
+    }),
+    error => error.aborted === true && /torn down/.test(error.message)
+  );
+  assert.equal(calls, 1, 'no second attempt once nobody is waiting for the audio');
+  assert.equal(gate.active, 0);
+});
+
+test('describeDownloadFailure: a rate-limited skip says so, in one line', () => {
+  const rateLimited = Object.assign(new Error('Command failed with exit code 1'), { rateLimited: true, attempts: 3 });
+  assert.equal(describeDownloadFailure(rateLimited), 'YouTube rate-limited this download (3 attempts)');
+  assert.equal(describeDownloadFailure(new Error('Video unavailable')), 'Video unavailable');
+});
+
+test('downloadAbortReason: a fetch is dropped once the song it belongs to has moved on', () => {
+  const queue = new MusicQueue('download-abort-reason');
+  const gen = queue.cacheGeneration;
+  assert.equal(queue.downloadAbortReason(gen), null);
+
+  // The one thing play(), playNext() and cleanup() all go through
+  queue.cleanupCachedAudio();
+  assert.match(queue.downloadAbortReason(gen), /song changed/);
+
+  const current = queue.cacheGeneration;
+  assert.equal(queue.downloadAbortReason(current), null);
+  queue.destroying = true;
+  assert.match(queue.downloadAbortReason(current), /torn down/);
+});
+
+test('an invalidated background download is stopped, not just ignored', () => {
+  // Its file is thrown away either way - but downloads are serialized now, so leaving it
+  // running would make the next song's stream lookup queue behind a doomed download
+  const queue = new MusicQueue('download-abort-kill');
+  let kills = 0;
+  queue.cacheProcess = { kill: () => { kills++; } };
+
+  queue.cleanupCachedAudio();
+
+  assert.equal(kills, 1);
+  assert.equal(queue.cacheProcess, null);
+  assert.equal(queue.abortBackgroundCache(), false, 'nothing left to stop');
 });

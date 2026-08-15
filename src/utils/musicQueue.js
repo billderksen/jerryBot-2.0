@@ -120,6 +120,170 @@ const CONNECTION_SETTLE_MS = 250;
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// --- Serialized, 403-tolerant yt-dlp fetches ---------------------------------
+//
+// YouTube answers "HTTP Error 403: Forbidden" on video data when it sees a burst of
+// fetches from one IP: a controlled test of four videos had two of the four fail when run
+// in parallel and all four succeed when run one after another. During a playlist this
+// module has two in flight at once - the stream lookup for the song being started, and the
+// background cache download of the song already playing - which is enough to trigger it,
+// and a single 403 used to fail the song straight into a skip.
+//
+// So both go through one process-wide gate of width 1, and a 403 is treated as the
+// transient rate-limit it is rather than as a dead video. The cheap listing calls (radio
+// mixes, search autocomplete) stay ungated - they are not what YouTube is counting.
+
+// Waits before the 2nd and 3rd attempt, so three attempts in all. Passed around as a
+// parameter so the retry loop can be tested without sitting out ten real seconds.
+export const DOWNLOAD_403_BACKOFF_MS = [3000, 7000];
+
+// Starting a song outranks caching one that is already audible
+export const DOWNLOAD_PRIORITY = { CACHE: 0, PLAY: 1 };
+
+// One slot, handed out highest-priority-first and FIFO within a priority. Ownership of the
+// slot passes straight from a releasing holder to the next waiter, so the count can never
+// drift; a release is idempotent because the retry loop releases in a `finally` that a
+// thrown abort also runs through.
+export class DownloadGate {
+  constructor(concurrency = 1) {
+    this.concurrency = concurrency;
+    this.active = 0;
+    this.waiting = [];
+  }
+
+  // @returns {Promise<function>} resolves with the release function once the slot is held
+  acquire(priority = DOWNLOAD_PRIORITY.CACHE) {
+    if (this.active < this.concurrency) {
+      this.active++;
+      return Promise.resolve(this.grant());
+    }
+    return new Promise(resolve => {
+      // Inserted ahead of everything of lower priority and behind everything of equal or
+      // higher, which is what keeps arrivals of one priority in their own order: a
+      // play-path job jumps the queued cache jobs without reshuffling them
+      let i = this.waiting.length;
+      while (i > 0 && this.waiting[i - 1].priority < priority) i--;
+      this.waiting.splice(i, 0, { priority, resolve });
+    });
+  }
+
+  grant() {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = this.waiting.shift();
+      // The slot is not freed and re-taken, it is handed over: `active` stays put
+      if (next) next.resolve(this.grant());
+      else this.active--;
+    };
+  }
+
+  async run(fn, priority = DOWNLOAD_PRIORITY.CACHE) {
+    const release = await this.acquire(priority);
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+}
+
+export const downloadGate = new DownloadGate(1);
+
+// yt-dlp reports the rate-limit as an HTTP 403 on the video data, e.g.
+// "ERROR: unable to download video data: HTTP Error 403: Forbidden". Matched on the
+// phrasing rather than on a bare "403" so a video id or a title containing those three
+// digits cannot turn a genuinely dead video into three attempts at nothing.
+export function is403(text) {
+  if (!text) return false;
+  const s = String(text);
+  if (/HTTP\s*Error\s*403\b/i.test(s)) return true;
+  return /\b403\b/.test(s) && /forbidden/i.test(s);
+}
+
+// execa keeps the child's stderr off the message on some failures and folds it in on
+// others, so the verdict is taken over everything it carries.
+export function downloadErrorText(error) {
+  if (!error) return '';
+  return [error.stderr, error.shortMessage, error.message].filter(Boolean).join('\n');
+}
+
+// Pure: what to do after attempt `attempt` (1-based) failed with `errorText`.
+export function planDownloadRetry(attempt, errorText, schedule = DOWNLOAD_403_BACKOFF_MS) {
+  if (!is403(errorText)) return { retry: false, delayMs: 0 };
+  const delayMs = schedule[attempt - 1];
+  if (delayMs === undefined) return { retry: false, delayMs: 0 };
+  return { retry: true, delayMs };
+}
+
+// Thrown when the reason for a fetch disappeared while it was queued or backing off. It is
+// not a failure: whatever moved the queue on owns its state now, and callers must leave it
+// alone rather than counting a failure or advancing the queue a second time.
+export class DownloadAbortedError extends Error {
+  constructor(reason) {
+    super(reason);
+    this.name = 'DownloadAbortedError';
+    this.aborted = true;
+  }
+}
+
+// The single phrasing for a failed fetch, so a rate-limited skip is obvious in `pm2 logs`
+// instead of being one more "Error playing song" among the dead videos.
+export function describeDownloadFailure(error) {
+  if (error?.rateLimited) return `YouTube rate-limited this download (${error.attempts} attempts)`;
+  return error?.message || 'unknown error';
+}
+
+// Run one yt-dlp fetch through the gate, retrying a 403 on the backoff schedule.
+//
+// All the attempts happen in here and exactly one error comes back out, so a 403 storm
+// still counts as a single failure against the caller's breaker - retries are internal.
+//
+// @param run - performs the fetch; called with the 1-based attempt number
+// @param abortReason - returns why this fetch is no longer wanted, or null to carry on.
+//   Checked before each attempt and again with the slot in hand, since a job can sit in
+//   the queue for the length of a whole download.
+export async function runGatedDownload(run, {
+  priority = DOWNLOAD_PRIORITY.CACHE,
+  label = 'download',
+  abortReason = () => null,
+  gate = downloadGate,
+  schedule = DOWNLOAD_403_BACKOFF_MS
+} = {}) {
+  for (let attempt = 1; ; attempt++) {
+    const reason = abortReason();
+    if (reason) throw new DownloadAbortedError(reason);
+
+    let plan = null;
+    const release = await gate.acquire(priority);
+    try {
+      const reasonNow = abortReason();
+      if (reasonNow) throw new DownloadAbortedError(reasonNow);
+      return await run(attempt);
+    } catch (error) {
+      if (error?.aborted) throw error;
+
+      const text = downloadErrorText(error);
+      plan = planDownloadRetry(attempt, text, schedule);
+      if (!plan.retry) {
+        // Tagged on the way out so the caller can say why it is skipping the song
+        if (is403(text)) {
+          error.rateLimited = true;
+          error.attempts = attempt;
+        }
+        throw error;
+      }
+    } finally {
+      release();
+    }
+
+    // Backing off inside the gate would idle the one thing the gate exists to keep busy
+    console.warn(`[MusicQueue] ${label}: HTTP 403 from YouTube on attempt ${attempt}/${schedule.length + 1}, retrying in ${plan.delayMs}ms`);
+    await delay(plan.delayMs);
+  }
+}
+
 // Load recently played from file
 function loadRecentlyPlayed() {
   const data = loadJsonSync(RECENTLY_PLAYED_FILE, []);
@@ -844,6 +1008,7 @@ export class MusicQueue {
     this.playingFromHistory = false; // Flag to prevent re-adding history songs
     this.cacheGeneration = 0; // Bumped whenever the current song changes - stale background downloads are discarded
     this.cachingGeneration = null; // Generation of the in-flight background download (null = none in flight)
+    this.cacheProcess = null; // yt-dlp child of the in-flight background download, so it can be stopped
     this.autoLeaveTimer = null; // Handle for the empty-queue auto-disconnect timer
     this.consecutiveFailures = 0; // Consecutive play() failures - trips a breaker at 3
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
@@ -1193,15 +1358,22 @@ export class MusicQueue {
       updatePresenceCallback(this.currentSong.title);
     }
 
+    // The generation this start belongs to. yt-dlp is a multi-second subprocess and a 403
+    // adds ten more seconds of backoff on top, so a stop, a skip or a teardown can easily
+    // land while it runs - and whichever of those it was has already moved the queue on.
+    const gen = this.cacheGeneration;
+    const songUrl = this.currentSong.url;
+    const songTitle = this.currentSong.title;
+
     try {
-      if (!isAllowedMediaUrl(this.currentSong.url)) {
-        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${this.currentSong.url}`);
+      if (!isAllowedMediaUrl(songUrl)) {
+        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
       }
 
       // Get the audio URL for streaming
       // Format priority: opus (best quality) > m4a/aac > webm/vorbis > any audio > any format
       // Prefer 160kbps+ audio when available
-      const result = await ytDlpExec(this.currentSong.url, {
+      const result = await runGatedDownload(() => ytDlpExec(songUrl, {
         ...ytCookieOpts,
         dumpSingleJson: true,
         noCheckCertificates: true,
@@ -1209,10 +1381,19 @@ export class MusicQueue {
         preferFreeFormats: true,
         format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
         audioQuality: 0 // Best quality
+      }), {
+        priority: DOWNLOAD_PRIORITY.PLAY,
+        label: `stream lookup for "${songTitle}"`,
+        abortReason: () => this.downloadAbortReason(gen)
       });
-      
+
+      // The queue can have moved on while yt-dlp ran; playing this now would hijack
+      // whatever song took its place
+      const movedOn = this.downloadAbortReason(gen);
+      if (movedOn) throw new DownloadAbortedError(movedOn);
+
       this.currentAudioUrl = result.url;
-      
+
       // Log audio quality info for debugging
       if (result.acodec || result.abr) {
         console.log(`Audio quality: ${result.acodec || 'unknown'} @ ${result.abr || 'unknown'}kbps`);
@@ -1225,7 +1406,18 @@ export class MusicQueue {
       this.cacheAudioInBackground();
       
     } catch (error) {
-      console.error('Error playing song:', error);
+      // Not a failure: a stop, a skip or a teardown got here first and owns the queue's
+      // state now, so this call touches nothing and advances nothing
+      if (error?.aborted) {
+        console.log(`[MusicQueue] Gave up starting "${songTitle}" - ${error.message}`);
+        return;
+      }
+
+      // All the retries happened inside runGatedDownload, so a 403 storm arrives here once
+      // and counts as one failure against the breaker below
+      const reason = describeDownloadFailure(error);
+      console.error(`[MusicQueue] Skipping "${songTitle}": ${reason}`);
+      if (!error?.rateLimited) console.error('Error playing song:', error);
       // Drop the failed song BEFORE playNext() - otherwise loop mode 'song' re-queues it
       // and we spin on the same broken URL forever
       const failedSong = this.currentSong;
@@ -1235,7 +1427,7 @@ export class MusicQueue {
 
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= 3) {
-        console.error(`[MusicQueue] Skipping repeatedly failing song: ${failedSong?.title || 'unknown'}`);
+        console.error(`[MusicQueue] Skipping repeatedly failing song: ${failedSong?.title || 'unknown'} (${reason})`);
         // Purge any remaining copies (loop re-queues, duplicate adds) of the failing song
         if (failedSong?.url) {
           this.songs = this.songs.filter(s => s.url !== failedSong.url);
@@ -1313,29 +1505,43 @@ export class MusicQueue {
     this.cachingGeneration = gen;
     const tempFileName = `godcord_${this.guildId}_${Date.now()}.opus`;
     const cachePath = join(tmpdir(), tempFileName);
-    
+    const songUrl = this.currentSong.url;
+    const songTitle = this.currentSong.title;
+
     console.log(`Background caching audio to: ${cachePath}`);
-    
+
     try {
-      if (!isAllowedMediaUrl(this.currentSong.url)) {
-        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${this.currentSong.url}`);
+      if (!isAllowedMediaUrl(songUrl)) {
+        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
       }
 
       // Cache at highest quality opus (quality 0 = best, ~256kbps VBR)
       // Use same format preference as streaming for consistency
-      await ytDlpExec(this.currentSong.url, {
-        ...ytCookieOpts,
-        output: cachePath,
-        extractAudio: true,
-        audioFormat: 'opus',
-        audioQuality: 0, // Best quality (VBR ~256kbps for opus)
-        noCheckCertificates: true,
-        noWarnings: true,
-        ffmpegLocation: ffmpegPath,
-        format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
-        postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
+      await runGatedDownload(() => {
+        // .exec() hands back the child process rather than its parsed output, so an
+        // invalidated download can actually be stopped instead of running on unwatched
+        const child = ytDlpExec.exec(songUrl, {
+          ...ytCookieOpts,
+          output: cachePath,
+          extractAudio: true,
+          audioFormat: 'opus',
+          audioQuality: 0, // Best quality (VBR ~256kbps for opus)
+          noCheckCertificates: true,
+          noWarnings: true,
+          ffmpegLocation: ffmpegPath,
+          format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
+          postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
+        });
+        this.cacheProcess = child;
+        return child.finally(() => {
+          if (this.cacheProcess === child) this.cacheProcess = null;
+        });
+      }, {
+        priority: DOWNLOAD_PRIORITY.CACHE,
+        label: `background cache of "${songTitle}"`,
+        abortReason: () => this.downloadAbortReason(gen)
       });
-      
+
       // Only set cached path if this download still belongs to the song that's playing
       if (gen === this.cacheGeneration && this.isPlaying && this.currentSong) {
         this.cachedAudioPath = cachePath;
@@ -1347,7 +1553,14 @@ export class MusicQueue {
         try { unlinkSync(cachePath); } catch (e) {}
       }
     } catch (error) {
-      console.error('Background caching failed:', error);
+      // A job dropped before it started, or a download killed part-way, is the queue
+      // moving on rather than anything being wrong with the song
+      if (error?.aborted || gen !== this.cacheGeneration) {
+        console.log(`[MusicQueue] Background cache of "${songTitle}" abandoned - ${error?.aborted ? error.message : 'song changed'}`);
+      } else {
+        console.error(`Background caching failed for "${songTitle}": ${describeDownloadFailure(error)}`);
+        if (!error?.rateLimited) console.error(error);
+      }
       try { unlinkSync(cachePath); } catch (e) {}
     }
 
@@ -1431,6 +1644,33 @@ export class MusicQueue {
     this.isCaching = false;
     this.resetPlaybackClock();
     this.cacheGeneration++; // Invalidate any background download still in flight
+    // ...and stop it for real. Its file is discarded from here on either way, but downloads
+    // are serialized now, so leaving it running would make the next song's stream lookup
+    // queue behind a download whose only remaining job is to be thrown away.
+    this.abortBackgroundCache();
+  }
+
+  // Why a fetch taken out for generation `gen` should not proceed - null means carry on.
+  // Both answers mean somebody else (a stop, the next song, a teardown) is driving the
+  // queue now: `destroying` covers a cleanup in progress, and the generation covers one
+  // that already finished, since cleanup() puts the flag back down when it is done.
+  downloadAbortReason(gen) {
+    if (this.destroying) return 'the queue is being torn down';
+    if (gen !== this.cacheGeneration) return 'the song changed';
+    return null;
+  }
+
+  // Stop the in-flight background cache download, if there is one.
+  abortBackgroundCache() {
+    const child = this.cacheProcess;
+    if (!child) return false;
+    this.cacheProcess = null;
+    try {
+      child.kill();
+    } catch (err) {
+      console.error('[MusicQueue] Failed to stop the background cache download:', err.message);
+    }
+    return true;
   }
 
   // Clear the empty-queue auto-disconnect timer (if one is pending)
