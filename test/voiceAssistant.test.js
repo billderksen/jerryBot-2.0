@@ -13,6 +13,8 @@ import {
   getOptedInUserIds,
   reloadOptIns,
   setOptInStorePath,
+  shouldAssistantAutoLeave,
+  voiceConnectionOwner,
 } from '../src/utils/voiceAssistant.js';
 
 test('downsampler: 6 stereo frames -> 2 mono samples, averaged', () => {
@@ -260,4 +262,79 @@ test('opt-in store: round-trips through disk', () => {
   reloadOptIns();
   assert.equal(isOptedIn('user-1'), false);
   assert.deepEqual(getOptedInUserIds(), []);
+});
+
+// --- connection ownership and auto-leave -----------------------------------
+// The guild has one voice connection and three things that create one (/play,
+// /record, /heyjerry join). These two functions are the whole guard against the
+// assistant hanging up on a song or a recording, so they are tested directly.
+
+const CONN = { id: 'the-live-connection' };
+const OTHER_CONN = { id: 'a-connection-this-queue-moved-off' };
+
+test('ownership: no connection at all', () => {
+  assert.equal(voiceConnectionOwner({ connection: null, queueConnection: null, recording: false }), 'none');
+});
+
+test('ownership: the music queue holding this connection owns it', () => {
+  assert.equal(
+    voiceConnectionOwner({ connection: CONN, queueConnection: CONN, recording: false }),
+    'music'
+  );
+});
+
+test('ownership: music wins over a recording on the same connection', () => {
+  // /play stops an active recording before it joins, but the two can overlap for
+  // as long as that teardown takes - and the queue is the one that will hang up.
+  assert.equal(
+    voiceConnectionOwner({ connection: CONN, queueConnection: CONN, recording: true }),
+    'music'
+  );
+});
+
+test('ownership: an active recording owns a queueless connection', () => {
+  assert.equal(
+    voiceConnectionOwner({ connection: CONN, queueConnection: null, recording: true }),
+    'recorder'
+  );
+});
+
+test('ownership: a queue holding a DIFFERENT connection has no claim', () => {
+  // A cleaned-up queue nulls its connection, and one that reconnected holds a
+  // new object; neither may keep the assistant off the live connection. Identity,
+  // not "is there a queue".
+  assert.equal(
+    voiceConnectionOwner({ connection: CONN, queueConnection: OTHER_CONN, recording: false }),
+    'assistant'
+  );
+  assert.equal(
+    voiceConnectionOwner({ connection: CONN, queueConnection: null, recording: false }),
+    'assistant'
+  );
+});
+
+test('auto-leave: an empty channel on a connection nobody else uses', () => {
+  assert.equal(shouldAssistantAutoLeave({ owner: 'assistant', humanCount: 0 }), true);
+});
+
+test('auto-leave: never on a music- or recorder-owned connection, even when empty', () => {
+  assert.equal(shouldAssistantAutoLeave({ owner: 'music', humanCount: 0 }), false);
+  assert.equal(shouldAssistantAutoLeave({ owner: 'recorder', humanCount: 0 }), false);
+  assert.equal(shouldAssistantAutoLeave({ owner: 'none', humanCount: 0 }), false);
+});
+
+test('auto-leave: not while anyone is still in the channel', () => {
+  assert.equal(shouldAssistantAutoLeave({ owner: 'assistant', humanCount: 1 }), false);
+});
+
+test('auto-leave: not mid-interaction, even in an empty channel', () => {
+  // Someone can wake Jerry and walk out; the reply still has to be spoken.
+  assert.equal(shouldAssistantAutoLeave({ owner: 'assistant', humanCount: 0, busy: true }), false);
+});
+
+test('auto-leave: unknown inputs fail safe by staying', () => {
+  // null = "couldn't tell" (channel not in cache, musicQueue import failed).
+  // Idling costs nothing; a wrong hang-up cuts someone off.
+  assert.equal(shouldAssistantAutoLeave({ owner: 'assistant', humanCount: null }), false);
+  assert.equal(shouldAssistantAutoLeave({ owner: null, humanCount: 0 }), false);
 });

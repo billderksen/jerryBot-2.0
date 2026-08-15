@@ -257,13 +257,15 @@ Implementation: `src/commands/record.js`, `src/utils/voiceRecorder.js`
 
 ## Hey Jerry Voice Assistant
 
-Say **"Hey Jerry"** in a voice channel the bot is already in, wait for the beep, then give a command in Dutch. Everything except speech-to-text and intent parsing runs locally.
+Say **"Hey Jerry"** in a voice channel the bot is in, wait for the beep, then give a command in Dutch. Everything except speech-to-text and intent parsing runs locally.
+
+The bot has to be in the channel to hear anything, and `/heyjerry join` is how it gets there without starting music: it joins your channel undeafened and listens, nothing else. `/heyjerry leave` sends it away again. Playing something (`/play`, or "Hey Jerry, speel …") reuses that same connection rather than creating a second one.
 
 ### The consent invariant
 
 **Jerry only ever subscribes to the audio of users who ran `/heyjerry on`.** This is the rule the whole feature is built around, so it is worth stating precisely:
 
-- Every `receiver.subscribe()` call in `voiceAssistant.js` is immediately preceded by an `isOptedIn()` check in the same function. There are exactly two: the wake-word monitor in `startMonitoring()` and the utterance capture in `captureUtterance()`.
+- There is exactly **one** `receiver.subscribe()` call in `voiceAssistant.js` — the wake-word monitor in `startMonitoring()` — and it is immediately preceded by an `isOptedIn()` check in the same function. The utterance capture is a tee of that monitor's decoded stream, not a second subscription.
 - The set of people to listen to is decided in **one** place — `doSync()`, reached only via `syncSubscriptions(guildId)` — as "non-bot members of the bot's current voice channel who are opted in". Anyone else is unsubscribed and has their wake-word slot released.
 - `syncSubscriptions()` runs on voice connection state changes, on every `VoiceStateUpdate`, on `/heyjerry on|off`, and from a 30s reconcile timer. All of it is serialized on a per-guild promise chain so concurrent triggers can't double-subscribe.
 - Consent is re-checked **again** after the utterance is recorded. Someone who runs `/heyjerry off` mid-sentence has their audio discarded before it would reach any API.
@@ -276,9 +278,17 @@ Opt-in state lives in `data/voiceAssistant.json` and is written synchronously on
 - `/heyjerry on` - Let Jerry listen to you
 - `/heyjerry off` - Stop Jerry from listening (takes effect before the reply is sent)
 - `/heyjerry status` - Your opt-in state, whether the assistant is running, and who else in your voice channel is opted in
+- `/heyjerry join` - Bring Jerry into your voice channel to listen, without starting music. Requires you to be in a voice channel **and** opted in — summoning a bot that isn't allowed to hear you does nothing. Refused when the assistant isn't running, and when music or a `/record` session holds the connection in another channel. Announced in-channel, not ephemerally.
+- `/heyjerry leave` - Send Jerry away. Open to opted-in members in his channel, or anyone with Manage Server. Refused while music is playing/queued (use `/stop`) or a recording is running (use `/record stop`) — those own the connection.
 - `/heyjerry replies <on|off>` - Toggle whether Jerry speaks replies out loud vs. only reporting in the activity log (requires Manage Server)
 
-Listed under the **utility** category in `/help`.
+Listed under the **utility** category in `/help`, which reads the subcommand list off the command builder, so all six show up there automatically.
+
+### Connection ownership
+
+A guild has one voice connection, and three commands can create it: `/play` (via `MusicQueue#join`), `/record start`, and `/heyjerry join`. Whoever created it owns its lifecycle, and the other two must not hang it up. `voiceConnectionOwner({ connection, queueConnection, recording })` in `voiceAssistant.js` is the single test — `'music'` when `getQueue(guildId).connection` **is** this connection object, `'recorder'` while a recording runs, `'assistant'` otherwise.
+
+The assistant hangs up on a connection it owns 60s after the channel's last non-bot member leaves (`shouldAssistantAutoLeave`). The timer is armed and cancelled from `doSync()`, so every trigger that reconciles subscriptions re-decides it, and everything is re-checked when it fires: a connection replaced by a reconnect, `/play` claiming it mid-countdown, or people coming back all cancel the hang-up. Unknown inputs (channel not in cache, `musicQueue` import failed) fail safe by staying. The music queue keeps its own separate empty-queue auto-leave for connections it owns.
 
 ### Pipeline
 

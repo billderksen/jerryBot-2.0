@@ -25,6 +25,12 @@
 // selfDeaf at its `true` default), which means it receives no audio at all.
 // It is rejoined undeafened while at least one opted-in member is in the
 // channel, and re-deafened when the last one leaves or opts out.
+//
+// CONNECTION OWNERSHIP: the guild's one voice connection can have been created
+// by the music queue, by /record, or by /heyjerry join. Whoever created it owns
+// its lifecycle, and the other two must not hang it up - see
+// voiceConnectionOwner(). The assistant only ever destroys a connection it is
+// the last user of (no queue, no recording), and only once the channel is empty.
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -142,6 +148,11 @@ const EMBED_NAME_MAX = 80;
 const EMBED_TRANSCRIPT_MAX = 300;
 const EMBED_SUMMARY_MAX = 500;
 const AUTO_LEAVE_DEFER_MS = 60_000;
+// How long a connection the assistant is the last user of sits in an empty
+// channel before it is hung up. Same 60s the music queue gives an empty queue,
+// for the same reason: long enough to cover someone rejoining after a client
+// crash or a channel hop, short enough that Jerry isn't left idling alone.
+const ASSISTANT_AUTO_LEAVE_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 30_000;
 // Mirrors musicQueue.js's DUCK_MAX_MS (120s; not imported, to avoid a module
 // coupling for one number - bump this if that constant changes) plus a safety
@@ -327,6 +338,8 @@ function getGuildState(guildId) {
       active: new Set(), // users with a pipeline in flight
       wakeTimes: [], // wake timestamps, for the per-guild rate limit
       chain: Promise.resolve(), // serializes subscription bookkeeping
+      autoLeaveTimer: null, // pending hang-up for an empty channel
+      autoLeaveConnection: null, // which connection that timer was armed for
     };
     guildStates.set(guildId, state);
   }
@@ -513,6 +526,154 @@ function rejoinWithDeaf(state, selfDeaf) {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Connection ownership and auto-leave
+// ---------------------------------------------------------------------------
+
+/**
+ * Who a guild's single voice connection belongs to. Three commands can create
+ * one - /play (via musicQueue.join), /record and /heyjerry join - and only the
+ * creator's own lifecycle may hang it up. The music queue disconnects when its
+ * queue runs dry, /record's session ends with the recording; what is left over
+ * is a connection the assistant is the last user of, and only that one is the
+ * assistant's to destroy.
+ *
+ * Pure on purpose: this is the guard standing between "Jerry leaves an empty
+ * channel" and "Jerry hangs up on a song", and that has to be testable without
+ * a voice connection.
+ *
+ * @param {object} args
+ * @param {object|null} args.connection - the guild's live connection, if any
+ * @param {object|null} args.queueConnection - musicQueue's `getQueue(id).connection`
+ * @param {boolean} args.recording - voiceRecorder's isRecording(id)
+ * @returns {'none'|'music'|'recorder'|'assistant'}
+ */
+export function voiceConnectionOwner({ connection, queueConnection, recording }) {
+  if (!connection) return 'none';
+  // Identity, not truthiness: a queue that has been cleaned up nulls its
+  // connection, and a queue holding a DIFFERENT connection object (one it moved
+  // off after a reconnect) has no claim on this one.
+  if (queueConnection && queueConnection === connection) return 'music';
+  if (recording) return 'recorder';
+  return 'assistant';
+}
+
+/**
+ * Whether the assistant should hang up on the connection it owns.
+ * @param {object} args
+ * @param {string|null} args.owner - voiceConnectionOwner()'s verdict; null when unknown
+ * @param {number|null} args.humanCount - non-bot members in the channel; null when unknown
+ * @param {boolean} [args.busy] - a wake interaction is still in flight
+ * @returns {boolean}
+ *
+ * Unknown inputs (null) fail safe by falling through to false: never leaving is
+ * a bot idling in a channel, wrongly leaving is a disconnect mid-sentence.
+ */
+export function shouldAssistantAutoLeave({ owner, humanCount, busy = false }) {
+  return owner === 'assistant' && humanCount === 0 && !busy;
+}
+
+// musicQueue is imported dynamically here, as everywhere else in this file: it
+// probes for yt-dlp and reads its JSON stores at module scope, which a unit test
+// importing this module must not have to pay for.
+// @returns {Promise<string|null>} null means "couldn't tell" - callers must not act on it.
+async function assessConnectionOwner(guildId, connection) {
+  let queueConnection = null;
+  try {
+    const { getQueue } = await import('./musicQueue.js');
+    queueConnection = getQueue(guildId)?.connection ?? null;
+  } catch (err) {
+    console.error('[VoiceAssistant] could not check who owns the voice connection:', err.message);
+    return null;
+  }
+  return voiceConnectionOwner({ connection, queueConnection, recording: isRecording(guildId) });
+}
+
+// @returns {number|null} non-bot members in the connection's channel, or null if
+// the channel isn't in cache (see shouldAssistantAutoLeave: null never leaves).
+function countHumansIn(connection) {
+  const channelId = connection?.joinConfig.channelId;
+  const channel = channelId ? client?.channels.cache.get(channelId) : null;
+  if (!channel?.members) return null;
+  return [...channel.members.values()].filter((member) => !member.user.bot).length;
+}
+
+function clearAutoLeave(state) {
+  if (!state.autoLeaveTimer) return;
+  clearTimeout(state.autoLeaveTimer);
+  state.autoLeaveTimer = null;
+  state.autoLeaveConnection = null;
+}
+
+function armAutoLeave(state, connection) {
+  // Already counting down on this exact connection: leave the clock where it is
+  // rather than restarting it on every reconcile tick, or it would never expire.
+  if (state.autoLeaveTimer && state.autoLeaveConnection === connection) return;
+  clearAutoLeave(state);
+
+  state.autoLeaveConnection = connection;
+  state.autoLeaveTimer = setTimeout(() => {
+    state.autoLeaveTimer = null;
+    state.autoLeaveConnection = null;
+    // On the bookkeeping chain, so the checks below can't race a sync that is
+    // halfway through tearing monitors down.
+    enqueue(state, () => fireAutoLeave(state, connection));
+  }, ASSISTANT_AUTO_LEAVE_MS);
+  if (typeof state.autoLeaveTimer.unref === 'function') state.autoLeaveTimer.unref();
+
+  console.log(`[VoiceAssistant] Nobody left in ${state.guildId}'s channel, leaving in ${ASSISTANT_AUTO_LEAVE_MS / 1000}s`);
+}
+
+// Everything is re-checked here rather than trusted from arming time: 60 seconds
+// is long enough for /play to claim the connection, for the channel to fill back
+// up, or for a reconnect to replace the connection object entirely.
+async function fireAutoLeave(state, connection) {
+  if (!started) return;
+
+  // Identity check, the same one musicQueue's auto-leave timer makes against
+  // queues.get(guildId): a timer armed for a connection that is no longer the
+  // live one must never destroy its replacement.
+  const current = getVoiceConnection(state.guildId) ?? null;
+  if (current !== connection || connection.state.status === VoiceConnectionStatus.Destroyed) {
+    console.log(`[VoiceAssistant] Stale auto-leave timer for ${state.guildId}, ignoring`);
+    return;
+  }
+
+  const owner = await assessConnectionOwner(state.guildId, connection);
+  const humanCount = countHumansIn(connection);
+  const busy = state.active.size > 0 || state.capturing.size > 0;
+
+  if (!shouldAssistantAutoLeave({ owner, humanCount, busy })) {
+    // Still ours and still empty, just mid-interaction: give the reply its 60s
+    // rather than dropping the timer and waiting on the next reconcile tick.
+    if (busy && owner === 'assistant' && humanCount === 0) armAutoLeave(state, connection);
+    return;
+  }
+
+  console.log(`[VoiceAssistant] Leaving ${connection.joinConfig.channelId} in ${state.guildId} — empty and nothing else is using the connection`);
+  await stopAllMonitors(state);
+  try {
+    connection.destroy();
+  } catch (err) {
+    console.error('[VoiceAssistant] could not leave the empty channel:', err.message);
+  }
+}
+
+// Arm or cancel the hang-up for this guild. Called from doSync, so every trigger
+// that reconciles subscriptions - a voice state update, a connection going
+// Ready, an opt-in toggle, the 30s reconcile tick - also re-decides this.
+async function evaluateAutoLeave(state, connection, channel) {
+  const owner = await assessConnectionOwner(state.guildId, connection);
+  const humanCount = [...channel.members.values()].filter((member) => !member.user.bot).length;
+  const busy = state.active.size > 0 || state.capturing.size > 0;
+
+  if (shouldAssistantAutoLeave({ owner, humanCount, busy })) {
+    armAutoLeave(state, connection);
+  } else {
+    clearAutoLeave(state);
+  }
+}
+
 async function doSync(state) {
   if (!started || !client) return;
 
@@ -520,6 +681,7 @@ async function doSync(state) {
   if (connection !== state.connection) bindConnection(state, connection);
 
   if (!connection || connection.state.status === VoiceConnectionStatus.Destroyed) {
+    clearAutoLeave(state);
     await stopAllMonitors(state);
     return;
   }
@@ -527,9 +689,14 @@ async function doSync(state) {
   const channelId = connection.joinConfig.channelId;
   const channel = channelId ? client.channels.cache.get(channelId) : null;
   if (!channel || !channel.members) {
+    clearAutoLeave(state);
     await stopAllMonitors(state);
     return;
   }
+
+  // Before the deafen flip below, which returns early: an empty channel still
+  // has to start its clock on the pass that noticed it was empty.
+  await evaluateAutoLeave(state, connection, channel);
 
   // The only place the set of people we listen to is decided. A dead wake engine
   // collapses it to nobody, which makes every path below - unsubscribe everyone,
@@ -620,12 +787,75 @@ function bindConnection(state, connection) {
       newState.status === VoiceConnectionStatus.Destroyed ||
       newState.status === VoiceConnectionStatus.Disconnected
     ) {
-      enqueue(state, () => stopAllMonitors(state));
+      enqueue(state, async () => {
+        clearAutoLeave(state); // nothing left to hang up on
+        await stopAllMonitors(state);
+      });
     }
   };
 
   connection.on('stateChange', handler);
   state.stateHandler = handler;
+}
+
+/**
+ * Join a voice channel to listen, with no music involved (/heyjerry join).
+ *
+ * selfDeaf is false because a deafened bot receives nothing at all, but the flag
+ * is only the starting point: doSync owns the deafen state from here, and will
+ * re-deafen if nobody in the channel is opted in. The caller is expected to have
+ * checked that summoning makes sense (assistant running, invoker opted in) and
+ * that nothing else owns a connection elsewhere - see /heyjerry join.
+ *
+ * @param {import('discord.js').VoiceBasedChannel} voiceChannel
+ * @returns {import('@discordjs/voice').VoiceConnection}
+ */
+export function joinForListening(voiceChannel) {
+  const connection = joinVoiceChannel({
+    channelId: voiceChannel.id,
+    guildId: voiceChannel.guild.id,
+    adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+    selfDeaf: false,
+  });
+
+  // Explicit rather than waiting for the bot's own VOICE_STATE_UPDATE: this sync
+  // is what runs bindConnection, and the connection has to be bound BEFORE it
+  // reaches Ready or the transition that builds the monitors fires with nothing
+  // listening for it. (The gateway echo and the 30s reconcile are the backstops,
+  // not the mechanism.) Not awaited - the caller is waiting on Ready instead, and
+  // the subscribing pass is the one the Ready transition triggers anyway.
+  syncSubscriptions(voiceChannel.guild.id);
+  return connection;
+}
+
+/**
+ * Hang up this guild's voice connection (/heyjerry leave, and the empty-channel
+ * timer's manual counterpart). Destroying it emits the Destroyed transition that
+ * bindConnection's handler watches, which is what stops the monitors - nothing
+ * is torn down here beyond the pending auto-leave.
+ *
+ * Ownership is NOT checked here: the caller decides whether the music queue or a
+ * recording has a better claim, because only the caller can say so out loud.
+ * @param {string} guildId
+ * @returns {boolean} whether there was a live connection to destroy
+ */
+export function leaveVoiceChannel(guildId) {
+  const state = guildStates.get(guildId);
+  if (state) clearAutoLeave(state);
+
+  const connection = getVoiceConnection(guildId);
+  if (!connection || connection.state.status === VoiceConnectionStatus.Destroyed) return false;
+  connection.destroy();
+  return true;
+}
+
+/**
+ * @returns {boolean} whether the wake-word sidecar has died. The assistant is
+ * still "enabled" in that case but cannot hear a wake word until the bot
+ * restarts, which is the difference /heyjerry join has to tell people about.
+ */
+export function isWakeEngineDead() {
+  return engineDead;
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,6 +1567,7 @@ export function stopVoiceAssistant() {
   }
 
   for (const state of guildStates.values()) {
+    clearAutoLeave(state);
     if (state.connection && state.stateHandler) {
       state.connection.off('stateChange', state.stateHandler);
     }
