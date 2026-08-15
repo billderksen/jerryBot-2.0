@@ -120,25 +120,36 @@ const CONNECTION_SETTLE_MS = 250;
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// --- Serialized, 403-tolerant yt-dlp fetches ---------------------------------
+// --- Serialized, 403-tolerant media downloads --------------------------------
 //
-// YouTube answers "HTTP Error 403: Forbidden" on video data when it sees a burst of
-// fetches from one IP: a controlled test of four videos had two of the four fail when run
-// in parallel and all four succeed when run one after another. During a playlist this
-// module has two in flight at once - the stream lookup for the song being started, and the
-// background cache download of the song already playing - which is enough to trigger it,
-// and a single 403 used to fail the song straight into a skip.
+// YouTube answers "HTTP Error 403: Forbidden" to media fetches it sees as a burst from one
+// IP. This module used to make two per song at once: ffmpeg pulling the googlevideo stream
+// URL for playback, and yt-dlp downloading the same audio again to cache it for seeking.
+// The production logs show exactly what that cost - 24 cache downloads 403'd, 0 metadata
+// lookups did, and 23 songs died as "FFmpeg process closed with code 8", which is ffmpeg's
+// exit code for a 403 (verified). A song whose stream 403s produces no audio at all, so the
+// player goes Idle and the queue skips it silently, with nothing to retry and nothing
+// logged that says why.
 //
-// So both go through one process-wide gate of width 1, and a 403 is treated as the
-// transient rate-limit it is rather than as a dead video. The cheap listing calls (radio
-// mixes, search autocomplete) stay ungated - they are not what YouTube is counting.
+// So there is now one media fetch per song: play() downloads the audio to a local file
+// through this gate and plays ffmpeg off that file. Nothing else fetches media, ffmpeg
+// never touches a googlevideo URL, and the one fetch that remains fails somewhere a retry
+// can reach. The cheap listing calls (radio mixes, search autocomplete) stay ungated - they
+// are not what YouTube is counting.
 
 // Waits before the 2nd and 3rd attempt, so three attempts in all. Passed around as a
 // parameter so the retry loop can be tested without sitting out ten real seconds.
 export const DOWNLOAD_403_BACKOFF_MS = [3000, 7000];
 
-// Starting a song outranks caching one that is already audible
+// Starting a song outranks any background fetch. Only the play path downloads today, so the
+// ladder matters across guilds (one gate, several queues) and is what a future next-song
+// prefetch would queue at.
 export const DOWNLOAD_PRIORITY = { CACHE: 0, PLAY: 1 };
+
+// A download that stops making progress must not hold the gate for the rest of the evening.
+// execa kills the child on timeout (SIGTERM, error.timedOut) rather than just abandoning the
+// promise, so the slot is genuinely released and no yt-dlp is left running.
+export const DOWNLOAD_TIMEOUT_MS = 60_000;
 
 // One slot, handed out highest-priority-first and FIFO within a priority. Ownership of the
 // slot passes straight from a releasing holder to the next waiter, so the count can never
@@ -232,6 +243,7 @@ export class DownloadAbortedError extends Error {
 // instead of being one more "Error playing song" among the dead videos.
 export function describeDownloadFailure(error) {
   if (error?.rateLimited) return `YouTube rate-limited this download (${error.attempts} attempts)`;
+  if (error?.timedOut) return `the download did not finish within ${DOWNLOAD_TIMEOUT_MS / 1000}s`;
   return error?.message || 'unknown error';
 }
 
@@ -996,9 +1008,8 @@ export class MusicQueue {
     this.volume = 1.0;
     this.currentResource = null;
     this.currentFFmpeg = null;
-    this.cachedAudioPath = null; // Path to cached audio file
-    this.isCaching = false; // Whether we're currently caching audio
-    this.currentAudioUrl = null; // Current streaming URL
+    this.cachedAudioPath = null; // Path to the downloaded audio file being played
+    this.isCaching = false; // Whether a download is in flight
     this.songStartTime = null; // Timestamp when current song started playing
     this.pausedAt = null; // Timestamp of the pause currently in effect (null = not paused)
     this.totalPausedMs = 0; // Paused milliseconds already accumulated for this song
@@ -1006,9 +1017,8 @@ export class MusicQueue {
     this.seekOffset = 0; // Offset in seconds for when song started (for seeking)
     this.historyIndex = -1; // Current position in recently played history (-1 = not navigating history)
     this.playingFromHistory = false; // Flag to prevent re-adding history songs
-    this.cacheGeneration = 0; // Bumped whenever the current song changes - stale background downloads are discarded
-    this.cachingGeneration = null; // Generation of the in-flight background download (null = none in flight)
-    this.cacheProcess = null; // yt-dlp child of the in-flight background download, so it can be stopped
+    this.cacheGeneration = 0; // Bumped whenever the current song changes - stale downloads are discarded
+    this.downloadProcess = null; // yt-dlp child of the in-flight download, so it can be stopped
     this.autoLeaveTimer = null; // Handle for the empty-queue auto-disconnect timer
     this.consecutiveFailures = 0; // Consecutive play() failures - trips a breaker at 3
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
@@ -1321,7 +1331,7 @@ export class MusicQueue {
 
     this.isPlaying = true;
     this.currentSong = this.songs.shift();
-    this.cacheGeneration++; // New song - any background download still in flight is now stale
+    this.cacheGeneration++; // New song - any download still in flight is now stale
 
     // Only add to recently played if not playing from history navigation
     if (!this.playingFromHistory) {
@@ -1358,58 +1368,41 @@ export class MusicQueue {
       updatePresenceCallback(this.currentSong.title);
     }
 
-    // The generation this start belongs to. yt-dlp is a multi-second subprocess and a 403
-    // adds ten more seconds of backoff on top, so a stop, a skip or a teardown can easily
-    // land while it runs - and whichever of those it was has already moved the queue on.
+    // The generation this start belongs to. The download is a multi-second subprocess and a
+    // 403 adds ten more seconds of backoff on top, so a stop, a skip or a teardown can
+    // easily land while it runs - and whichever of those it was has already moved the queue
+    // on.
     const gen = this.cacheGeneration;
     const songUrl = this.currentSong.url;
     const songTitle = this.currentSong.title;
 
     try {
-      if (!isAllowedMediaUrl(songUrl)) {
-        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
-      }
-
-      // Get the audio URL for streaming
-      // Format priority: opus (best quality) > m4a/aac > webm/vorbis > any audio > any format
-      // Prefer 160kbps+ audio when available
-      const result = await runGatedDownload(() => ytDlpExec(songUrl, {
-        ...ytCookieOpts,
-        dumpSingleJson: true,
-        noCheckCertificates: true,
-        noWarnings: true,
-        preferFreeFormats: true,
-        format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
-        audioQuality: 0 // Best quality
-      }), {
-        priority: DOWNLOAD_PRIORITY.PLAY,
-        label: `stream lookup for "${songTitle}"`,
-        abortReason: () => this.downloadAbortReason(gen)
-      });
+      // Download first, then play the file. The audio is fetched exactly once, by the one
+      // component that can retry a 403 - ffmpeg is never pointed at a googlevideo URL,
+      // where a 403 arrives as an instantly-silent song and an unexplained skip.
+      const cachePath = await this.downloadSongToCache(songUrl, songTitle, gen);
 
       // The queue can have moved on while yt-dlp ran; playing this now would hijack
       // whatever song took its place
       const movedOn = this.downloadAbortReason(gen);
-      if (movedOn) throw new DownloadAbortedError(movedOn);
-
-      this.currentAudioUrl = result.url;
-
-      // Log audio quality info for debugging
-      if (result.acodec || result.abr) {
-        console.log(`Audio quality: ${result.acodec || 'unknown'} @ ${result.abr || 'unknown'}kbps`);
+      if (movedOn) {
+        try { unlinkSync(cachePath); } catch (e) {}
+        throw new DownloadAbortedError(movedOn);
       }
-      
-      // Start streaming immediately
-      this.playFromUrl(this.currentAudioUrl, 0);
-      
-      // Start caching in the background for instant seeking later
-      this.cacheAudioInBackground();
-      
+
+      // The downloaded file *is* the cache, so seeking is instant from the first second
+      this.cachedAudioPath = cachePath;
+      this.playFromCache(0);
+      broadcastState(); // the dashboard's cached indicator is true from the start now
+
     } catch (error) {
       // Not a failure: a stop, a skip or a teardown got here first and owns the queue's
-      // state now, so this call touches nothing and advances nothing
-      if (error?.aborted) {
-        console.log(`[MusicQueue] Gave up starting "${songTitle}" - ${error.message}`);
+      // state now, so this call touches nothing and advances nothing. Read from the
+      // generation as well as the error, since cancelling kills the yt-dlp child and that
+      // arrives here as an ordinary subprocess failure.
+      const movedOn = this.downloadAbortReason(gen);
+      if (error?.aborted || movedOn) {
+        console.log(`[MusicQueue] Gave up starting "${songTitle}" - ${error?.aborted ? error.message : movedOn}`);
         return;
       }
 
@@ -1439,87 +1432,26 @@ export class MusicQueue {
     }
   }
 
-  // Play from URL at specific position (for initial play and fallback seek)
-  playFromUrl(audioUrl, seekSeconds = 0) {
-    const ffmpegArgs = [];
-    
-    if (seekSeconds > 0) {
-      ffmpegArgs.push('-ss', String(Math.floor(seekSeconds)));
+  // Fetch one song's audio to a local file, through the download gate, retrying a YouTube
+  // 403. Returns the path to the finished file; deletes the part-file on any failure.
+  //
+  // A method rather than a free function so tests can drive play() end to end without the
+  // network, and so the whole download sits behind one seam.
+  async downloadSongToCache(songUrl, songTitle, gen) {
+    if (!isAllowedMediaUrl(songUrl)) {
+      throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
     }
-    
-    // Store the seek offset - songStartTime will be set when player actually starts
-    this.seekOffset = seekSeconds;
-    
-    ffmpegArgs.push(
-      '-reconnect', '1',
-      '-reconnect_streamed', '1',
-      '-reconnect_delay_max', '5',
-      '-i', audioUrl,
-      '-analyzeduration', '0',
-      '-loglevel', '0',
-      '-af', buildFilterChain(),
-      '-f', 's16le',
-      '-ar', '48000', // Discord's native sample rate
-      '-ac', '2',     // Stereo
-      'pipe:1'
-    );
-    
-    const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
-    this.currentFFmpeg = ffmpeg;
-    
-    ffmpeg.on('close', (code) => {
-      console.log(`FFmpeg process closed with code ${code}`);
-    });
-    
-    ffmpeg.on('error', (err) => {
-      console.error('FFmpeg error:', err);
-    });
-    
-    ffmpeg.stderr.on('data', () => {});
-    
-    const resource = createAudioResource(ffmpeg.stdout, { 
-      inputType: StreamType.Raw,
-      inlineVolume: true
-    });
-    
-    if (resource.volume) {
-      // Apply logarithmic volume curve for natural perception
-      const actualVolume = Math.pow(this.volume, 2);
-      resource.volume.setVolume(actualVolume);
-    }
-    this.currentResource = resource;
-    
-    this.player.play(resource);
-    console.log(`Now playing: ${this.currentSong.title}${seekSeconds > 0 ? ` from ${seekSeconds}s` : ''}`);
-  }
 
-  // Cache audio in the background for instant seeking
-  async cacheAudioInBackground() {
-    if (!this.currentSong) return;
-
-    // Snapshot the generation this download belongs to - the song may change while yt-dlp runs
-    const gen = this.cacheGeneration;
-    if (this.isCaching && this.cachingGeneration === gen) return; // already downloading this song
-
+    const cachePath = join(tmpdir(), `godcord_${this.guildId}_${Date.now()}.opus`);
+    console.log(`Downloading audio to: ${cachePath}`);
     this.isCaching = true;
-    this.cachingGeneration = gen;
-    const tempFileName = `godcord_${this.guildId}_${Date.now()}.opus`;
-    const cachePath = join(tmpdir(), tempFileName);
-    const songUrl = this.currentSong.url;
-    const songTitle = this.currentSong.title;
-
-    console.log(`Background caching audio to: ${cachePath}`);
 
     try {
-      if (!isAllowedMediaUrl(songUrl)) {
-        throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
-      }
-
-      // Cache at highest quality opus (quality 0 = best, ~256kbps VBR)
-      // Use same format preference as streaming for consistency
+      // Highest quality opus (quality 0 = best, ~256kbps VBR)
       await runGatedDownload(() => {
-        // .exec() hands back the child process rather than its parsed output, so an
-        // invalidated download can actually be stopped instead of running on unwatched
+        // .exec() hands back the child process rather than its parsed output, so a
+        // cancelled or timed-out download can actually be stopped instead of running on
+        // unwatched, holding the one slot the next song needs before it can make a sound
         const child = ytDlpExec.exec(songUrl, {
           ...ytCookieOpts,
           output: cachePath,
@@ -1531,47 +1463,35 @@ export class MusicQueue {
           ffmpegLocation: ffmpegPath,
           format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
           postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
-        });
-        this.cacheProcess = child;
+        }, { timeout: DOWNLOAD_TIMEOUT_MS });
+        this.downloadProcess = child;
         return child.finally(() => {
-          if (this.cacheProcess === child) this.cacheProcess = null;
+          if (this.downloadProcess === child) this.downloadProcess = null;
         });
       }, {
-        priority: DOWNLOAD_PRIORITY.CACHE,
-        label: `background cache of "${songTitle}"`,
+        priority: DOWNLOAD_PRIORITY.PLAY,
+        label: `download of "${songTitle}"`,
         abortReason: () => this.downloadAbortReason(gen)
       });
 
-      // Only set cached path if this download still belongs to the song that's playing
-      if (gen === this.cacheGeneration && this.isPlaying && this.currentSong) {
-        this.cachedAudioPath = cachePath;
-        console.log('Audio cached successfully - seeking will now be instant!');
-        broadcastState(); // Update UI to show cached checkmark
-      } else {
-        // Song changed while we were downloading, discard this file
-        console.log('Discarding stale background cache (song changed during download)');
-        try { unlinkSync(cachePath); } catch (e) {}
+      // yt-dlp exiting 0 without leaving the file where we asked for it would otherwise
+      // reach playFromCache(), which logs and returns - and the queue would sit forever on
+      // a song that never plays and so never ends. Fail it into the skip path instead.
+      if (!existsSync(cachePath)) {
+        throw new Error(`yt-dlp reported success but left no file at ${cachePath}`);
       }
-    } catch (error) {
-      // A job dropped before it started, or a download killed part-way, is the queue
-      // moving on rather than anything being wrong with the song
-      if (error?.aborted || gen !== this.cacheGeneration) {
-        console.log(`[MusicQueue] Background cache of "${songTitle}" abandoned - ${error?.aborted ? error.message : 'song changed'}`);
-      } else {
-        console.error(`Background caching failed for "${songTitle}": ${describeDownloadFailure(error)}`);
-        if (!error?.rateLimited) console.error(error);
-      }
-      try { unlinkSync(cachePath); } catch (e) {}
-    }
 
-    // Only release the flag if a newer download hasn't already claimed it
-    if (this.cachingGeneration === gen) {
+      return cachePath;
+    } catch (error) {
+      // Whatever went wrong, yt-dlp may have left a part-file behind
+      try { unlinkSync(cachePath); } catch (e) {}
+      throw error;
+    } finally {
       this.isCaching = false;
-      this.cachingGeneration = null;
     }
   }
 
-  // Play from cached audio file at specific position
+  // Play from the downloaded audio file at a specific position
   playFromCache(seekSeconds = 0) {
     if (!this.cachedAudioPath || !existsSync(this.cachedAudioPath)) {
       console.error('Cached audio file not found');
@@ -1640,14 +1560,13 @@ export class MusicQueue {
       }
     }
     this.cachedAudioPath = null;
-    this.currentAudioUrl = null;
     this.isCaching = false;
     this.resetPlaybackClock();
-    this.cacheGeneration++; // Invalidate any background download still in flight
-    // ...and stop it for real. Its file is discarded from here on either way, but downloads
-    // are serialized now, so leaving it running would make the next song's stream lookup
-    // queue behind a download whose only remaining job is to be thrown away.
-    this.abortBackgroundCache();
+    this.cacheGeneration++; // Invalidate any download still in flight
+    // ...and stop it for real. Its file is discarded from here on either way, and with the
+    // audio now downloaded before it is played, a doomed download left running would hold
+    // the one slot the next song needs before it can make a sound.
+    this.abortDownload();
   }
 
   // Why a fetch taken out for generation `gen` should not proceed - null means carry on.
@@ -1660,15 +1579,15 @@ export class MusicQueue {
     return null;
   }
 
-  // Stop the in-flight background cache download, if there is one.
-  abortBackgroundCache() {
-    const child = this.cacheProcess;
+  // Stop the in-flight download, if there is one.
+  abortDownload() {
+    const child = this.downloadProcess;
     if (!child) return false;
-    this.cacheProcess = null;
+    this.downloadProcess = null;
     try {
       child.kill();
     } catch (err) {
-      console.error('[MusicQueue] Failed to stop the background cache download:', err.message);
+      console.error('[MusicQueue] Failed to stop the download:', err.message);
     }
     return true;
   }
@@ -1767,7 +1686,20 @@ export class MusicQueue {
   // when a song is actually ending, or it would leak onto the next song's natural end.
   stopForUserAction() {
     const status = this.player.state.status;
-    if (status === AudioPlayerStatus.Idle) return false;
+    if (status === AudioPlayerStatus.Idle) {
+      // An Idle player used to mean there was nothing to stop. Now a song can be seconds
+      // into its download with no audio yet, and the user means that one - so cancel it
+      // here. Nothing else would: no audio ever started, so no Idle transition is coming
+      // to run playNext(), and the queue would otherwise sit on a song it had already
+      // been told to abandon until the download finished.
+      if (!this.isPlaying) return false;
+
+      this.skipRequested = true;
+      this.cacheGeneration++; // play() drops the download when it lands
+      this.abortDownload();   // ...and it lands now rather than in a minute
+      this.playNext();
+      return true;
+    }
 
     this.skipRequested = true;
     // Only a Playing player drains its silence padding frames; from any other state a plain
@@ -2103,13 +2035,10 @@ export class MusicQueue {
     // Store old FFmpeg reference
     const oldFFmpeg = this.currentFFmpeg;
 
-    // Use cached file if available (instant), otherwise use URL (slower)
+    // The song is played from a local file, so seeking is always instant - and there is
+    // nothing to fall back to if that file has gone
     if (this.cachedAudioPath && existsSync(this.cachedAudioPath)) {
-      console.log('Using cached audio for instant seek');
       this.playFromCache(target);
-    } else if (this.currentAudioUrl) {
-      console.log('Cache not ready, using URL for seek (may have slight delay)');
-      this.playFromUrl(this.currentAudioUrl, target);
     } else {
       console.log('No audio source available for seek');
       this.isSeeking = false;
@@ -2153,8 +2082,6 @@ export class MusicQueue {
 
     if (this.cachedAudioPath && existsSync(this.cachedAudioPath)) {
       this.playFromCache(currentPosition);
-    } else if (this.currentAudioUrl) {
-      this.playFromUrl(this.currentAudioUrl, currentPosition);
     } else {
       this.isSeeking = false;
       this.clearSeekWatchdog();

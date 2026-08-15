@@ -16,6 +16,7 @@ import {
   planDownloadRetry,
   runGatedDownload,
   describeDownloadFailure,
+  DOWNLOAD_TIMEOUT_MS,
 } from '../src/utils/musicQueue.js';
 
 // A voice connection is, as far as this module's lifecycle code is concerned, an EventEmitter
@@ -596,6 +597,11 @@ test('describeDownloadFailure: a rate-limited skip says so, in one line', () => 
   assert.equal(describeDownloadFailure(new Error('Video unavailable')), 'Video unavailable');
 });
 
+test('describeDownloadFailure: a download that hung says so too', () => {
+  const timedOut = Object.assign(new Error('Command timed out after 60000 milliseconds'), { timedOut: true });
+  assert.equal(describeDownloadFailure(timedOut), `the download did not finish within ${DOWNLOAD_TIMEOUT_MS / 1000}s`);
+});
+
 test('downloadAbortReason: a fetch is dropped once the song it belongs to has moved on', () => {
   const queue = new MusicQueue('download-abort-reason');
   const gen = queue.cacheGeneration;
@@ -611,16 +617,195 @@ test('downloadAbortReason: a fetch is dropped once the song it belongs to has mo
   assert.match(queue.downloadAbortReason(current), /torn down/);
 });
 
-test('an invalidated background download is stopped, not just ignored', () => {
-  // Its file is thrown away either way - but downloads are serialized now, so leaving it
-  // running would make the next song's stream lookup queue behind a doomed download
+test('an invalidated download is stopped, not just ignored', () => {
+  // Its file is thrown away either way - but the audio is downloaded before it is played
+  // now, so leaving a doomed download running holds the slot the next song needs to start
   const queue = new MusicQueue('download-abort-kill');
   let kills = 0;
-  queue.cacheProcess = { kill: () => { kills++; } };
+  queue.downloadProcess = { kill: () => { kills++; } };
 
   queue.cleanupCachedAudio();
 
   assert.equal(kills, 1);
-  assert.equal(queue.cacheProcess, null);
-  assert.equal(queue.abortBackgroundCache(), false, 'nothing left to stop');
+  assert.equal(queue.downloadProcess, null);
+  assert.equal(queue.abortDownload(), false, 'nothing left to stop');
+});
+
+// --- download-then-play ------------------------------------------------------
+
+// Drives play() without the network or ffmpeg. The download becomes a controllable stub and
+// playback is recorded rather than performed.
+//
+// playNext is stubbed to the part of its contract these tests care about: the real one
+// writes to the shared recently-played file and, on an empty queue, reaches for the radio
+// (a live yt-dlp call). It is covered by its own tests elsewhere.
+function buildDownloadQueue(guildId) {
+  const queue = new MusicQueue(guildId);
+  // Keeps play() off the shared recently-played and listening-stats files
+  queue.playingFromHistory = true;
+  queue.played = [];
+  queue.playNextCalls = 0;
+  queue.playFromCache = function (seconds) { this.played.push({ path: this.cachedAudioPath, seconds }); };
+  queue.playNext = async function () {
+    this.playNextCalls++;
+    this.currentSong = null;
+    this.isPlaying = false;
+  };
+  return queue;
+}
+
+// Records what the module logs, so a test can assert on the line a human reads in `pm2 logs`
+function captureConsole() {
+  const lines = [];
+  const real = { error: console.error, log: console.log, warn: console.warn };
+  const record = (...args) => lines.push(args.map(a => (a instanceof Error ? a.message : String(a))).join(' '));
+  console.error = record;
+  console.log = record;
+  console.warn = record;
+  return {
+    find: (pattern) => lines.some(line => pattern.test(line)),
+    dump: () => `logged:\n${lines.join('\n')}`,
+    restore: () => Object.assign(console, real)
+  };
+}
+
+const aSong = (title = 'Gragas - Gangsta Paradise (AI Cover)') => ({
+  title,
+  url: 'https://www.youtube.com/watch?v=qrCRgIu2QtU',
+  duration: 180,
+  requestedBy: 'test'
+});
+
+test('(g) the play path hands ffmpeg a local file, never a YouTube URL', async () => {
+  // The bug this whole change is about: ffmpeg pulling a googlevideo URL that 403s produces
+  // a song with no audio, which the player reports as Idle and the queue skips silently.
+  const queue = buildDownloadQueue('play-from-file');
+  queue.downloadSongToCache = async () => '/tmp/godcord_test.opus';
+  queue.songs = [aSong()];
+
+  await queue.play();
+
+  assert.equal(queue.played.length, 1, 'playback started');
+  assert.equal(queue.played[0].path, '/tmp/godcord_test.opus');
+  assert.equal(queue.played[0].seconds, 0);
+  assert.ok(!/^https?:/.test(queue.played[0].path), 'what ffmpeg opens is a file, not a URL');
+  assert.equal(queue.cachedAudioPath, '/tmp/godcord_test.opus', 'and it doubles as the seek cache');
+});
+
+test('(a) one media fetch per song - nothing downloads alongside playback', () => {
+  // The colliding pair was ffmpeg's stream pull and a second, concurrent yt-dlp download of
+  // the same audio. There is no second fetch to collide with any more.
+  const queue = new MusicQueue('single-fetch');
+  assert.equal(queue.cacheAudioInBackground, undefined, 'the concurrent cache download is gone');
+  assert.equal(queue.playFromUrl, undefined, 'and so is the path that streamed from a URL');
+});
+
+test('(f) a skip during the download cancels it and moves the queue on at once', async () => {
+  const queue = buildDownloadQueue('skip-mid-download');
+  let released;
+  let kills = 0;
+  const downloadStarted = { done: false };
+  queue.downloadSongToCache = () => new Promise(resolve => {
+    downloadStarted.done = true;
+    // The real method parks the yt-dlp child here for the cancellation to find
+    queue.downloadProcess = { kill: () => { kills++; } };
+    released = () => resolve('/tmp/godcord_skipped.opus');
+  });
+  queue.songs = [aSong(), aSong('next up')];
+
+  const starting = queue.play();
+  await tick();
+  assert.equal(downloadStarted.done, true, 'the download is in flight');
+  assert.equal(queue.player.state.status, AudioPlayerStatus.Idle, 'with no audio yet');
+
+  const acted = queue.skip();
+
+  assert.equal(kills, 1, 'the yt-dlp child was killed rather than left running');
+  assert.equal(queue.playNextCalls, 1, 'the queue advanced immediately, not after the download');
+  assert.equal(queue.skipRequested, true, 'and loop mode will not re-queue the skipped song');
+
+  // The download lands afterwards, as it always will - it must not resurrect the song
+  released();
+  await starting;
+  assert.equal(queue.played.length, 0, 'no zombie playback from the cancelled start');
+  assert.equal(queue.playNextCalls, 1, 'and the queue was not advanced twice');
+});
+
+test('(f) stop() during the download cannot be resurrected by the download landing', async () => {
+  const queue = buildDownloadQueue('stop-mid-download');
+  let released;
+  queue.downloadSongToCache = () => new Promise(resolve => { released = () => resolve('/tmp/godcord_stopped.opus'); });
+  queue.songs = [aSong()];
+
+  const starting = queue.play();
+  await tick();
+  queue.stop();
+
+  assert.equal(queue.songs.length, 0, 'the queue was emptied');
+  released();
+  await starting;
+  assert.equal(queue.played.length, 0, 'the song that was stopped never started playing');
+});
+
+test('(b) a genuinely dead video fails once and skips, as before', async () => {
+  const queue = buildDownloadQueue('dead-video');
+  queue.downloadSongToCache = async () => { throw new Error('ERROR: Video unavailable'); };
+  queue.songs = [aSong('a dead one')];
+
+  const logged = captureConsole();
+  try {
+    await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.consecutiveFailures, 1, 'one failure against the breaker');
+  assert.equal(queue.playNextCalls, 1, 'and the queue moved on');
+  assert.equal(queue.played.length, 0);
+  assert.ok(logged.find(/Skipping "a dead one": ERROR: Video unavailable/), logged.dump());
+});
+
+test('(c) a 403 storm skips the song once, saying why', async () => {
+  const queue = buildDownloadQueue('rate-limited');
+  queue.downloadSongToCache = async () => {
+    // What runGatedDownload throws after exhausting the schedule
+    throw Object.assign(new Error('Command failed with exit code 1'), { rateLimited: true, attempts: 3 });
+  };
+  queue.songs = [aSong('a rate-limited one')];
+
+  const logged = captureConsole();
+  try {
+    await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.consecutiveFailures, 1, 'three attempts, one failure - retries are internal');
+  assert.equal(queue.playNextCalls, 1);
+  assert.ok(
+    logged.find(/Skipping "a rate-limited one": YouTube rate-limited this download \(3 attempts\)/),
+    logged.dump()
+  );
+});
+
+test('a download killed by the cancellation is not reported as a broken song', async () => {
+  // Killing the child surfaces as an ordinary subprocess failure, so the error alone cannot
+  // tell it apart from a dead video - the generation is what says the queue moved on
+  const queue = buildDownloadQueue('killed-not-failed');
+  queue.downloadSongToCache = async (url, title, gen) => {
+    queue.cacheGeneration++; // the skip that killed it
+    throw new Error('Command failed with exit code 255');
+  };
+  queue.songs = [aSong()];
+
+  const logged = captureConsole();
+  try {
+    await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.consecutiveFailures, 0, 'not counted against the breaker');
+  assert.equal(queue.playNextCalls, 0, 'and not advanced twice - whoever cancelled owns that');
+  assert.ok(logged.find(/Gave up starting/), logged.dump());
 });
