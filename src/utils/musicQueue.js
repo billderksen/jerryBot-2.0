@@ -108,6 +108,15 @@ const SEEK_WATCHDOG_MS = 10000;
 const DUCK_STALL_MS = 10000;
 // ...or overruns this total, however healthy it looks
 const DUCK_MAX_MS = 120000;
+// How long a voice connection that raised an 'error' gets to come back to Ready before the
+// queue gives up on it. Matches the window the Disconnected handler allows its own reconnect
+// race, so both failure paths give Discord the same amount of rope.
+const CONNECTION_RECOVERY_MS = 5000;
+// A connection 'error' usually arrives a beat before the WebSocket close that explains it, so
+// the connection's status is never read until it has had this long to settle.
+const CONNECTION_SETTLE_MS = 250;
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Load recently played from file
 function loadRecentlyPlayed() {
@@ -635,7 +644,7 @@ function startPositionBroadcast() {
   positionBroadcastInterval = setInterval(() => {
     const firstQueue = queues.values().next().value;
     if (firstQueue && firstQueue.isPlaying && firstQueue.songStartTime &&
-        firstQueue.player.state.status !== AudioPlayerStatus.Paused) {
+        !isPlayerPaused(firstQueue.player.state.status)) {
       broadcastState();
     } else {
       stopPositionBroadcast();
@@ -650,6 +659,14 @@ function stopPositionBroadcast() {
   }
 }
 
+// The dashboard has one "paused" indicator and the player has two ways of holding a resource
+// without playing it: Paused, which somebody asked for, and AutoPaused, which @discordjs/voice
+// enters on its own as soon as no subscribed connection is Ready. Reporting AutoPaused as
+// playing is what let a dead voice link render as a progress bar running over silence.
+export function isPlayerPaused(status) {
+  return status === AudioPlayerStatus.Paused || status === AudioPlayerStatus.AutoPaused;
+}
+
 function broadcastState(seekPosition = null) {
   if (!webUpdateCallback) return;
 
@@ -658,7 +675,7 @@ function broadcastState(seekPosition = null) {
 
   if (firstQueue) {
     // Calculate current playback position in seconds (paused time excluded)
-    const isPaused = firstQueue.player.state.status === AudioPlayerStatus.Paused;
+    const isPaused = isPlayerPaused(firstQueue.player.state.status);
     const speed = globalSettings.mixerFilters?.speed || 1.0;
     const position = firstQueue.getPlaybackElapsedMs() / 1000 * speed;
     webUpdateCallback({
@@ -767,6 +784,35 @@ function awaitClipEnd(player, resource) {
   });
 }
 
+// Wait, for at most `timeoutMs`, for a voice connection to be usable again.
+//
+// The verdict is taken at the end of the window rather than the moment Ready is first seen,
+// because a Ready sighting is not the same as a healthy connection: a connection 'error'
+// typically arrives just before the WebSocket close that caused it, so the status at the
+// instant of the error can still read Ready, and a reconnect can pass through Ready on its
+// way back out again. So every Ready has to survive a settle before it counts.
+export async function waitForReadyConnection(connection, timeoutMs = CONNECTION_RECOVERY_MS, settleMs = CONNECTION_SETTLE_MS) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (true) {
+    await delay(Math.max(0, Math.min(settleMs, deadline - Date.now())));
+
+    if (connection.state.status === VoiceConnectionStatus.Ready) return true;
+    // Nothing is coming back from here, so don't sit out the rest of the window
+    if (connection.state.status === VoiceConnectionStatus.Destroyed) return false;
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return false;
+
+    try {
+      await entersState(connection, VoiceConnectionStatus.Ready, remaining);
+    } catch {
+      return false;
+    }
+    // Reached Ready - loop back round to confirm it holds
+  }
+}
+
 export class MusicQueue {
   constructor(guildId, guildInfo = null) {
     this.guildId = guildId;
@@ -800,6 +846,7 @@ export class MusicQueue {
     this.consecutiveFailures = 0; // Consecutive play() failures - trips a breaker at 3
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
     this.listenerConnection = null; // Connection object we already attached lifecycle listeners to
+    this.connectionRecovery = null; // In-flight recovery from a connection 'error' (null = none)
     this.recentRadioUrls = []; // Last 5 server-side radio auto-adds, to avoid looping on the same tracks
     this.ttsPlayer = null; // Dedicated player for ducked clips, created on first use (see duckAndPlay)
     this.duckActive = false; // True while a ducked clip is playing over the music
@@ -881,29 +928,129 @@ export class MusicQueue {
     // attach the lifecycle listeners once per connection object
     if (this.listenerConnection !== this.connection) {
       this.listenerConnection = this.connection;
+      // Captured rather than read off `this` inside the handlers: an event that arrives late,
+      // from a connection this queue has already moved off, must be judged against the
+      // connection it came from
+      const conn = this.connection;
 
       // Handle connection state
-      this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+      conn.on(VoiceConnectionStatus.Disconnected, async () => {
         try {
           await Promise.race([
-            entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
-            entersState(this.connection, VoiceConnectionStatus.Connecting, 5000),
+            entersState(conn, VoiceConnectionStatus.Signalling, CONNECTION_RECOVERY_MS),
+            entersState(conn, VoiceConnectionStatus.Connecting, CONNECTION_RECOVERY_MS),
           ]);
         } catch {
-          // Reconnect failed - tear down, but never destroy an already-destroyed connection
-          if (this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
-            this.connection.destroy();
-          }
-          this.cleanup();
+          this.teardownConnection('disconnected', conn);
         }
       });
 
-      this.connection.on('error', err => {
+      conn.on('error', err => {
         console.error('[MusicQueue] connection error:', err.message);
+        this.recoverFromConnectionError(conn);
       });
     }
 
     return this.connection;
+  }
+
+  // Give up on a voice connection that is not coming back. Both connection failure paths -
+  // a Disconnected whose reconnect never started, and an 'error' that never recovered - end
+  // here, so there is exactly one way for the queue to lose its connection.
+  //
+  // destroy() emits the Destroyed transition the voice assistant's stateChange handler
+  // watches for, so its receive monitors stop with the connection rather than outliving it.
+  teardownConnection(reason, connection) {
+    // destroy() throws on an already-destroyed connection, and this runs from event and timer
+    // callbacks where that would take down the process
+    if (connection && connection.state.status !== VoiceConnectionStatus.Destroyed) {
+      connection.destroy();
+    }
+
+    // A failure from a connection this queue has already moved off takes that connection with
+    // it, but must not stop the playback running on its replacement
+    if (this.connection && this.connection !== connection) {
+      console.warn(`[MusicQueue] Ignoring voice connection ${reason} from a replaced connection`);
+      return;
+    }
+
+    console.warn(`[MusicQueue] Voice connection ${reason} - stopping playback`);
+    // cleanup() raises `destroying` before it stops the player, so the Idle that follows never
+    // reaches playNext(); this is the last chance to credit what was actually heard
+    this.trackAndClearListening();
+    this.cleanup();
+  }
+
+  // A connection-level 'error' is not a state transition. @discordjs/voice re-emits it and
+  // leaves the connection exactly where it was, so no other handler in this class will ever
+  // hear about it. A transient one (Discord answering the voice gateway with a 521) is
+  // followed by the library re-signalling its way back to Ready; a fatal one just sits there
+  // forever. Wait out a bounded window to tell the two apart, then either let the music carry
+  // on or stop cleanly. The one thing this must never do is leave the queue marked playing on
+  // a connection that is never going to carry audio again.
+  async recoverFromConnectionError(connection) {
+    if (this.destroying) return;
+    // An error storm is one failure, not five: the first handler owns the recovery and every
+    // later one rides its result instead of starting a second teardown
+    if (this.connectionRecovery) return this.connectionRecovery;
+    // An error from a connection this queue has already moved off is that connection's
+    // problem. An already-destroyed one that this queue is still holding is not - that is the
+    // wedge itself, and it falls through to the teardown below.
+    if (!connection || this.connection !== connection) return;
+
+    this.connectionRecovery = (async () => {
+      // The player parks itself (AutoPaused) as soon as no subscribed connection is Ready, so
+      // it holds the resource rather than consuming it while we wait - but songStartTime keeps
+      // running regardless. Stop the clock for the gap so the position the dashboard shows
+      // stays the position the listener actually heard. Skipped when the clock is already
+      // stopped: a user pause, or a ducked clip, owns that pause and will close it itself.
+      const gapStartedAt = this.songStartTime && this.pausedAt === null ? Date.now() : null;
+      if (gapStartedAt !== null) this.pausedAt = gapStartedAt;
+      broadcastState();
+
+      let ready = false;
+      try {
+        ready = await waitForReadyConnection(connection, CONNECTION_RECOVERY_MS, CONNECTION_SETTLE_MS);
+      } catch (error) {
+        console.error('[MusicQueue] Voice connection recovery check failed:', error.message);
+      }
+
+      // A rejoin, a stop, or a full cleanup may all have happened while we waited
+      if (this.destroying || this.connection !== connection) {
+        this.closePlaybackGap(gapStartedAt);
+        return;
+      }
+
+      if (ready) {
+        // Nothing to restart: the player un-parks itself the moment a subscribed connection is
+        // Ready again, and it still holds the resource it was playing
+        console.log('[MusicQueue] Voice connection recovered after error');
+        this.closePlaybackGap(gapStartedAt);
+        broadcastState();
+        return;
+      }
+
+      this.teardownConnection('error unrecoverable', connection);
+    })().catch(error => {
+      // Nothing awaits this on the event-handler path, so a throw here - broadcastState()
+      // reaches the web dashboard, and a callback out there can throw - would go unhandled
+      // and take the process with it
+      console.error('[MusicQueue] Voice connection recovery failed:', error.message);
+    }).finally(() => {
+      this.connectionRecovery = null;
+    });
+
+    return this.connectionRecovery;
+  }
+
+  // Credit a stretch of dead air back to the playback clock. Identity-checked the same way the
+  // auto-leave timer is: if a new song, a seek or a user pause moved the clock while the
+  // connection was away, that owns it now and this gap is no longer the pause in effect.
+  closePlaybackGap(gapStartedAt) {
+    if (gapStartedAt === null || this.pausedAt !== gapStartedAt) return;
+    this.totalPausedMs += Date.now() - gapStartedAt;
+    // A user pause that landed during the gap keeps the clock stopped, just from here on
+    this.pausedAt = this.player.state.status === AudioPlayerStatus.Paused ? Date.now() : null;
   }
 
   addSong(song) {
