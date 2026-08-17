@@ -816,7 +816,7 @@ export function getRecentlyPlayed() {
 // instead of keeping its own copy). Reuses this module's already-configured,
 // cookie-aware yt-dlp instance. Returns [] on any failure or unrecognized URL -
 // never throws, so callers can fall through to their normal behavior.
-export async function getRadioTracks(seedUrl, limit = 20) {
+export async function getRadioTracks(seedUrl, limit = 40) {
   const videoIdMatch = typeof seedUrl === 'string' && seedUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   if (!videoIdMatch) return [];
   const videoId = videoIdMatch[1];
@@ -832,7 +832,10 @@ export async function getRadioTracks(seedUrl, limit = 20) {
       noWarnings: true,
       flatPlaylist: true,
       skipDownload: true,
-      playlistEnd: 25
+      // Raised from 25: a wider mix gives the picker below (see pickRadioTrack) a bigger
+      // eligible pool once recent history and in-session memory are filtered out, which is
+      // what actually fixes "radio keeps repeating" for niche genres with a narrow mix.
+      playlistEnd: 40
     });
 
     if (!results.entries || results.entries.length === 0) return [];
@@ -851,6 +854,112 @@ export async function getRadioTracks(seedUrl, limit = 20) {
     console.error('[MusicQueue] Radio lookup failed:', error.message);
     return [];
   }
+}
+
+// The number of most-recent radio picks remembered for this queue's lifetime, so a session
+// does not loop back onto a track it only just played. Grown from 5: five was smaller than a
+// single fetched mix, so the picker (see pickRadioTrack) could exhaust its "unseen" tracks
+// well before the mix itself ran out of ones the room hadn't heard yet this session.
+export const RADIO_MEMORY_SIZE = 25;
+
+// How far back into the real, on-disk play history (not just this session's radio picks) a
+// track is still considered "recently heard" and filtered out of a fresh radio pick.
+const RADIO_HISTORY_WINDOW = 30;
+// The shrunk window used once relaxation (see filterEligibleRadioTracks) has to fall back to
+// it - still enough to dodge the last few songs, but no longer competing with the mix itself
+// for a niche genre where the whole mix might be smaller than the full window.
+const RADIO_HISTORY_WINDOW_RELAXED = 10;
+
+// Filters a fetched "mix" down to the tracks that are safe to hand out as the next radio
+// pick, in progressively looser tiers, given the real play history, the in-session radio
+// memory, and what is already queued/playing. Never returns silence on a whim: relaxation
+// tries dropping the session memory first (tier 1), then shrinking the history window (tier
+// 2), before finally dropping the history filter altogether (tier 3) - the queue/current-song
+// exclusion is the only one that never relaxes, since re-adding either would be an immediate,
+// literal repeat rather than "some repetition". A pure function - no fetching, no randomness -
+// so the tiering itself is directly testable.
+export function filterEligibleRadioTracks(tracks, {
+  historyUrls = [],       // URLs from the real play history, newest first
+  queueUrls = [],         // URLs already sitting in the queue
+  currentUrl = null,      // URL currently playing (or about to be), if any
+  recentRadioUrls = [],   // this session's radio-pick memory
+} = {}) {
+  const hardExcluded = new Set(queueUrls);
+  if (currentUrl) hardExcluded.add(currentUrl);
+  const candidates = (tracks || []).filter(t => t && !hardExcluded.has(t.url));
+
+  const tiers = [
+    { historyWindow: RADIO_HISTORY_WINDOW, useMemory: true },
+    { historyWindow: RADIO_HISTORY_WINDOW, useMemory: false },
+    { historyWindow: RADIO_HISTORY_WINDOW_RELAXED, useMemory: false },
+    { historyWindow: 0, useMemory: false }
+  ];
+
+  for (let tier = 0; tier < tiers.length; tier++) {
+    const { historyWindow, useMemory } = tiers[tier];
+    const recentlyPlayedSet = new Set(historyUrls.slice(0, historyWindow));
+    const memorySet = useMemory ? new Set(recentRadioUrls) : null;
+    const eligible = candidates.filter(t =>
+      !recentlyPlayedSet.has(t.url) && (!memorySet || !memorySet.has(t.url))
+    );
+    if (eligible.length > 0) return { eligible, tier };
+  }
+
+  // Nothing left even with every soft filter dropped - the only tracks in the mix are
+  // literally the ones already queued or playing right now.
+  return { eligible: [], tier: tiers.length };
+}
+
+// Picks a seed for the next radio lookup from recent listening history instead of always the
+// song that just ended, so a niche seed (a single deep cut) doesn't lock radio onto the same
+// narrow YouTube Mix every time the queue runs dry. Prefers genuine user requests over past
+// radio auto-adds - a radio pick is already one hop from what the room actually asked for, so
+// seeding off another one drifts further still. Falls back to `fallbackSong` (normally the
+// song that just ended) when there isn't enough history to choose from. Pure and directly
+// testable; `randomFn` defaults to Math.random and only exists so tests can pin the choice.
+export function chooseRadioSeed(recentHistory, fallbackSong, randomFn = Math.random) {
+  const pool = (recentHistory || []).slice(0, 8).filter(s => s && s.url);
+  if (pool.length === 0) return fallbackSong || null;
+
+  const isRadioPick = (s) => typeof s.requestedBy === 'string' && s.requestedBy.toLowerCase().includes('radio');
+  const userRequested = pool.filter(s => !isRadioPick(s));
+  const candidates = userRequested.length > 0 ? userRequested : pool;
+
+  return candidates[Math.floor(randomFn() * candidates.length)] || fallbackSong || null;
+}
+
+// The one radio pick brain, used by both server-side auto-fill (tryRadioFill, when no
+// dashboard is open to keep the queue topped up) and the dashboard's /api/youtube/radio route
+// - previously each kept its own copy, with its own memory, and picked deterministically (the
+// first mix entry not in a 5-song memory) against YouTube Mix's stable ordering. That is what
+// produced "it keeps repeating": two brains, two memories, and a pick that was really just
+// "the same handful of tracks, in the same order, every time". This fetches the mix, filters
+// it down with filterEligibleRadioTracks(), and picks uniformly at random from what's left -
+// runtime randomness, not a scripted workflow, so there is no reason to hold back on
+// Math.random() here. Returns { track, eligibleCount, fetchedCount, tier } - track is null
+// only when the mix itself came back empty or truly nothing in it is safe to offer.
+export async function pickRadioTrack(seedUrl, {
+  fetchLimit = 40,
+  queueUrls = [],
+  currentUrl = null,
+  recentRadioUrls = [],
+  seedTitle = null
+} = {}) {
+  const tracks = await getRadioTracks(seedUrl, fetchLimit);
+  const fetchedCount = tracks.length;
+  if (fetchedCount === 0) return { track: null, eligibleCount: 0, fetchedCount: 0, tier: -1 };
+
+  const historyUrls = globalRecentlyPlayed.map(s => s.url);
+  const { eligible, tier } = filterEligibleRadioTracks(tracks, { historyUrls, queueUrls, currentUrl, recentRadioUrls });
+
+  if (eligible.length === 0) {
+    console.warn(`[MusicQueue] radio: no eligible track (seed: ${seedTitle || seedUrl}, pool 0/${fetchedCount})`);
+    return { track: null, eligibleCount: 0, fetchedCount, tier };
+  }
+
+  const track = eligible[Math.floor(Math.random() * eligible.length)];
+  console.log(`[MusicQueue] radio: picked "${track.title}" (seed: ${seedTitle || seedUrl}, pool ${eligible.length}/${fetchedCount})`);
+  return { track, eligibleCount: eligible.length, fetchedCount, tier };
 }
 
 // Store queue per guild
@@ -1241,7 +1350,7 @@ export class MusicQueue {
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
     this.listenerConnection = null; // Connection object we already attached lifecycle listeners to
     this.connectionRecovery = null; // In-flight recovery from a connection 'error' (null = none)
-    this.recentRadioUrls = []; // Last 5 server-side radio auto-adds, to avoid looping on the same tracks
+    this.recentRadioUrls = []; // Last RADIO_MEMORY_SIZE radio picks (server or dashboard), to avoid looping on the same tracks
     this.ttsPlayer = null; // Dedicated player for ducked clips, created on first use (see duckAndPlay)
     this.duckActive = false; // True while a ducked clip is playing over the music
     this.pendingUserPause = false; // A /pause asked for during a clip, honoured when it ends
@@ -2226,23 +2335,33 @@ export class MusicQueue {
   // Try to auto-queue one related track when radio mode is on and the queue just ran
   // dry. Returns true (and has already started playback) on success, false if no
   // suitable track was found - callers fall back to their normal empty-queue behavior.
-  async tryRadioFill(seedUrl) {
+  // `endedSong` is the song that just finished, used as a fallback seed - see
+  // chooseRadioSeed() for why the actual seed usually isn't it.
+  async tryRadioFill(endedSong) {
     try {
-      const tracks = await getRadioTracks(seedUrl);
+      const seedSong = chooseRadioSeed(globalRecentlyPlayed, endedSong) || endedSong;
+      const result = await pickRadioTrack(seedSong.url, {
+        // This queue is the genuinely-empty one that got us here (see the staleness check
+        // just below), so there is nothing of this guild's own to exclude yet beyond the
+        // in-session memory - pickRadioTrack's queue/current-song filter matters most for
+        // the dashboard's own call into it, made while a song is still playing.
+        recentRadioUrls: this.recentRadioUrls,
+        seedTitle: seedSong.title
+      });
 
-      // getRadioTracks() is a multi-second yt-dlp subprocess - this queue may have been
-      // stopped, replaced (a stale instance left over from a discarded queue, same as the
-      // auto-leave timer's check), or had a song added to it while we were waiting. Only
-      // proceed if it's still the live, genuinely-empty, idle queue for this guild.
+      // getRadioTracks() (inside pickRadioTrack) is a multi-second yt-dlp subprocess - this
+      // queue may have been stopped, replaced (a stale instance left over from a discarded
+      // queue, same as the auto-leave timer's check), or had a song added to it while we were
+      // waiting. Only proceed if it's still the live, genuinely-empty, idle queue for this guild.
       if (queues.get(this.guildId) !== this || this.destroying || this.isPlaying || this.songs.length > 0) {
         return false;
       }
 
-      const track = tracks.find(t => !this.recentRadioUrls.includes(t.url));
+      const track = result.track;
       if (!track) return false;
 
       this.recentRadioUrls.push(track.url);
-      if (this.recentRadioUrls.length > 5) this.recentRadioUrls.shift();
+      if (this.recentRadioUrls.length > RADIO_MEMORY_SIZE) this.recentRadioUrls.shift();
 
       this.addSong({
         title: track.title,
@@ -2328,7 +2447,7 @@ export class MusicQueue {
       // just used to end here. Never throws into this path - any failure falls
       // through to the normal empty-queue behavior below.
       if (globalSettings.radioEnabled && !this.destroying && endedSong?.url) {
-        const filled = await this.tryRadioFill(endedSong.url);
+        const filled = await this.tryRadioFill(endedSong);
         if (filled) return;
       }
 

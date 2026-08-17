@@ -27,6 +27,9 @@ import {
   positionTick,
   setWebPositionCallback,
   setWebClientCountCallback,
+  filterEligibleRadioTracks,
+  chooseRadioSeed,
+  RADIO_MEMORY_SIZE,
 } from '../src/utils/musicQueue.js';
 
 // A voice connection is, as far as this module's lifecycle code is concerned, an EventEmitter
@@ -1915,4 +1918,144 @@ test('loop song: the reused file is touched, so the /tmp sweep reads it as in us
   queue.cleanup();
   await tick();
   assert.deepEqual(cacheFilesFor('loop-touch'), []);
+});
+
+// --- radio pick brain: filterEligibleRadioTracks / chooseRadioSeed -----------
+//
+// These are the pure pieces pulled out of the old tryRadioFill/dashboard split so the
+// tiering and seed choice are testable without a live yt-dlp call. pickRadioTrack() itself
+// (the async wrapper that fetches the mix and calls filterEligibleRadioTracks) is exercised
+// against real YouTube by a scratch script instead - see the radio report.
+
+const radioTrack = (n) => ({ title: `Track ${n}`, url: `https://www.youtube.com/watch?v=trk${n}` });
+
+test('filterEligibleRadioTracks: a niche mix with most of it recently played leaves only the fresh tracks, at tier 0', () => {
+  const tracks = Array.from({ length: 8 }, (_, i) => radioTrack(i));
+  const historyUrls = tracks.slice(0, 6).map(t => t.url); // 6 of the 8 already played
+
+  const { eligible, tier } = filterEligibleRadioTracks(tracks, { historyUrls });
+
+  assert.equal(tier, 0, 'nothing needed relaxing');
+  assert.deepEqual(eligible.map(t => t.url), [tracks[6].url, tracks[7].url]);
+});
+
+test('filterEligibleRadioTracks: a fresh mix with no history, memory or queue is eligible in full at tier 0', () => {
+  const tracks = [radioTrack(0), radioTrack(1), radioTrack(2)];
+
+  const { eligible, tier } = filterEligibleRadioTracks(tracks, {});
+
+  assert.equal(tier, 0);
+  assert.equal(eligible.length, 3);
+});
+
+test('filterEligibleRadioTracks: everything played and everything in session memory still returns something, never silence', () => {
+  const tracks = Array.from({ length: 5 }, (_, i) => radioTrack(i));
+  const urls = tracks.map(t => t.url);
+
+  const { eligible, tier } = filterEligibleRadioTracks(tracks, {
+    historyUrls: urls,       // all 5 "actually played"
+    recentRadioUrls: urls    // and all 5 in this session's memory too
+  });
+
+  // Tier 0 (history+memory) and tier 1 (history only) both exclude everything; tier 2's
+  // shrunk window still covers all 5 (they're the first 5 history entries); only tier 3,
+  // which drops the history filter altogether, has anything left to offer.
+  assert.equal(tier, 3);
+  assert.equal(eligible.length, 5, 'degraded to "some repetition", not to nothing');
+});
+
+test('filterEligibleRadioTracks: the currently-queued/now-playing exclusion never relaxes, even once every soft filter has', () => {
+  const tracks = [radioTrack(0), radioTrack(1)];
+
+  const { eligible, tier } = filterEligibleRadioTracks(tracks, {
+    queueUrls: [tracks[0].url],
+    currentUrl: tracks[1].url
+  });
+
+  // Every soft filter (history, memory) was already vacuous here - there was nothing to
+  // relax - so this exhausts all four tiers and comes back empty. A tiny mix that's already
+  // entirely in the queue has nothing left to offer, and that's the one case where null is
+  // the right answer, not a repeat.
+  assert.equal(eligible.length, 0);
+  assert.equal(tier, 4, 'ran out of tiers rather than reusing a queued/playing track');
+});
+
+test('filterEligibleRadioTracks: dropping session memory first (tier 1) recovers a track that was never actually played', () => {
+  const track = radioTrack(0);
+
+  const { eligible, tier } = filterEligibleRadioTracks([track], {
+    historyUrls: [],               // never actually played...
+    recentRadioUrls: [track.url]   // ...just picked earlier this session
+  });
+
+  assert.equal(tier, 1);
+  assert.deepEqual(eligible.map(t => t.url), [track.url]);
+});
+
+test('filterEligibleRadioTracks: shrinking the history window (tier 2) recovers a track that is only stale by the wide window', () => {
+  const track = radioTrack('target');
+  // 16 history entries, newest first, with the target sitting at index 15 - inside the
+  // default 30-entry window, but outside the relaxed 10-entry one.
+  const historyUrls = Array.from({ length: 15 }, (_, i) => `https://www.youtube.com/watch?v=filler${i}`);
+  historyUrls.push(track.url);
+
+  const { eligible, tier } = filterEligibleRadioTracks([track], { historyUrls });
+
+  assert.equal(tier, 2);
+  assert.deepEqual(eligible.map(t => t.url), [track.url]);
+});
+
+test('RADIO_MEMORY_SIZE: grown from 5 to 25, so the session memory outlasts a single fetched mix', () => {
+  assert.equal(RADIO_MEMORY_SIZE, 25);
+});
+
+test('chooseRadioSeed: no history at all falls back to the song that just ended', () => {
+  const fallback = { url: 'https://www.youtube.com/watch?v=ended', title: 'Ended Song' };
+  assert.equal(chooseRadioSeed([], fallback), fallback);
+  assert.equal(chooseRadioSeed(null, fallback), fallback);
+});
+
+test('chooseRadioSeed: history entries missing a url are ignored, so an all-invalid history also falls back', () => {
+  const fallback = { url: 'https://www.youtube.com/watch?v=ended', title: 'Ended Song' };
+  assert.equal(chooseRadioSeed([{ title: 'no url here' }, {}], fallback), fallback);
+});
+
+test('chooseRadioSeed: prefers a real user request over past radio auto-adds', () => {
+  const radioPick = { url: 'https://www.youtube.com/watch?v=radio', title: 'Radio Pick', requestedBy: '📻 Radio' };
+  const userPick = { url: 'https://www.youtube.com/watch?v=user', title: 'User Pick', requestedBy: 'billy' };
+
+  // Radio pick listed first, to prove it's filtered out rather than just not being index 0
+  const result = chooseRadioSeed([radioPick, userPick], null, () => 0);
+  assert.equal(result, userPick);
+});
+
+test('chooseRadioSeed: falls back to the whole pool, radio picks included, when nothing was user-requested', () => {
+  const radioA = { url: 'https://www.youtube.com/watch?v=radioA', title: 'A', requestedBy: '📻 Radio' };
+  const radioB = { url: 'https://www.youtube.com/watch?v=radioB', title: 'B', requestedBy: '📻 Radio' };
+
+  assert.equal(chooseRadioSeed([radioA, radioB], null, () => 0), radioA);
+  assert.equal(chooseRadioSeed([radioA, radioB], null, () => 0.9999), radioB);
+});
+
+test('chooseRadioSeed: only the last 8 plays are considered, even with a longer history', () => {
+  // The first 8 are radio auto-adds (so they stay in the candidate pool); a genuine user
+  // request sits at index 8 - one past the window - and must never be reachable.
+  const radioEntries = Array.from({ length: 8 }, (_, i) => ({
+    url: `https://www.youtube.com/watch?v=r${i}`,
+    title: `Radio ${i}`,
+    requestedBy: '📻 Radio'
+  }));
+  const laterUserEntry = { url: 'https://www.youtube.com/watch?v=toofar', title: 'Too Far', requestedBy: 'billy' };
+  const history = [...radioEntries, laterUserEntry, laterUserEntry];
+
+  // randomFn near 1 selects the last candidate in the pool - if the window were not
+  // enforced, that would be the user entry outside it
+  const result = chooseRadioSeed(history, null, () => 0.9999);
+  assert.equal(result, radioEntries[7], 'the 9th history entry was never in the candidate pool');
+});
+
+test('chooseRadioSeed: a single-entry history is chosen regardless of randomFn', () => {
+  const onlyEntry = { url: 'https://www.youtube.com/watch?v=only', title: 'Only' };
+  assert.equal(chooseRadioSeed([onlyEntry], null, () => 0), onlyEntry);
+  assert.equal(chooseRadioSeed([onlyEntry], null, () => 0.9999), onlyEntry);
 });

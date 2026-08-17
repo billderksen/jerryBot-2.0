@@ -4190,7 +4190,7 @@
           }
           
           // Radio mode: add a song when queue is empty and playing
-          if (state.radioEnabled && state.isPlaying && state.queue.length === 0 && radioSongs.length > 0) {
+          if (state.radioEnabled && state.isPlaying && state.queue.length === 0 && radioNextTrack) {
             console.log('Radio mode: Queue empty, adding radio song');
             addRadioSong();
           }
@@ -4868,8 +4868,11 @@
       });
     }
 
-    // Radio mode state
-    let radioSongs = []; // Pre-fetched radio songs
+    // Radio mode state - musicQueue.js's pickRadioTrack() is now the only radio pick brain
+    // (server-side auto-fill and this dashboard share it, and its recentRadioUrls memory), so
+    // this only ever holds the single track it most recently picked ahead of time, to queue
+    // immediately once the queue actually runs dry instead of paying a network round-trip then.
+    let radioNextTrack = null; // The one track the server picked, waiting to be queued
     let fetchingRadio = false;
     let addingRadioSong = false; // Prevent concurrent addRadioSong calls
     let radioAddController = null; // AbortController for in-flight radio add requests
@@ -4883,7 +4886,7 @@
 
       if (state.radioEnabled) {
         showToast('📻 Radio mode enabled - Similar songs will auto-play', 'success');
-        // Pre-fetch radio songs if we have a current song
+        // Pre-fetch a radio track if we have a current song
         if (state.currentSong) {
           fetchRadioSongs(state.currentSong.url);
         }
@@ -4900,7 +4903,7 @@
         }
         addingRadioSong = false; // Reset flag when disabled
         fetchingRadio = false;
-        radioSongs = [];
+        radioNextTrack = null;
       }
     }
 
@@ -4945,22 +4948,22 @@
     }
 
     async function fetchRadioSongs(videoUrl) {
-      if (fetchingRadio || !videoUrl) return;
+      if (fetchingRadio || !videoUrl || radioNextTrack) return;
 
       fetchingRadio = true;
       radioFetchController = new AbortController();
 
       try {
-        const response = await fetch(`/api/youtube/radio?url=${encodeURIComponent(videoUrl)}`, {
+        const response = await fetch(`/api/youtube/radio?url=${encodeURIComponent(videoUrl)}&guildId=${encodeURIComponent(state.guildId || '')}`, {
           signal: radioFetchController.signal
         });
         const data = await response.json();
 
-        // Only set radioSongs if radio is still enabled (user may have toggled off during fetch)
-        if (data.tracks && data.tracks.length > 0 && state.radioEnabled) {
-          radioSongs = data.tracks;
-          console.log('Fetched', radioSongs.length, 'radio songs');
-          // The state handler queues one as soon as the queue runs dry, but it only sees real
+        // Only keep the pick if radio is still enabled (user may have toggled off during fetch)
+        if (data.track && state.radioEnabled) {
+          radioNextTrack = data.track;
+          console.log('Radio picked:', radioNextTrack.title);
+          // The state handler queues it as soon as the queue runs dry, but it only sees real
           // state changes now - it used to be re-run by the per-second broadcast. If the queue
           // was already empty while this fetch was in flight, nothing else would ask again
           // until the next song change. (addRadioSong has its own in-flight guard.)
@@ -4969,7 +4972,7 @@
       } catch (error) {
         // Don't log abort errors - they're expected when radio is disabled
         if (error.name !== 'AbortError') {
-          console.error('Error fetching radio songs:', error);
+          console.error('Error fetching radio track:', error);
         }
       }
       radioFetchController = null;
@@ -4978,12 +4981,22 @@
 
     async function addRadioSong() {
       // Prevent concurrent calls and check radio is still enabled
-      if (!state.radioEnabled || radioSongs.length === 0 || addingRadioSong) return;
+      if (!state.radioEnabled || addingRadioSong) return;
 
       addingRadioSong = true;
 
-      // Pick the first song from radio queue
-      const song = radioSongs.shift();
+      // Nothing pre-fetched yet (e.g. a skip beat the pre-fetch triggered by the last song
+      // change) - ask the server to pick one now instead of picking anything client-side.
+      if (!radioNextTrack && state.currentSong) {
+        await fetchRadioSongs(state.currentSong.url);
+      }
+      const song = radioNextTrack;
+      radioNextTrack = null;
+
+      if (!song) {
+        addingRadioSong = false;
+        return;
+      }
 
       // Create an AbortController for this request
       radioAddController = new AbortController();
@@ -5032,8 +5045,8 @@
       radioAddController = null;
       addingRadioSong = false;
 
-      // If running low on radio songs, fetch more (only if radio still enabled)
-      if (state.radioEnabled && radioSongs.length < 5 && state.currentSong) {
+      // Pre-fetch the next pick for next time (only if radio still enabled)
+      if (state.radioEnabled && !radioNextTrack && state.currentSong) {
         fetchRadioSongs(state.currentSong.url);
       }
     }

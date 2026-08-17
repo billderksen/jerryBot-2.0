@@ -11,7 +11,7 @@ import { dirname, join } from 'path';
 import ytDlpPkg from 'yt-dlp-exec';
 import spotifyUrlInfo from 'spotify-url-info';
 import { fetch } from 'undici';
-import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer, applyMixerFilters, getMusicSettings, getRadioTracks } from '../utils/musicQueue.js';
+import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer, applyMixerFilters, getMusicSettings, pickRadioTrack, getQueue, RADIO_MEMORY_SIZE } from '../utils/musicQueue.js';
 import { createRoom, getRoom, deleteRoom, getRoomList, getLeaderboard, Player, setActivityLogger as setPictionaryActivityLogger } from '../utils/pictionaryGame.js';
 import { createRoom as createHitsterRoom, getRoom as getHitsterRoom, deleteRoom as deleteHitsterRoom, getRoomList as getHitsterRoomList, getLeaderboard as getHitsterLeaderboard } from '../utils/hitsterGame.js';
 import { createRoom as createPestenRoom, getRoom as getPestenRoom, deleteRoom as deletePestenRoom, getRoomList as getPestenRoomList, getLeaderboard as getPestenLeaderboard } from '../utils/pestenGame.js';
@@ -1311,20 +1311,41 @@ app.get('/api/youtube/playlist', rateLimit('ytplaylist', 3, 60_000), async (req,
   }
 });
 
-// API endpoint to get YouTube radio/mix (similar songs)
+// API endpoint: pick the next radio track. Delegates entirely to musicQueue.js's
+// pickRadioTrack() - the same pick brain server-side auto-fill uses (tryRadioFill, for when
+// no dashboard is open) - instead of handing the dashboard a raw, unfiltered mix list to pick
+// from itself. That used to mean two independent brains with two independent memories,
+// which is what let the same handful of tracks loop: this route and tryRadioFill now share
+// one memory (the live queue's recentRadioUrls) and one filter (real play history + queue +
+// now playing), so a pick made here is remembered by the server-side path too, and vice versa.
 app.get('/api/youtube/radio', async (req, res) => {
   const videoUrl = req.query.url;
   if (!videoUrl) {
     return res.status(400).json({ error: 'Video URL is required' });
   }
 
-  // Delegates to musicQueue.js's helper - the same lookup server-side radio
-  // auto-fill uses when playNext() runs with no dashboard connected.
-  const tracks = await getRadioTracks(videoUrl);
-  if (tracks.length === 0) {
-    return res.status(404).json({ error: 'No radio mix found for this video' });
+  const guildId = req.query.guildId || currentState.guildId;
+  const queue = guildId ? getQueue(guildId) : null;
+
+  const result = await pickRadioTrack(videoUrl, {
+    queueUrls: queue ? queue.songs.map(s => s.url) : [],
+    currentUrl: queue?.currentSong?.url || null,
+    recentRadioUrls: queue ? queue.recentRadioUrls : []
+  });
+
+  if (!result.track) {
+    return res.status(404).json({ error: 'No radio track available' });
   }
-  res.json({ tracks });
+
+  // Shared memory: remembered here immediately, not only once the dashboard's follow-up
+  // POST /api/queue/add lands, so a server-side fill racing in behind this request (the
+  // queue running dry before the dashboard gets to add it) can't hand back this same track.
+  if (queue) {
+    queue.recentRadioUrls.push(result.track.url);
+    if (queue.recentRadioUrls.length > RADIO_MEMORY_SIZE) queue.recentRadioUrls.shift();
+  }
+
+  res.json({ track: result.track });
 });
 
 // API endpoint to get lyrics for a song
