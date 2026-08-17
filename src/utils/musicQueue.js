@@ -1636,6 +1636,18 @@ export class MusicQueue {
   }
 
   playPrevious() {
+    // A queue can exist without being in a channel: a restart restores the queue but stays out
+    // of an empty channel (see restoreQueueState). Every other way of starting a song goes
+    // through a caller that has a channel to join with - this one has neither a channel nor a
+    // way to ask for one, and starting anyway would download the song and hand it to a player
+    // with no connection subscribed, which parks it AutoPaused: a progress bar with the bot in
+    // no channel at all. So it declines, the way skip() and resume() decline when there is
+    // nothing to act on. The dashboard's previous button needs the bot in a channel first.
+    if (!this.connection) {
+      console.log('[MusicQueue] previous: not in a voice channel - play something first');
+      return false;
+    }
+
     // Start from current position or beginning
     let startIndex = this.historyIndex >= 0 ? this.historyIndex + 1 : 0;
     
@@ -1706,6 +1718,12 @@ export class MusicQueue {
     console.log(`play() called - isPlaying: ${this.isPlaying}, songs in queue: ${this.songs.length}`);
     if (this.isPlaying || this.songs.length === 0) {
       console.log('Skipping play() - already playing or no songs');
+      // The flag belongs to the start it was set for - history navigation and the restore both
+      // raise it immediately before calling this. A start that never happens must not leave it
+      // standing, or the next song to start would silently keep itself out of the recently-played
+      // history and the listening stats. Cleared here rather than at each caller, so every way of
+      // setting it is covered by the one place that consumes it.
+      this.playingFromHistory = false;
       return { started: false, reason: this.isPlaying ? 'already-playing' : 'empty-queue' };
     }
 
@@ -3358,6 +3376,12 @@ async function restoreGuildQueue(client, guildId, guildState, { now, maxAgeMs })
 function putQueueBack(queue, plan) {
   queue.songs = plan.songs.map(song => ({ ...song }));
   queue.volume = plan.volume;
+  // The file was cleared before the restore acted on it, and a held restore (an empty channel, a
+  // pause) starts nothing - so without this there is a window, open until somebody touches the
+  // queue, in which the restored queue exists only in memory and a crash loses it for good. The
+  // restores that do start a song save again on the way through play(); this covers the ones
+  // that do not, and costs a debounce either way.
+  scheduleQueueStateSave();
 }
 
 async function startRestoredSong(queue, plan) {

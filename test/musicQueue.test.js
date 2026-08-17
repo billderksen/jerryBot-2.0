@@ -33,6 +33,7 @@ import {
   RADIO_MEMORY_SIZE,
   flushQueueState,
   saveQueueStateNow,
+  scheduleQueueStateSave,
   forgetQueueState,
   restoreQueueState,
   describeRestoreHold,
@@ -2334,6 +2335,71 @@ test('play(): an ordinary start is unchanged - no offset, from the beginning', a
   assert.equal(queue.played[0].seconds, 0);
 });
 
+test('play(): a start that never happened does not take the next song out of the history', async () => {
+  // History navigation and the restore both raise playingFromHistory immediately before calling
+  // play(), to keep a song that is already in the history from being counted twice. Left
+  // standing by a start that was refused, it would silently keep the *next* song - an ordinary
+  // one somebody asked for - out of recentlyPlayed and out of the listening stats.
+  const busy = new MusicQueue('history-flag-busy');
+  busy.songs = [{ title: 'queued', url: URL_A, duration: 60 }];
+  busy.isPlaying = true;
+  busy.playingFromHistory = true;
+
+  const refused = await busy.play();
+
+  assert.equal(refused.reason, 'already-playing');
+  assert.equal(busy.playingFromHistory, false, 'the flag went with the start it was set for');
+
+  const empty = new MusicQueue('history-flag-empty');
+  empty.playingFromHistory = true;
+  assert.equal((await empty.play()).reason, 'empty-queue');
+  assert.equal(empty.playingFromHistory, false);
+});
+
+test('previous: with the bot in no channel, it declines instead of playing to nobody', () => {
+  // The one start path with no channel to join with - and a restored queue that stayed out of an
+  // empty channel is exactly a queue with no connection. Downloading and playing anyway hands
+  // the audio to a player with nothing subscribed, which parks it AutoPaused: a running progress
+  // bar with the bot in no channel at all.
+  const queue = new MusicQueue('previous-no-connection');
+  queue.songs = [{ title: 'restored, waiting', url: URL_A, duration: 60 }];
+  let started = 0;
+  queue.play = async () => { started++; return { started: true }; };
+
+  const logged = captureConsole();
+  let acted;
+  try {
+    acted = queue.playPrevious();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(acted, false);
+  assert.equal(started, 0, 'nothing was downloaded or played');
+  assert.deepEqual(queue.songs.map(s => s.title), ['restored, waiting'], 'and the restored queue is untouched');
+  assert.equal(queue.historyIndex, -1);
+  assert.equal(queue.playingFromHistory, false);
+  assert.ok(logged.find(/previous: not in a voice channel/), logged.dump());
+});
+
+test('previous: in a channel, it still queues the last song and starts it', () => {
+  // The guard above is the only thing that changed: with a connection, previous works as before
+  const history = getRecentlyPlayed();
+  history.unshift({ url: URL_D, title: 'played before', duration: 60, requestedBy: 'billy', playedAt: Date.now() });
+  try {
+    const { queue } = buildQueue('previous-with-connection');
+    let started = 0;
+    queue.play = async () => { started++; return { started: true }; };
+
+    assert.equal(queue.playPrevious(), true);
+    assert.equal(queue.songs[0].title, 'played before');
+    assert.equal(started, 1);
+    assert.equal(queue.playingFromHistory, true, 'and the song is not re-counted in the history');
+  } finally {
+    history.shift();
+  }
+});
+
 // The restore path looks the guild's queue up in the module's own map, so the stubs go on the
 // instance that is already in it rather than on a queue built beside it.
 function stubQueueForRestore(queue) {
@@ -2438,7 +2504,18 @@ test('restore: a channel with nobody in it gets its queue back and no bot in the
   assert.equal(calls.length, 0, 'and nothing was downloaded for a room with nobody in it');
   assert.ok(logged.find(/nobody in "Muziek"/), logged.dump());
 
+  // The file was cleared before the restore acted on it and a held restore starts nothing, so
+  // the queue would exist only in memory until somebody touched it - one crash from being gone
+  assert.equal(scheduleQueueStateSave(), false, 'a save is already pending for the restored queue');
+  assert.equal(saveQueueStateNow(), true);
+  assert.deepEqual(
+    loadQueueState().guilds['restore-empty-channel'].songs.map(s => s.title),
+    ['Was playing', 'Next up'],
+    'a crash right now would find the queue back on disk'
+  );
+
   after.cleanup();
+  forgetQueueState();
 });
 
 test('restore: a snapshot from last night is discarded, and never joins anything', async () => {
