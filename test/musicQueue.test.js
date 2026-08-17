@@ -3609,3 +3609,217 @@ test('crossfade: a seek during the fade still gets its own seek protection', asy
   queue.cleanup();
   await tick();
 });
+
+// --- the fix round -----------------------------------------------------------
+
+test('a song that is starting does not wait for its own loudness analysis', async () => {
+  // The rapid-skip case the prefetch exists for. The analysis pass is 8.6s for a 4-minute track
+  // and the entry's promise does not resolve until it finishes, so a claim used to block the next
+  // song's start for the whole pass - worst case the 120s measurement timeout. What unblocks it is
+  // the claim killing the analysis, and this test is only satisfied by that: the promise below
+  // resolves from inside kill(), so if the claim does not abort, this hangs.
+  const queue = buildTransitionQueue('claim-cancels-analysis');
+  const path = join(tmpdir(), `godcord_pre_claim-cancels-analysis_${process.pid}.opus`);
+  writeFileSync(path, 'audio');
+
+  let resolveFetch;
+  queue.prefetch = {
+    url: URL_B, title: 'up next', path, token: queue.prefetchToken, consumedGen: null,
+    startedAt: Date.now(), attempts: 1, ms: 900, ready: false,
+    promise: new Promise(resolve => { resolveFetch = resolve; })
+  };
+  // Parked exactly where measureAndRemember parks it
+  let killed = false;
+  queue.measureProcess = { kill: () => { killed = true; resolveFetch(path); } };
+
+  const logged = captureConsole();
+  let taken;
+  try {
+    taken = await queue.takePrefetched(URL_B, queue.cacheGeneration);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(killed, true, 'the analysis was dropped rather than waited out');
+  assert.equal(taken, path, 'and the file came back for the song to start from');
+  assert.equal(queue.measureProcess, null, 'with nothing left parked');
+  assert.ok(logged.find(/dropping the loudness measurement - "up next" is starting now/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('a dropped prefetch drops the analysis of the file it is deleting', async () => {
+  const queue = buildTransitionQueue('drop-cancels-analysis');
+  const path = join(tmpdir(), `godcord_pre_drop-cancels-analysis_${process.pid}.opus`);
+  writeFileSync(path, 'audio');
+  let killed = false;
+  queue.prefetch = {
+    url: URL_B, title: 'no longer next', path, token: queue.prefetchToken, consumedGen: null,
+    startedAt: Date.now(), attempts: 1, ms: 0, ready: false, promise: Promise.resolve(path)
+  };
+  queue.measureProcess = { kill: () => { killed = true; } };
+
+  const logged = captureConsole();
+  try {
+    queue.invalidatePrefetch('the next song changed');
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(killed, true, 'measuring a file that is being deleted is pure waste');
+  assert.equal(existsSync(path), false);
+  queue.cleanup();
+});
+
+test('measureAndRemember: a dropped analysis resolves at once, unmeasured', { skip: FFMPEG ? false : 'no system ffmpeg' }, async () => {
+  // The real thing: a real ffmpeg analysis, aborted through the real path, resolving null.
+  const queue = new MusicQueue('abort-real-analysis');
+  const path = join(tmpdir(), `godcord_abort_${process.pid}.opus`);
+  execFileSync(FFMPEG, [
+    '-y', '-loglevel', '0', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=120:sample_rate=48000',
+    '-c:a', 'libopus', '-b:a', '96k', path
+  ]);
+  try {
+    const logged = captureConsole();
+    let measured;
+    let elapsed;
+    try {
+      const startedAt = Date.now();
+      const running = queue.measureAndRemember(path, 'a long one');
+      await waitUntil(() => queue.measureProcess, 'the analysis to start');
+      // Long enough that ffmpeg has processed real audio and WILL print loudnorm's summary for it
+      // on the way out. A pass aborted at this point has measured a fraction of the file, and a
+      // level worked out from a fraction of a song is worse than no level at all - this is the
+      // half of the abort that a kill alone does not give you.
+      await sleep(400);
+      assert.equal(queue.abortLoudnessMeasurement('a test asked it to stop'), true);
+      measured = await running;
+      elapsed = Date.now() - startedAt;
+    } finally {
+      logged.restore();
+    }
+
+    assert.equal(measured, null, 'nothing measured');
+    assert.equal(loudnessFor(path), null, 'and nothing remembered, so no level appears mid-song');
+    assert.ok(elapsed < 2500, `it gave up promptly rather than finishing the pass (${elapsed}ms)`);
+  } finally {
+    if (existsSync(path)) unlinkSync(path);
+  }
+});
+
+test('crossfade: a transition that dies before it plays does not lose the song it was fading in', async () => {
+  // The hole this closes: the transition encoder dies at +50ms, its Idle is swallowed by the
+  // isSeeking the swap raised, and the handover then runs anyway - crediting and deleting the
+  // outgoing song, making the incoming song current for a stream that does not exist, and ten
+  // seconds later crediting IT for seconds nobody heard and dropping it without ever playing it.
+  const { queue, calls } = await buildCrossfadeQueue('xfade-dead-transition');
+  const fileForB = queue.prefetch.path;
+
+  const logged = captureConsole();
+  let state;
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    state = queue.crossfade;
+    assert.equal(queue.isSeeking, true);
+
+    // What a dead encoder looks like from here: an Idle with no Playing before it
+    queue.player.emit(AudioPlayerStatus.Idle);
+    await queue.advancing;
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.crossfade, null, 'the pending handover was abandoned');
+  assert.equal(queue.isSeeking, false, 'and the flag that was swallowing the Idle went with it');
+  assert.equal(queue.seekWatchdog, null, 'so nothing waits out ten seconds of silence');
+  assert.equal(queue.playNextCalls, 1, 'the queue advanced on the Idle itself');
+  assert.equal(queue.currentSong.title, 'up next', 'the song being faded in is playing');
+  assert.equal(queue.played.at(-1).path, fileForB, 'from the file that was already on disk');
+  assert.equal(queue.played.at(-1).seconds, 0, 'from its beginning');
+  assert.equal(calls.length, 2, 'and nothing was downloaded again');
+  // The handover timer may still be pending; it must not be able to act on a fade that is over
+  assert.equal(queue.completeCrossfade(state), false, 'a late handover changes nothing');
+  assert.equal(queue.currentSong.title, 'up next');
+
+  queue.cleanup();
+  await tick();
+});
+
+test('a skip inside any restart window advances at once rather than waiting out the watchdog', async () => {
+  // Same class as the crossfade case, next door and pre-existing: seek() raises isSeeking for the
+  // ~80ms its new encoder takes to start playing, and a skip landing in there had its Idle
+  // swallowed too.
+  const queue = buildTransitionQueue('skip-during-seek');
+  const calls = stubFetches(queue);
+  queue.connection = new FakeConnection();
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+  await startFirstSong(queue, calls);
+  // The next song's fetch lands, so the advance below is not waiting on a download
+  calls[1].finish();
+  await tick();
+
+  const logged = captureConsole();
+  try {
+    await queue.seek(30);
+    assert.equal(queue.isSeeking, true, 'the restart is in flight');
+
+    // No Playing transition yet - the encoder is still starting
+    queue.skipRequested = true; // what stopForUserAction sets before it stops the player
+    queue.player.emit(AudioPlayerStatus.Idle);
+    await queue.advancing;
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.isSeeking, false);
+  assert.equal(queue.seekWatchdog, null);
+  assert.equal(queue.playNextCalls, 1, 'advanced on the Idle rather than in ten seconds');
+  assert.ok(logged.find(/idle during a restart that a skip ended/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: an abandoned fade hands the file back to the prefetch', async () => {
+  // Left claimed, the slot is one maintainPrefetch refuses to touch: the next queue change would
+  // neither drop the file nor line up the song that is next now.
+  const { queue } = await buildCrossfadeQueue('xfade-unclaim');
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    assert.notEqual(queue.prefetch.consumedGen, null, 'the fade took the file over');
+    queue.cancelCrossfade('a test abandoned it');
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.prefetch.consumedGen, null, 'and gave it back');
+  const fileForB = queue.prefetch.path;
+
+  // Which the ordinary bookkeeping can now act on again
+  const dropped = captureConsole();
+  try {
+    queue.songs = [{ ...aSong('somebody else', URL_C), duration: 200 }];
+    queue.maintainPrefetch();
+  } finally {
+    dropped.restore();
+  }
+  assert.equal(existsSync(fileForB), false, 'the file for a song that is no longer next was dropped');
+
+  queue.cleanup();
+  await tick();
+});
+
+test('parseLoudnormJson: an empty or null field is not a measurement of zero', () => {
+  // Number(null), Number('') and Number([]) are all 0, and 0 is inside every range - so without a
+  // type check a field ffmpeg left empty would read as 0 LUFS and cut the song by about 16dB.
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-39.35"', 'null')), null);
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-39.35"', '""')), null);
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-39.35"', '"   "')), null);
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-39.35"', '[]')), null);
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-0.03"', 'null')), null);
+  // A number rather than ffmpeg's usual string is still a measurement
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-39.35"', '-39.35')).input_i, -39.35);
+});

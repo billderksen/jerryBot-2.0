@@ -113,6 +113,10 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 // How long a seek/filter restart may stay pending before we assume the Playing
 // transition is never coming and unstick the player
 const SEEK_WATCHDOG_MS = 10000;
+// How much of an encoder's stderr is worth keeping to explain its death. Three lines of ffmpeg
+// error is the difference between "code 8" and "403 Forbidden"; a megabyte of it is a leak.
+const ENCODER_STDERR_TAIL_CHARS = 2000;
+
 // A ducked clip (wake beep, spoken reply) holds the music down while it plays, so
 // it is abandoned once it stops making playback progress for this long...
 const DUCK_STALL_MS = 10000;
@@ -840,7 +844,15 @@ export function parseLoudnormJson(text) {
 
   const values = {};
   for (const [field, [min, max]] of Object.entries(LOUDNESS_RANGES)) {
-    const value = Number(parsed[field]);
+    const raw = parsed[field];
+    // Typed before it is converted, because Number() is far too generous to be a validator here:
+    // Number(null), Number('') and Number([]) are all 0, and 0 passes every range below - so a
+    // field ffmpeg left empty or a JSON null would read as a measurement of 0 LUFS and cut the
+    // song by about 16dB. ffmpeg prints these as strings; a number is accepted too, and nothing
+    // else is a measurement.
+    if (typeof raw !== 'string' && typeof raw !== 'number') return null;
+    if (typeof raw === 'string' && raw.trim() === '') return null;
+    const value = Number(raw);
     if (!Number.isFinite(value) || value < min || value > max) return null;
     values[field] = value;
   }
@@ -881,14 +893,22 @@ export function buildLoudnormFilter(loudness, target = LOUDNORM_TARGET) {
  * a failure, a timeout, a missing ffmpeg or a file that will not decode all come back as null,
  * and null means the song plays at its own level. Nothing here may keep a song from starting.
  *
+ * @param onSpawn - handed a `{ kill() }` handle as soon as the pass is running, so the caller can
+ *   park it somewhere a cancellation can find it. A handle rather than the child itself because
+ *   aborting has to mean "and throw away whatever it worked out": ffmpeg killed with SIGTERM exits
+ *   gracefully and loudnorm STILL prints its summary for the part of the file it got through
+ *   (verified - an abort at 500ms into a 4-minute track reported -18.03 LUFS against the true
+ *   -14.74). A level measured over half a second of a song is worse than no level at all, so an
+ *   aborted pass answers null however much ffmpeg managed to say.
  * @returns {Promise<object|null>} the measured values, or null
  */
-export async function measureLoudness(filePath, { timeoutMs = LOUDNESS_MEASURE_TIMEOUT_MS } = {}) {
+export async function measureLoudness(filePath, { timeoutMs = LOUDNESS_MEASURE_TIMEOUT_MS, onSpawn = null } = {}) {
   if (!filePath || !existsSync(filePath)) return null;
 
   return new Promise(resolve => {
     let child;
     let settled = false;
+    let aborted = false;
     let stderr = '';
     let timer = null;
 
@@ -913,8 +933,25 @@ export async function measureLoudness(filePath, { timeoutMs = LOUDNESS_MEASURE_T
       return finish(null);
     }
 
+    if (onSpawn) {
+      try {
+        onSpawn({
+          kill: () => {
+            aborted = true;
+            killChild(child, 'loudness measurement');
+          }
+        });
+      } catch (err) {
+        // Parking it is the caller's business; failing to park it must not lose the measurement
+        console.error('[MusicQueue] Could not register the loudness measurement:', err.message);
+      }
+    }
+
     timer = setTimeout(safeTimer('the loudness measurement timeout', () => {
       console.warn(`[MusicQueue] loudness measurement of ${filePath} exceeded ${timeoutMs}ms, giving up on it`);
+      // Same reasoning as an abort: a pass that had to be cut off has only measured part of the
+      // file, and a partial level is not this song's level
+      aborted = true;
       killChild(child, 'loudness measurement');
       finish(null);
     }), timeoutMs);
@@ -927,7 +964,8 @@ export async function measureLoudness(filePath, { timeoutMs = LOUDNESS_MEASURE_T
       console.error('[MusicQueue] Loudness measurement failed:', err.message);
       finish(null);
     });
-    child.on('close', () => finish(parseLoudnormJson(stderr)));
+    // An aborted pass answers null whatever loudnorm printed on its way out - see onSpawn above
+    child.on('close', () => finish(aborted ? null : parseLoudnormJson(stderr)));
   });
 }
 
@@ -1720,6 +1758,7 @@ export class MusicQueue {
     this.prefetch = null;
     this.prefetchToken = 0; // Bumped whenever a prefetch stops being wanted - stale ones abort
     this.prefetchProcess = null; // yt-dlp child of the in-flight prefetch, so it can be stopped
+    this.measureProcess = null; // ffmpeg child of the in-flight loudness analysis, so it can be dropped
     this.prefetchHits = 0; // Transitions that found the song already downloaded...
     this.prefetchMisses = 0; // ...and those that had to fetch it in the gap, as before
     this.autoLeaveTimer = null; // Handle for the empty-queue auto-disconnect timer
@@ -1740,14 +1779,36 @@ export class MusicQueue {
 
     // Handle player state changes - use arrow function to preserve 'this'
     this.player.on(AudioPlayerStatus.Idle, () => {
-      // Don't trigger playNext if we're seeking
-      if (this.isSeeking) {
-        console.log('Player went idle during seek, ignoring...');
-        return;
-      }
       if (this.destroying) {
         console.log('Player went idle during cleanup, ignoring...');
         return;
+      }
+      // `isSeeking` means a restart is in flight and the Idle it produces is the old stream going
+      // away, not the song ending - so it is swallowed, and the Playing transition of the new
+      // stream lowers the flag. Two things arrive looking exactly like that and are not that, and
+      // both used to be swallowed and then sit out the full 10s seek watchdog in silence:
+      //
+      //   - a transition encoder that died before it produced a byte. There is no new stream
+      //     coming, so this Idle IS the end of the song. Worse than the wait: the handover was
+      //     still scheduled, so it would go on to credit the outgoing song, delete its file and
+      //     make the incoming song current for a stream that does not exist - and the incoming
+      //     song would then be credited for seconds nobody heard and dropped without ever playing.
+      //   - a user skipping inside the ~80ms a restart takes to start playing. They ended it on
+      //     purpose; there is nothing to protect.
+      if (this.isSeeking) {
+        if (this.crossfade) {
+          // Clears isSeeking and the watchdog with it, so this falls through to the ordinary
+          // advance: the song being faded in is still at the head of the queue with its file on
+          // disk, and it starts properly instead of being lost.
+          this.cancelCrossfade('the transition ended before it started playing');
+        } else if (this.skipRequested) {
+          console.log('Player went idle during a restart that a skip ended - advancing now');
+          this.isSeeking = false;
+          this.clearSeekWatchdog();
+        } else {
+          console.log('Player went idle during seek, ignoring...');
+          return;
+        }
       }
       console.log('Player went idle, playing next...');
       unattended(this.playNext(), 'advancing the queue after the player went idle');
@@ -2342,14 +2403,7 @@ export class MusicQueue {
       // measurement is still in flight and gets a level change part-way through. A failure is
       // not one: measureLoudness answers null and the song plays at its own level.
       if (measure && globalSettings.normalizeAudio) {
-        const measuredAt = Date.now();
-        const loudness = await measureLoudness(cachePath);
-        if (loudness) {
-          rememberLoudness(cachePath, loudness);
-          console.log(`[MusicQueue] measured "${songTitle}" at ${loudness.input_i} LUFS in ${Date.now() - measuredAt}ms - playing it at ${LOUDNORM_TARGET.i}`);
-        } else {
-          console.warn(`[MusicQueue] could not measure the loudness of "${songTitle}" - it will play unnormalized`);
-        }
+        await this.measureAndRemember(cachePath, songTitle);
       }
 
       return { attempts, ms: Date.now() - startedAt };
@@ -2364,6 +2418,46 @@ export class MusicQueue {
       removeCacheFile(cachePath);
       throw error;
     }
+  }
+
+  // Work out what one finished download should be played at, and remember it.
+  //
+  // Parked on `measureProcess` while it runs, because this is the one piece of a download that
+  // something may need to take back: the analysis is 8.6s of CPU for a 4-minute track, and the
+  // moment the song it belongs to is the song that is starting, nobody is waiting for a level -
+  // they are waiting for audio (see abortLoudnessMeasurement, and takePrefetched's claim).
+  async measureAndRemember(cachePath, songTitle) {
+    const measuredAt = Date.now();
+    let child = null;
+    const loudness = await measureLoudness(cachePath, {
+      onSpawn: (spawned) => {
+        child = spawned;
+        this.measureProcess = spawned;
+      }
+    });
+    if (this.measureProcess === child) this.measureProcess = null;
+
+    // Only for a file that is still there. A prefetch dropped while its analysis ran has already
+    // deleted the file (and with it the entry in the map), and remembering a level for a path
+    // nothing will ever play again would leave a map entry with nothing left to retire it.
+    if (loudness && existsSync(cachePath)) {
+      rememberLoudness(cachePath, loudness);
+      console.log(`[MusicQueue] measured "${songTitle}" at ${loudness.input_i} LUFS in ${Date.now() - measuredAt}ms - playing it at ${LOUDNORM_TARGET.i}`);
+      return loudness;
+    }
+    console.warn(`[MusicQueue] could not measure the loudness of "${songTitle}" - it will play unnormalized`);
+    return null;
+  }
+
+  // Stop the loudness analysis pass, if one is running. Killing it resolves it as null through
+  // measureLoudness's ordinary close handler, so the download it belongs to finishes immediately
+  // with the file and no level - which is exactly what an unmeasured song already does.
+  abortLoudnessMeasurement(why) {
+    const child = this.measureProcess;
+    if (!child) return false;
+    this.measureProcess = null;
+    console.log(`[MusicQueue] dropping the loudness measurement - ${why}`);
+    return killChild(child, 'loudness measurement');
   }
 
   // Download the song that is starting now, at play priority. Returns the path to the
@@ -2499,6 +2593,9 @@ export class MusicQueue {
     const child = this.prefetchProcess;
     this.prefetchProcess = null;
     killChild(child, 'prefetch');
+    // A fetch that had got as far as its analysis has no yt-dlp left to kill, and an analysis of a
+    // file that is about to be deleted is pure waste
+    this.abortLoudnessMeasurement(`the prefetch of "${entry.title}" was dropped`);
     removeCacheFile(entry.path);
     console.log(`[MusicQueue] dropped the prefetch of "${entry.title}" - ${reason}`);
     return true;
@@ -2525,6 +2622,19 @@ export class MusicQueue {
     }
 
     entry.consumedGen = gen;
+    // This song is starting NOW, and the fetch it is waiting on may still be sitting in its
+    // loudness analysis - up to 8.6s for a 4-minute track, and the whole 120s timeout in the worst
+    // case. That is the rapid-skip gap the prefetch exists to remove, spent working out a level
+    // for a song that is already being asked for. So the analysis is abandoned rather than waited
+    // out, and the song plays at its own level.
+    //
+    // Killing it rather than starting playback and applying the values when they land: playback
+    // reads the level once, at the spawn, so late values would sit in the map until the next seek
+    // or filter change picked them up - a loudness jump in the middle of a song, which is worse
+    // than a song that is consistently a bit loud. It also keeps `ready` meaning what the
+    // crossfade needs it to mean (downloaded AND measured AND safe for a second reader) rather
+    // than splitting it into two flags.
+    this.abortLoudnessMeasurement(`"${entry.title}" is starting now`);
     const path = await entry.promise;
     if (this.prefetch === entry) this.prefetch = null;
 
@@ -2583,7 +2693,7 @@ export class MusicQueue {
     return true;
   }
 
-  // --- the two ffmpeg spawn sites ---------------------------------------------
+  // --- the two playback ffmpeg spawn sites ------------------------------------
   //
   // There used to be exactly one, and that was worth having as an invariant: one encoder, one
   // file, one contract. The crossfade needs a second - two files open at once, which no
@@ -2629,7 +2739,7 @@ export class MusicQueue {
       'pipe:1'
     );
 
-    const ffmpeg = this.spawnEncoder(ffmpegArgs);
+    const ffmpeg = this.spawnEncoder(ffmpegArgs, 'encoder');
     this.startResource(ffmpeg);
     console.log(`Now playing: ${this.currentSong.title}${seekSeconds > 0 ? ` from ${seekSeconds}s` : ''}`);
   }
@@ -2656,7 +2766,10 @@ export class MusicQueue {
       `[${index}:a]${buildFilterChain(loudnessFor(path))},aformat=sample_rates=48000:channel_layouts=stereo,apad=whole_dur=${d}[a${index}]`;
 
     const ffmpegArgs = [
-      '-loglevel', '0',
+      // Not the silent `-loglevel 0` the single-file path uses. This is the more complicated of
+      // the two invocations - two inputs, a filter graph, two loudnorm chains - and if it dies
+      // there is no other account of why, so its complaints are worth the pipe (see spawnEncoder).
+      '-loglevel', 'error',
       // Sub-second, unlike the whole-second seek above: the fade has to start where the listener
       // is, not at the nearest second boundary
       '-ss', fromSec.toFixed(3),
@@ -2672,26 +2785,40 @@ export class MusicQueue {
       'pipe:1'
     ];
 
-    const ffmpeg = this.spawnEncoder(ffmpegArgs);
+    const ffmpeg = this.spawnEncoder(ffmpegArgs, 'crossfade transition');
     this.startResource(ffmpeg);
   }
 
   // One encoder, however it was configured. Parked on `currentFFmpeg` so every existing
   // cancellation path - a skip, a stop, a teardown, the next song - stops it without knowing
   // which of the two built it.
-  spawnEncoder(ffmpegArgs) {
+  //
+  // The tail of stderr is kept rather than thrown away. An encoder that dies is the whole reason a
+  // song goes silent, and "FFmpeg process closed with code 8" was the entire account of it - the
+  // 403-era diagnosis in the comments above cost real log archaeology for want of these few
+  // hundred bytes. A kill (code null) is the normal way these end and says nothing.
+  spawnEncoder(ffmpegArgs, what = 'encoder') {
     const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
     this.currentFFmpeg = ffmpeg;
 
+    let stderrTail = '';
+    ffmpeg.stderr.on('data', (chunk) => {
+      // Bounded, so a chatty encoder cannot grow this without limit
+      stderrTail = (stderrTail + chunk).slice(-ENCODER_STDERR_TAIL_CHARS);
+    });
+
     ffmpeg.on('close', (code) => {
       console.log(`FFmpeg process closed with code ${code}`);
+      if (code) {
+        const said = stderrTail.trim().split('\n').slice(-3).join(' | ');
+        console.error(`[MusicQueue] the ${what} exited ${code}${said ? `: ${said}` : ' with nothing to say'}`);
+      }
     });
 
     ffmpeg.on('error', (err) => {
       console.error('FFmpeg error:', err);
     });
 
-    ffmpeg.stderr.on('data', () => {});
     return ffmpeg;
   }
 
@@ -2961,6 +3088,12 @@ export class MusicQueue {
     const state = this.crossfade;
     if (!state) return false;
     this.crossfade = null;
+
+    // Nothing is playing from the incoming file any more, so it goes back to being an ordinary
+    // prefetch. Left claimed, it would be a slot maintainPrefetch refuses to touch: a queue change
+    // after an abandoned fade would neither drop the file nor line up the song that is next now,
+    // costing the next transition its hit and leaving a /tmp file until the teardown.
+    if (this.prefetch && this.prefetch.path === state.nextPath) this.prefetch.consumedGen = null;
 
     // The fade raised `isSeeking` to keep the Idle that a resource swap can produce from
     // advancing the queue, and only the new stream's Playing transition puts it down - which is

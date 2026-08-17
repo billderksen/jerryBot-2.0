@@ -172,6 +172,13 @@ waiting). A song the queue had to fetch on the spot - the first song of a sessio
 skip - plays unnormalized. Any measurement failure logs and plays unnormalized; nothing here can
 keep a song from starting. Playback itself costs ~3.6% of one core.
 
+A song claiming its prefetch (`takePrefetched`) **kills an analysis still in flight** and plays
+unnormalized, rather than making the start wait out the pass - otherwise a skip in the first ~10s
+of a song blocks the next start for up to the whole 120s measurement timeout. An aborted or
+timed-out pass answers `null` **even if ffmpeg printed a summary**: SIGTERM'd ffmpeg still prints
+loudnorm's numbers for the part of the file it processed, and a level measured from half a second
+of a song is worse than no level at all.
+
 ### Crossfade
 At `[duration - crossfadeSec]` a single ffmpeg is spawned with two file inputs joined by
 `acrossfade`, and its output replaces the resource the player holds. Scheduling is derived from
