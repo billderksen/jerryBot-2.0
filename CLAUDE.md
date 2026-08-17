@@ -385,12 +385,20 @@ Every stage is individually try/caught. Any failure speaks `"Sorry, dat verstond
 | `play <query>` | the same add-song handler the web dashboard uses, after `sanitizeSearchQuery` | `Oké, ik speel <title>` |
 | `skip` / `pause` / `resume` | the same music command handler the web dashboard uses | `Oké` |
 | `stop` | ditto — but speaks *before* disconnecting, since the command leaves the channel | `Oké` |
-| `volume <0-100>` | `volume:<n>` on the command handler | `Oké` |
+| `volume <0-100>` | `volume:<n>` on the command handler | `Volume naar <n>` |
+| `volume` relative (`harder` / `zachter` / `veel harder` / `veel zachter`) | reads the queue's current level, moves it by ±15 (±30 for "veel"), clamped 0-100, then `volume:<n>` | `Volume naar <n>`, or `Het volume staat al op <n>` at either end of the slider |
 | `nowplaying` / `queue` | reads the guild's `MusicQueue` | the title / how many tracks are queued |
 | `remind <n> <message>` | `reminderTracker.addReminder` (`fireAt = now + n·60000`, general channel) | `Ik herinner je over <N> minuten` |
 | `ask <question>` | OpenRouter chat with `getChatConfig()`'s model | the answer, truncated to 400 chars — the full text goes in the embed |
 
 Music commands go through the *same* `handleMusicCommand` / `handleAddSong` functions in `index.js` that the web dashboard is wired to, so voice and dashboard share exactly one code path.
+
+Relative volume is a `{ action: 'volume', relative: ±15|±30 }` intent - a direction, not a level,
+because the resulting level depends on where the volume is now and only the dispatcher can see
+that. `validateIntent` takes an absolute `volume` **or** a `relative`, never both. The phrase table
+(`RELATIVE_VOLUME_PHRASES` in `speech/intent.js`) is whole-utterance anchored like `EXACT_PHRASES`,
+which is what keeps a bare "harder" safe to accept while "dat is harder dan ik dacht" never reaches
+it; the LLM fallback can also return `relative` for phrasings the table misses.
 
 ### Setup
 

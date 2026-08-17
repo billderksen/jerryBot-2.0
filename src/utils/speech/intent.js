@@ -75,6 +75,59 @@ const VOLUME_PATTERNS = [
   /^(?:zet )?(?:het )?vol(?:ume)? op (\d{1,3})$/,
 ];
 
+// How much "harder" moves the volume, and how much "veel harder" moves it.
+// Nobody shouting at a speaker has a number in mind - they have a direction and
+// a rough size - so these are the two sizes and the direction comes from the word.
+export const VOLUME_STEP = 15;
+export const VOLUME_BIG_STEP = 30;
+
+// Whole-utterance relative volume, in the same table style as EXACT_PHRASES and
+// for the same reason: a bare "harder" is unambiguously the command, while "dat
+// is harder dan ik dacht" merely contains the word and never reaches here.
+// The value is the number of points to move by, not a level.
+const RELATIVE_VOLUME_PHRASES = {
+  'harder': VOLUME_STEP,
+  'luider': VOLUME_STEP,
+  'wat harder': VOLUME_STEP,
+  'iets harder': VOLUME_STEP,
+  'harder graag': VOLUME_STEP,
+  'doe harder': VOLUME_STEP,
+  'zet harder': VOLUME_STEP,
+  'volume omhoog': VOLUME_STEP,
+  'harder alsjeblieft': VOLUME_STEP,
+
+  'zachter': -VOLUME_STEP,
+  'stiller': -VOLUME_STEP,
+  'wat zachter': -VOLUME_STEP,
+  'iets zachter': -VOLUME_STEP,
+  'zachter graag': -VOLUME_STEP,
+  'doe zachter': -VOLUME_STEP,
+  'zet zachter': -VOLUME_STEP,
+  'volume omlaag': -VOLUME_STEP,
+  'zachter alsjeblieft': -VOLUME_STEP,
+
+  'veel harder': VOLUME_BIG_STEP,
+  'veel luider': VOLUME_BIG_STEP,
+  'veel zachter': -VOLUME_BIG_STEP,
+  'veel stiller': -VOLUME_BIG_STEP,
+};
+
+/**
+ * The level a relative volume request lands on. Pure, and clamped into the range
+ * the player accepts rather than rejected at the edges: somebody at 95 saying
+ * "harder" means "as loud as it goes", not "nothing, that would be 110".
+ * @param {number} currentPercent - the level now, 0-100
+ * @param {number} delta - points to move by, positive or negative
+ * @returns {number} the resulting level, an integer in 0-100
+ */
+export function applyRelativeVolume(currentPercent, delta) {
+  const current = Number(currentPercent);
+  const step = Number(delta);
+  const from = Number.isFinite(current) ? current : 100;
+  const by = Number.isFinite(step) ? step : 0;
+  return Math.max(0, Math.min(100, Math.round(from + by)));
+}
+
 // Whisper does not return an empty string for an empty clip - it invents
 // something. These are the markers seen in practice on near-silent captures:
 // punctuation-only output, and the music/noise tags it borrows from subtitle
@@ -102,7 +155,8 @@ Schema (alleen deze velden zijn toegestaan; laat velden weg die niet bij de geko
 {
   "action": "play" | "skip" | "pause" | "resume" | "stop" | "volume" | "nowplaying" | "queue" | "remind" | "ask" | "unknown",
   "query": string,     // alleen bij "play": de liednaam/artiest die gevraagd is, zonder opdracht-woorden
-  "volume": number,    // alleen bij "volume": geheel getal 0-100
+  "volume": number,    // alleen bij "volume": geheel getal 0-100, een absoluut niveau
+  "relative": number,  // alleen bij "volume": geheel getal -100..100, hoeveel harder/zachter (nooit samen met "volume")
   "minutes": number,   // alleen bij "remind": geheel getal 1-1440, hoeveel minuten vanaf nu
   "message": string,   // alleen bij "remind": waar de herinnering over gaat
   "question": string   // alleen bij "ask": de vraag van de gebruiker
@@ -114,6 +168,7 @@ Regels:
 - "remind": gebruiker wil een herinnering ("herinner me over ...", "laat me over ... weten dat ..."). Reken de tijdsduur om naar minuten, ook als die met woorden geschreven is (bv. "twintig minuten" = 20).
 - "ask": gebruiker stelt een DUIDELIJKE vraag (kennis, feiten, uitleg) die niets met muziekbediening of herinneringen te maken heeft. Gebruik "ask" alleen als het overduidelijk een vraag is.
 - "skip" / "pause" / "resume" / "stop" / "nowplaying" / "queue" / "volume": muziekbediening die niet al door snelkoppelingen is afgehandeld.
+- "volume": vraagt de gebruiker om een NIVEAU ("zet het volume op 40"), gebruik "volume". Vraagt de gebruiker om een VERANDERING ("doe eens wat harder", "mag het zachter"), gebruik "relative": +15 voor harder, -15 voor zachter, +30 of -30 als er "veel" bij staat. Nooit beide velden.
 - "unknown": alles wat niet duidelijk in een van bovenstaande categorieen past (onzin, ruis, opmerkingen zonder duidelijke opdracht). Kies bij twijfel "unknown", niet "ask".
 
 Voorbeelden:
@@ -125,6 +180,9 @@ Gebruiker: "zet bohemian rhapsody in de wachtrij"
 
 Gebruiker: "herinner me over 20 minuten aan de pizza"
 {"action": "remind", "minutes": 20, "message": "de pizza"}
+
+Gebruiker: "doe de muziek eens wat harder"
+{"action": "volume", "relative": 15}
 
 Gebruiker: "hoe hoog is de eiffeltoren"
 {"action": "ask", "question": "hoe hoog is de eiffeltoren"}
@@ -186,6 +244,13 @@ export function fastPathMatch(text) {
     return { action: EXACT_PHRASES[normalized] };
   }
 
+  // A direction rather than a level: the resulting level depends on where the
+  // volume is now, which only the dispatcher can see, so what comes out of here
+  // is the request and not the answer.
+  if (RELATIVE_VOLUME_PHRASES[normalized] !== undefined) {
+    return { action: 'volume', relative: RELATIVE_VOLUME_PHRASES[normalized] };
+  }
+
   for (const pattern of VOLUME_PATTERNS) {
     const match = normalized.match(pattern);
     if (match) {
@@ -238,6 +303,18 @@ export function validateIntent(obj) {
       return { action: 'play', query };
     }
     case 'volume': {
+      // Two shapes, never both: an absolute level, or a relative move. "set it to
+      // 40 and also 15 louder" is not a request anybody made, so it is rejected
+      // rather than half-honoured.
+      if (obj.relative !== undefined) {
+        if (obj.volume !== undefined) return { action: 'unknown' };
+        const relative = coerceInt(obj.relative);
+        // 0 is not a move, and nothing beyond the full range of the slider can be
+        if (relative === null || relative === 0 || relative < -100 || relative > 100) {
+          return { action: 'unknown' };
+        }
+        return { action: 'volume', relative };
+      }
       const volume = coerceInt(obj.volume);
       if (volume === null || volume < 0 || volume > 100) return { action: 'unknown' };
       return { action: 'volume', volume };

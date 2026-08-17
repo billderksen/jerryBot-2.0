@@ -46,7 +46,7 @@ import prism from 'prism-media';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 import { WakewordEngine } from './speech/wakeword.js';
 import { transcribe } from './speech/transcribe.js';
-import { parseIntent, isLikelyHallucination } from './speech/intent.js';
+import { parseIntent, isLikelyHallucination, applyRelativeVolume } from './speech/intent.js';
 import { speak, playBeep, isTtsAvailable } from './speech/tts.js';
 import { addReminder } from './reminderTracker.js';
 import { chatWithAI, getChatConfig, getVoiceConfig } from './openrouter.js';
@@ -1361,10 +1361,30 @@ async function dispatch(state, { userId, displayName, intent, spokenReplies }) {
     }
 
     case 'volume': {
-      const nothing = await requireSomethingPlaying(guildId, `volume ${intent.volume}%`);
+      // "harder" is a direction, not a level: the resulting level depends on where the volume is
+      // now, which is why this is worked out here rather than in the parser.
+      const relative = intent.relative !== undefined;
+      const asked = relative
+        ? `volume ${intent.relative > 0 ? '+' : ''}${intent.relative}`
+        : `volume ${intent.volume}%`;
+      const nothing = await requireSomethingPlaying(guildId, asked);
       if (nothing) return nothing;
-      runCommand(`volume:${intent.volume}`, guildId);
-      return { reply: 'Oké', summary: `volume ${intent.volume}%` };
+
+      const { getQueue } = await import('./musicQueue.js');
+      // The queue keeps the linear 0-1 level the UI shows; setVolume applies its own perceptual
+      // curve on top of it, so this is the number the slider and the spoken reply agree on
+      const currentPercent = Math.round((getQueue(guildId)?.volume ?? 1) * 100);
+      const level = relative ? applyRelativeVolume(currentPercent, intent.relative) : intent.volume;
+
+      // Already at the end of the slider. Saying "volume naar 100" to somebody asking for more
+      // is the same small lie as confirming a command that did nothing.
+      if (relative && level === currentPercent) {
+        return { reply: `Het volume staat al op ${level}`, summary: `${asked} — already at ${level}%` };
+      }
+
+      runCommand(`volume:${level}`, guildId);
+      // The level, not "Oké": a relative change is only confirmed by saying where it landed
+      return { reply: `Volume naar ${level}`, summary: `volume ${level}%` };
     }
 
     case 'nowplaying': {
