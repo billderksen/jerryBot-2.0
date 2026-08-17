@@ -377,6 +377,8 @@ sweepStaleCacheFiles();
 // normal case, and every caller is on a path where something has already gone away.
 function removeCacheFile(path) {
   if (!path) return;
+  // The measurement describes this file, so it goes when the file does
+  forgetLoudness(path);
   for (const candidate of [path, `${path}.part`]) {
     try {
       if (existsSync(candidate)) unlinkSync(candidate);
@@ -642,7 +644,9 @@ export function getMusicSettings() {
   return {
     loopMode: globalSettings.loopMode,
     is24_7: globalSettings.is24_7,
-    radioEnabled: globalSettings.radioEnabled
+    radioEnabled: globalSettings.radioEnabled,
+    normalizeAudio: globalSettings.normalizeAudio,
+    crossfadeSec: globalSettings.crossfadeSec
   };
 }
 
@@ -656,6 +660,27 @@ const defaultMixerFilters = {
   flanger: false
 };
 
+// --- the two settings that shape a transition --------------------------------
+//
+// Both live in playerSettings.json next to loopMode and the mixer, because that is where the
+// settings shared by every client already are: they are read by the playback path, written by
+// saveSettings(), and survive a restart with the rest of them. There is no UI for either yet -
+// an admin edits the file - so both default ON and a value that is missing or nonsense reads as
+// the default rather than as "off".
+export const DEFAULT_CROSSFADE_SEC = 2.5;
+export const MAX_CROSSFADE_SEC = 12;
+
+// 0 turns crossfading off. Anything unusable (a string, a negative, NaN) is the default rather
+// than off: a typo in a hand-edited file should not silently remove a feature.
+export function clampCrossfadeSec(value) {
+  if (value === 0 || value === '0') return 0;
+  // Number(null) and Number('') are both 0, and a missing setting is not a request for silence
+  if (value === null || value === undefined || value === '') return DEFAULT_CROSSFADE_SEC;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) return DEFAULT_CROSSFADE_SEC;
+  return Math.max(0, Math.min(MAX_CROSSFADE_SEC, seconds));
+}
+
 function loadSettings() {
   const data = loadJsonSync(SETTINGS_FILE, { loopMode: 'off', is24_7: false, sleepEndTime: null, radioEnabled: false, mixerFilters: { ...defaultMixerFilters } });
   // Check if sleep timer has expired
@@ -667,6 +692,10 @@ function loadSettings() {
     is24_7: data.is24_7 || false,
     sleepEndTime: data.sleepEndTime || null,
     radioEnabled: data.radioEnabled || false,
+    // Only an explicit `false` turns normalization off, so a file written before this existed
+    // (every one of them) gets it
+    normalizeAudio: data.normalizeAudio !== false,
+    crossfadeSec: clampCrossfadeSec(data.crossfadeSec),
     mixerFilters: { ...defaultMixerFilters, ...(data.mixerFilters || {}) }
   };
 }
@@ -675,8 +704,22 @@ function saveSettings() {
   saveJsonSync(SETTINGS_FILE, globalSettings);
 }
 
-function buildFilterChain() {
-  const filters = ['aresample=resampler=soxr'];
+// The ffmpeg -af chain for one playing file.
+//
+// @param loudness - measured loudness for this exact file (see measureLoudness), or null to
+//   play it at whatever level it was uploaded at. A file's gain belongs to the file, not to the
+//   player, which is why it is passed in rather than read from a global: the crossfade builds
+//   two of these at once, for two songs measured separately.
+function buildFilterChain(loudness = null) {
+  const filters = [];
+  const loudnorm = buildLoudnormFilter(loudness);
+  if (loudnorm) {
+    // First, so everything after it works on audio that is already at the target level - and
+    // pinned back to 48kHz immediately, because loudnorm's own output is 192kHz (verified) and
+    // the speed filter below hard-codes 48000 as the rate it is re-labelling
+    filters.push(loudnorm, 'aresample=48000');
+  }
+  filters.push('aresample=resampler=soxr');
   const m = globalSettings.mixerFilters;
 
   if (m.bass !== 0) filters.push(`bass=g=${m.bass}`);
@@ -699,10 +742,199 @@ function buildFilterChain() {
   return filters.join(',');
 }
 
+// --- loudness normalization --------------------------------------------------
+//
+// The library is mostly AI covers, and their levels are all over the place: one track is
+// mastered into the ceiling and the next is 12dB below it, so the room spends the evening
+// reaching for the volume slider. EBU R128 fixes that, and because every song is already a
+// local file before it is played (see the download gate above), it can be fixed properly.
+//
+// The two-pass loudnorm workflow, without ever re-encoding the file:
+//
+//   pass 1 (measureLoudness)  ffmpeg -af loudnorm=...:print_format=json -f null -
+//                             decodes the finished download once and prints what it measured
+//   pass 2 (buildFilterChain) the measured values are handed to loudnorm in the ffmpeg that
+//                             already runs for playback, which turns its guessing single pass
+//                             into the same linear gain the two-pass workflow would apply
+//
+// So the quality is two-pass, the file on disk is untouched, and playback costs one filter in a
+// process that was going to run anyway (measured: 8.8s of CPU across a 4-minute song, i.e. 3.6%
+// of one core, since ffmpeg is throttled by the player draining its pipe).
+//
+// WHERE THE MEASUREMENT RUNS is the one place this deviates from the plan, and it is measured
+// rather than assumed: the analysis pass costs 8.6s of CPU for a 4-minute track on this box
+// (1.0s of that is the decode; the rest is R128 with true-peak oversampling at 192kHz), not the
+// 0.3-0.5s the perf audit's numbers suggested. That is fine in the background, where the
+// next-song prefetch has a whole song to work in - and it is not fine in the gap the listener is
+// sitting in, which is exactly what wave A spent its time removing. So the prefetch measures and
+// the play-path download does not: a song that was prefetched (nearly all of them, the hit rate
+// is in the logs) plays normalized, and one the queue had to fetch on the spot plays at its own
+// level rather than making the room wait 9 seconds for the privilege.
+export const LOUDNORM_TARGET = { i: -16, tp: -1.5, lra: 11 };
+
+// A wedged analysis pass must not hold a download's completion open forever. Generous, because
+// it is bounded work on a file that is already on disk - an hour-long DJ set is the honest case.
+export const LOUDNESS_MEASURE_TIMEOUT_MS = 120_000;
+
+// ffmpeg's own accepted ranges for the measured_* options (af_loudnorm.c). Out-of-range values
+// are not a cosmetic problem: they make the filter fail to initialise, which is a song that
+// produces no audio at all rather than a song that is a little too loud. Silence is the one
+// outcome worth refusing to risk, so anything outside these is treated as "not measured".
+const LOUDNESS_RANGES = {
+  input_i: [-99, 0],
+  input_tp: [-99, 99],
+  input_lra: [0, 99],
+  input_thresh: [-99, 0],
+  target_offset: [-99, 99]
+};
+
+// What one measured file's gain is worked out from. Keyed by the /tmp path rather than stored on
+// the song, because it describes that file: the same song downloaded again is a different file
+// and gets measured again, while a file the loop path hands on (adoptEndedFileForNextPlay) keeps
+// its path and therefore its measurement, which is what makes a repeat free.
+const measuredLoudness = new Map();
+
+// Exported alongside the getter so a measurement taken anywhere - the download path, a test,
+// anything later that measures out of band - lands in the one place playback reads from.
+export function rememberLoudness(path, values) {
+  if (!path || !values) return false;
+  measuredLoudness.set(path, values);
+  return true;
+}
+
+// Exported for the crossfade's second input and for tests; null means "play it as it is".
+export function loudnessFor(path) {
+  return (path && measuredLoudness.get(path)) || null;
+}
+
+// Deleting the file it describes retires the measurement with it, so the map cannot outgrow the
+// handful of files this module has on disk at once.
+function forgetLoudness(path) {
+  if (path) measuredLoudness.delete(path);
+}
+
+/**
+ * The measured values out of a loudnorm print_format=json pass.
+ *
+ * Pure, and deliberately strict: everything it accepts is fed straight to ffmpeg as filter
+ * options, and a value ffmpeg rejects costs the listener the whole song. A silent file measures
+ * as "-inf", which is Number() -> NaN, which is not a measurement.
+ *
+ * @param {string} text - ffmpeg's stderr from the analysis pass, log noise and all
+ * @returns {{input_i: number, input_tp: number, input_lra: number, input_thresh: number,
+ *   target_offset: number}|null} null when there is no usable measurement in there
+ */
+export function parseLoudnormJson(text) {
+  if (typeof text !== 'string' || text === '') return null;
+  // The JSON block is printed among ffmpeg's ordinary output, and a run that was restarted
+  // could carry more than one - the last one is the one that finished
+  const blocks = text.match(/\{[^{}]*"input_i"[^{}]*\}/g);
+  if (!blocks || blocks.length === 0) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(blocks[blocks.length - 1]);
+  } catch {
+    return null;
+  }
+
+  const values = {};
+  for (const [field, [min, max]] of Object.entries(LOUDNESS_RANGES)) {
+    const value = Number(parsed[field]);
+    if (!Number.isFinite(value) || value < min || value > max) return null;
+    values[field] = value;
+  }
+  return values;
+}
+
+/**
+ * The single-pass loudnorm filter for a file whose loudness is already known - i.e. pass 2 of
+ * the two-pass workflow, applied live instead of written to a new file.
+ *
+ * Pure. `linear=true` is what makes it a single static gain rather than a compressor riding the
+ * track; loudnorm falls back to its dynamic mode by itself when a linear gain would clip the
+ * true-peak ceiling, which is the correct answer for a track already mastered into it.
+ *
+ * @returns {string|null} null when there is nothing measured to apply
+ */
+export function buildLoudnormFilter(loudness, target = LOUDNORM_TARGET) {
+  if (!loudness) return null;
+  const { input_i, input_tp, input_lra, input_thresh, target_offset } = loudness;
+  for (const value of [input_i, input_tp, input_lra, input_thresh, target_offset]) {
+    if (!Number.isFinite(value)) return null;
+  }
+  return [
+    `loudnorm=I=${target.i}`,
+    `TP=${target.tp}`,
+    `LRA=${target.lra}`,
+    `measured_I=${input_i}`,
+    `measured_TP=${input_tp}`,
+    `measured_LRA=${input_lra}`,
+    `measured_thresh=${input_thresh}`,
+    `offset=${target_offset}`,
+    'linear=true'
+  ].join(':');
+}
+
+/**
+ * Measure one finished download's loudness. Never rejects and never blocks anything for long:
+ * a failure, a timeout, a missing ffmpeg or a file that will not decode all come back as null,
+ * and null means the song plays at its own level. Nothing here may keep a song from starting.
+ *
+ * @returns {Promise<object|null>} the measured values, or null
+ */
+export async function measureLoudness(filePath, { timeoutMs = LOUDNESS_MEASURE_TIMEOUT_MS } = {}) {
+  if (!filePath || !existsSync(filePath)) return null;
+
+  return new Promise(resolve => {
+    let child;
+    let settled = false;
+    let stderr = '';
+    let timer = null;
+
+    const finish = (values) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(values);
+    };
+
+    try {
+      child = spawn(ffmpegPath, [
+        '-hide_banner',
+        '-nostats',
+        '-i', filePath,
+        '-af', `loudnorm=I=${LOUDNORM_TARGET.i}:TP=${LOUDNORM_TARGET.tp}:LRA=${LOUDNORM_TARGET.lra}:print_format=json`,
+        '-f', 'null',
+        '-'
+      ]);
+    } catch (err) {
+      console.error('[MusicQueue] Could not start the loudness measurement:', err.message);
+      return finish(null);
+    }
+
+    timer = setTimeout(safeTimer('the loudness measurement timeout', () => {
+      console.warn(`[MusicQueue] loudness measurement of ${filePath} exceeded ${timeoutMs}ms, giving up on it`);
+      killChild(child, 'loudness measurement');
+      finish(null);
+    }), timeoutMs);
+    if (timer.unref) timer.unref();
+
+    // The JSON is printed to stderr, at the end, after everything else ffmpeg has to say
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.stdout.on('data', () => {});
+    child.on('error', err => {
+      console.error('[MusicQueue] Loudness measurement failed:', err.message);
+      finish(null);
+    });
+    child.on('close', () => finish(parseLoudnormJson(stderr)));
+  });
+}
+
 // Global settings (shared across all clients)
 let globalSettings = loadSettings();
 let sleepTimer = null;
-console.log(`Loaded player settings: loopMode=${globalSettings.loopMode}, is24_7=${globalSettings.is24_7}, sleepEndTime=${globalSettings.sleepEndTime}, radioEnabled=${globalSettings.radioEnabled}`);
+console.log(`Loaded player settings: loopMode=${globalSettings.loopMode}, is24_7=${globalSettings.is24_7}, sleepEndTime=${globalSettings.sleepEndTime}, radioEnabled=${globalSettings.radioEnabled}, normalizeAudio=${globalSettings.normalizeAudio}, crossfadeSec=${globalSettings.crossfadeSec}`);
 
 // Setup sleep timer if one was persisted
 function setupSleepTimer() {
@@ -1890,8 +2122,12 @@ export class MusicQueue {
   // @param childSlot - property name to park the running child on ('downloadProcess' or
   //   'prefetchProcess'). Two slots rather than one because the two cancellations are not
   //   the same: a song change cancels the play download and must leave the prefetch alone.
+  // @param measure - whether to spend an analysis pass working out this file's loudness before
+  //   reporting it finished. True on the background prefetch, which has a whole song to do it
+  //   in; false on the play path, where it would be 9 seconds of silence with somebody waiting
+  //   (see the loudness section above for the measured numbers behind that split).
   // @returns {Promise<{attempts: number, ms: number}>} what the fetch cost, for the timing line
-  async fetchAudioTo(cachePath, songUrl, songTitle, { priority, label, abortReason, childSlot }) {
+  async fetchAudioTo(cachePath, songUrl, songTitle, { priority, label, abortReason, childSlot, measure = false }) {
     if (!isAllowedMediaUrl(songUrl)) {
       throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
     }
@@ -1941,6 +2177,20 @@ export class MusicQueue {
         throw new Error(`yt-dlp reported success but left no file at ${cachePath}`);
       }
 
+      // Before the caller is told the file is ready, so nothing ever plays a file whose
+      // measurement is still in flight and gets a level change part-way through. A failure is
+      // not one: measureLoudness answers null and the song plays at its own level.
+      if (measure && globalSettings.normalizeAudio) {
+        const measuredAt = Date.now();
+        const loudness = await measureLoudness(cachePath);
+        if (loudness) {
+          rememberLoudness(cachePath, loudness);
+          console.log(`[MusicQueue] measured "${songTitle}" at ${loudness.input_i} LUFS in ${Date.now() - measuredAt}ms - playing it at ${LOUDNORM_TARGET.i}`);
+        } else {
+          console.warn(`[MusicQueue] could not measure the loudness of "${songTitle}" - it will play unnormalized`);
+        }
+      }
+
       return { attempts, ms: Date.now() - startedAt };
     } catch (error) {
       // So the skip line can say how much of the gap this song spent failing, which is the
@@ -1968,7 +2218,9 @@ export class MusicQueue {
       priority: DOWNLOAD_PRIORITY.PLAY,
       label: `download of "${songTitle}"`,
       abortReason: () => this.downloadAbortReason(gen),
-      childSlot: 'downloadProcess'
+      childSlot: 'downloadProcess',
+      // Somebody is sitting in silence waiting for this one - see fetchAudioTo
+      measure: false
     });
     console.log(formatDownloadTiming(songTitle, cost.ms, cost.attempts));
     return cachePath;
@@ -2043,10 +2295,15 @@ export class MusicQueue {
         priority: DOWNLOAD_PRIORITY.CACHE,
         label: `prefetch of "${entry.title}"`,
         abortReason: () => this.prefetchAbortReason(entry),
-        childSlot: 'prefetchProcess'
+        childSlot: 'prefetchProcess',
+        // A whole song's worth of time to spend, and nobody waiting on it
+        measure: true
       });
       entry.attempts = cost.attempts;
       entry.ms = cost.ms;
+      // The file is written, measured and safe to hand to a second reader - which is what the
+      // crossfade needs to know before it can fade into it (see readyPrefetchFor)
+      entry.ready = true;
       console.log(formatDownloadTiming(entry.title, cost.ms, cost.attempts, true));
       return entry.path;
     } catch (error) {
@@ -2152,6 +2409,9 @@ export class MusicQueue {
       startedAt: Date.now(),
       attempts: 0,
       ms: 0,
+      // It is the file that just played, so it is as ready as a file gets - and it keeps the
+      // loudness measured for it when it was downloaded, which is what makes a repeat free
+      ready: true,
       // Already on disk, so there is nothing to wait for. takePrefetched() awaits this, checks
       // the file is still there, and plays it.
       promise: Promise.resolve(path)
@@ -2161,6 +2421,22 @@ export class MusicQueue {
     console.log(`[MusicQueue] loop: reusing the file already on disk for "${nextSong.title}"`);
     return true;
   }
+
+  // --- the two ffmpeg spawn sites ---------------------------------------------
+  //
+  // There used to be exactly one, and that was worth having as an invariant: one encoder, one
+  // file, one contract. The crossfade needs a second - two files open at once, which no
+  // single-input invocation can express - so there are now two, and they are kept adjacent and
+  // share everything they can:
+  //
+  //   playFromCache()            one file, from a position: a song start, a seek, a filter change
+  //   playCrossfadeTransition()  two files, joined by acrossfade: the end of one song into the
+  //                              start of the next
+  //
+  // What does NOT change is the contract either of them hands the player: signed 16-bit
+  // little-endian, 48kHz, stereo, on stdout, wrapped in a Raw AudioResource with inline volume.
+  // Anything that has to be true of a playing resource is true of both, because both go through
+  // spawnEncoder() and startResource() below rather than building it themselves.
 
   // Play from the downloaded audio file at a specific position
   playFromCache(seekSeconds = 0) {
@@ -2174,50 +2450,102 @@ export class MusicQueue {
 
     // Build FFmpeg args
     const ffmpegArgs = [];
-    
+
     // Add seek position if not starting from beginning
     if (seekSeconds > 0) {
       ffmpegArgs.push('-ss', String(Math.floor(seekSeconds)));
     }
-    
+
     ffmpegArgs.push(
       '-i', this.cachedAudioPath,
       '-analyzeduration', '0',
       '-loglevel', '0',
-      '-af', buildFilterChain(),
+      // The loudness measured for this exact file, or nothing when it was never measured
+      '-af', buildFilterChain(loudnessFor(this.cachedAudioPath)),
       '-f', 's16le',
       '-ar', '48000', // Discord's native sample rate
       '-ac', '2',     // Stereo
       'pipe:1'
     );
-    
+
+    const ffmpeg = this.spawnEncoder(ffmpegArgs);
+    this.startResource(ffmpeg);
+    console.log(`Now playing: ${this.currentSong.title}${seekSeconds > 0 ? ` from ${seekSeconds}s` : ''}`);
+  }
+
+  // Play the last `state.seconds` of the current file straight into the start of the next one,
+  // as one uninterrupted stream. See the crossfade section below for when this is allowed to
+  // happen; by the time it is called, both files are on disk and the decision is made.
+  //
+  // @param fromSec - where in the current file to pick up, which is wherever the listener has
+  //   actually got to. acrossfade always fades the LAST `d` seconds of its first input, so the
+  //   fade lands on the real end of the file whatever this is and however late the timer fired -
+  //   the position only decides how much of the song the new process re-decodes.
+  playCrossfadeTransition(state, fromSec) {
+    const d = state.seconds;
+    // apad is the guard that makes this safe rather than clever: acrossfade emits NOTHING AT ALL
+    // (verified: 0 bytes, exit 0) when either input is shorter than the fade, which would be a
+    // silent song instead of a loud one. whole_dur pads a short input up to the fade length and
+    // is a no-op on every input that is already longer, which is all of them.
+    const branch = (index, path) =>
+      `[${index}:a]${buildFilterChain(loudnessFor(path))},aresample=48000,apad=whole_dur=${d}[a${index}]`;
+
+    const ffmpegArgs = [
+      '-loglevel', '0',
+      // Sub-second, unlike the whole-second seek above: the fade has to start where the listener
+      // is, not at the nearest second boundary
+      '-ss', fromSec.toFixed(3),
+      '-analyzeduration', '0',
+      '-i', state.fromPath,
+      '-analyzeduration', '0',
+      '-i', state.nextPath,
+      '-filter_complex', `${branch(0, state.fromPath)};${branch(1, state.nextPath)};[a0][a1]acrossfade=d=${d}[out]`,
+      '-map', '[out]',
+      '-f', 's16le',
+      '-ar', '48000',
+      '-ac', '2',
+      'pipe:1'
+    ];
+
+    const ffmpeg = this.spawnEncoder(ffmpegArgs);
+    this.startResource(ffmpeg);
+  }
+
+  // One encoder, however it was configured. Parked on `currentFFmpeg` so every existing
+  // cancellation path - a skip, a stop, a teardown, the next song - stops it without knowing
+  // which of the two built it.
+  spawnEncoder(ffmpegArgs) {
     const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
     this.currentFFmpeg = ffmpeg;
-    
+
     ffmpeg.on('close', (code) => {
       console.log(`FFmpeg process closed with code ${code}`);
     });
-    
+
     ffmpeg.on('error', (err) => {
       console.error('FFmpeg error:', err);
     });
-    
+
     ffmpeg.stderr.on('data', () => {});
-    
-    const resource = createAudioResource(ffmpeg.stdout, { 
+    return ffmpeg;
+  }
+
+  // Hand an encoder's output to the player as the resource it is playing now.
+  startResource(ffmpeg) {
+    const resource = createAudioResource(ffmpeg.stdout, {
       inputType: StreamType.Raw,
       inlineVolume: true
     });
-    
+
     if (resource.volume) {
       // Apply logarithmic volume curve for natural perception
       const actualVolume = Math.pow(this.volume, 2);
       resource.volume.setVolume(actualVolume);
     }
     this.currentResource = resource;
-    
+
     this.player.play(resource);
-    console.log(`Now playing: ${this.currentSong.title}${seekSeconds > 0 ? ` from ${seekSeconds}s` : ''}`);
+    return resource;
   }
 
   // Clean up cached audio file
@@ -2230,6 +2558,9 @@ export class MusicQueue {
         console.error('Error cleaning up cached audio:', err);
       }
     }
+    // Whether or not the unlink worked, this queue is done with the file - and a measurement
+    // for a path nothing will play again is just a map entry that never goes
+    forgetLoudness(this.cachedAudioPath);
     this.cachedAudioPath = null;
     this.resetPlaybackClock();
     this.cacheGeneration++; // Invalidate any download still in flight

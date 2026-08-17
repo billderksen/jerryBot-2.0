@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'events';
-import { existsSync, readdirSync, writeFileSync, statSync, utimesSync } from 'fs';
+import { existsSync, readdirSync, writeFileSync, statSync, utimesSync, unlinkSync } from 'fs';
+import { execFileSync, execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice';
@@ -48,6 +49,15 @@ import {
   REJOIN_BACKOFF_MS,
   REJOIN_INTERVAL_MS,
   REJOIN_GIVE_UP_MS,
+  parseLoudnormJson,
+  buildLoudnormFilter,
+  measureLoudness,
+  loudnessFor,
+  rememberLoudness,
+  clampCrossfadeSec,
+  getMusicSettings,
+  DEFAULT_CROSSFADE_SEC,
+  MAX_CROSSFADE_SEC,
 } from '../src/utils/musicQueue.js';
 import {
   setQueueStatePath,
@@ -2900,4 +2910,202 @@ test('24/7 rejoin: an attempt that cannot join tries again, and leaves no half-j
     setDiscordClient(null);
     cancelRejoin('rejoin-outage', 'end of test');
   }
+});
+
+// --- loudness normalization --------------------------------------------------
+//
+// The fixtures are real ffmpeg output, captured from `ffmpeg -i <file> -af
+// loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -` on this box, log lines and all.
+// Nothing about the parser is worth testing against a hand-written approximation of it: the
+// whole risk is what ffmpeg actually prints around the JSON, and what happens when a value in
+// it is one ffmpeg would then refuse to accept back.
+
+const REAL_LOUDNORM_STDERR = `Input #0, ogg, from 'b.opus':
+  Duration: 00:00:10.01, start: 0.000000, bitrate: 125 kb/s
+  Stream #0:0: Audio: opus, 48000 Hz, mono, fltp
+Stream mapping:
+  Stream #0:0 -> #0:0 (opus (native) -> pcm_s16le (native))
+[out#0/null @ 0x5e05caba4cc0] video:0kB audio:3750kB subtitle:0kB other streams:0kB
+size=N/A time=00:00:07.10 bitrate=N/A speed=35.5x
+[Parsed_loudnorm_0 @ 0x5e05cabef680]
+{
+	"input_i" : "-39.35",
+	"input_tp" : "-35.88",
+	"input_lra" : "0.00",
+	"input_thresh" : "-49.35",
+	"output_i" : "-15.97",
+	"output_tp" : "-12.54",
+	"output_lra" : "0.00",
+	"output_thresh" : "-25.97",
+	"normalization_type" : "dynamic",
+	"target_offset" : "-0.03"
+}`;
+
+// The same pass over a real 4-minute AI cover - a track mastered right into the ceiling, which
+// is the case this whole feature exists for
+const LOUD_TRACK_LOUDNORM_STDERR = `[Parsed_loudnorm_0 @ 0x6287538a1000]
+{
+	"input_i" : "-14.74",
+	"input_tp" : "-0.74",
+	"input_lra" : "8.10",
+	"input_thresh" : "-25.27",
+	"output_i" : "-15.67",
+	"output_tp" : "-1.61",
+	"output_lra" : "6.90",
+	"output_thresh" : "-25.96",
+	"normalization_type" : "dynamic",
+	"target_offset" : "-0.33"
+}`;
+
+test('parseLoudnormJson: reads the measured values out of real ffmpeg output', () => {
+  assert.deepEqual(parseLoudnormJson(REAL_LOUDNORM_STDERR), {
+    input_i: -39.35,
+    input_tp: -35.88,
+    input_lra: 0,
+    input_thresh: -49.35,
+    target_offset: -0.03
+  });
+  assert.deepEqual(parseLoudnormJson(LOUD_TRACK_LOUDNORM_STDERR), {
+    input_i: -14.74,
+    input_tp: -0.74,
+    input_lra: 8.1,
+    input_thresh: -25.27,
+    target_offset: -0.33
+  });
+});
+
+test('parseLoudnormJson: nothing to read is null, not a half-filled measurement', () => {
+  assert.equal(parseLoudnormJson(''), null);
+  assert.equal(parseLoudnormJson(null), null);
+  assert.equal(parseLoudnormJson('Input #0, ogg, from a.opus:\n  Duration: 00:00:10.01'), null);
+  // ffmpeg died part-way through printing it
+  assert.equal(parseLoudnormJson('{\n\t"input_i" : "-14.74",\n\t"input_tp" :'), null);
+});
+
+test('parseLoudnormJson: a silent file measures as -inf, which is not a measurement', () => {
+  // Real output for a file with no audio in it at all. Number('-inf') is NaN, and handing NaN
+  // to ffmpeg as measured_I is a song that produces nothing.
+  const silent = REAL_LOUDNORM_STDERR.replace('"-39.35"', '"-inf"');
+  assert.equal(parseLoudnormJson(silent), null);
+});
+
+test('parseLoudnormJson: values ffmpeg would refuse are treated as unmeasured', () => {
+  // measured_thresh's accepted range is -99..0. A value outside it does not make the song
+  // quiet, it makes the filter fail to initialise - which is a silent song.
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"-49.35"', '"-120.4"')), null);
+  assert.equal(parseLoudnormJson(REAL_LOUDNORM_STDERR.replace('"0.00"', '"140.0"')), null);
+});
+
+test('parseLoudnormJson: the last block wins', () => {
+  const twice = `${REAL_LOUDNORM_STDERR}\n${LOUD_TRACK_LOUDNORM_STDERR}`;
+  assert.equal(parseLoudnormJson(twice).input_i, -14.74);
+});
+
+test('buildLoudnormFilter: the measured values become a single-pass filter at the target', () => {
+  const filter = buildLoudnormFilter(parseLoudnormJson(LOUD_TRACK_LOUDNORM_STDERR));
+  // The streaming-standard target, and the measurement that turns loudnorm's guessing single
+  // pass into the second pass of a two-pass run
+  assert.match(filter, /^loudnorm=I=-16:TP=-1\.5:LRA=11:/);
+  assert.match(filter, /measured_I=-14\.74/);
+  assert.match(filter, /measured_TP=-0\.74/);
+  assert.match(filter, /measured_LRA=8\.1/);
+  assert.match(filter, /measured_thresh=-25\.27/);
+  assert.match(filter, /offset=-0\.33/);
+  // A static gain rather than a compressor riding the track. loudnorm drops to dynamic by
+  // itself when a linear gain would clip the ceiling.
+  assert.match(filter, /linear=true/);
+});
+
+test('buildLoudnormFilter: an unmeasured file gets no filter at all', () => {
+  assert.equal(buildLoudnormFilter(null), null);
+  assert.equal(buildLoudnormFilter(undefined), null);
+  // A measurement missing a field is not a measurement
+  assert.equal(buildLoudnormFilter({ input_i: -14, input_tp: -1 }), null);
+});
+
+test('measureLoudness: a file that is not there answers null rather than throwing', async () => {
+  assert.equal(await measureLoudness(join(tmpdir(), `godcord_nope_${process.pid}.opus`)), null);
+  assert.equal(await measureLoudness(null), null);
+});
+
+test('measureLoudness: a file with no audio in it answers null, and the song still plays', async () => {
+  // The failure that must never block a song: ffmpeg exits non-zero, nothing is measured, and
+  // the caller carries on with no filter.
+  const path = join(tmpdir(), `godcord_notaudio_${process.pid}.opus`);
+  writeFileSync(path, 'this is not an opus file');
+  try {
+    const logged = captureConsole();
+    try {
+      assert.equal(await measureLoudness(path), null);
+    } finally {
+      logged.restore();
+    }
+    assert.equal(buildLoudnormFilter(loudnessFor(path)), null, 'nothing was remembered for it');
+  } finally {
+    if (existsSync(path)) unlinkSync(path);
+  }
+});
+
+// ffmpeg is a hard runtime dependency of this module, but a checkout without it should report
+// that rather than failing a loudness assertion for the wrong reason.
+const FFMPEG = (() => {
+  try {
+    return execSync('which ffmpeg', { encoding: 'utf8' }).trim() || null;
+  } catch {
+    return null;
+  }
+})();
+
+test('measureLoudness: real ffmpeg, real file - a known tone measures as a usable number', { skip: FFMPEG ? false : 'no system ffmpeg' }, async () => {
+  // The one test that proves the whole first pass end to end: a synthetic tone at a known
+  // level, measured by the same code the download path calls.
+  const path = join(tmpdir(), `godcord_tone_${process.pid}.opus`);
+  execFileSync(FFMPEG, [
+    '-y', '-loglevel', '0',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=6:sample_rate=48000',
+    '-filter:a', 'volume=-12dB', '-c:a', 'libopus', '-b:a', '96k', path
+  ]);
+  try {
+    const measured = await measureLoudness(path);
+    assert.ok(measured, 'a real file measures');
+    // A -12dBFS sine sits around -15 LUFS; the point is that it is a plausible, finite number
+    // in the range ffmpeg will take back, not a magic constant
+    assert.ok(measured.input_i < 0 && measured.input_i > -40, `input_i was ${measured.input_i}`);
+    assert.ok(measured.input_tp < 0, `input_tp was ${measured.input_tp}`);
+    assert.ok(Number.isFinite(measured.target_offset));
+    assert.match(buildLoudnormFilter(measured), /measured_I=/);
+  } finally {
+    if (existsSync(path)) unlinkSync(path);
+  }
+});
+
+test('a deleted cache file takes its measurement with it', () => {
+  const path = join(tmpdir(), `godcord_forget_${process.pid}.opus`);
+  writeFileSync(path, 'audio');
+  const queue = new MusicQueue('loudness-forget');
+  queue.cachedAudioPath = path;
+  rememberLoudness(path, parseLoudnormJson(REAL_LOUDNORM_STDERR));
+  assert.ok(loudnessFor(path), 'measured');
+
+  queue.cleanupCachedAudio();
+
+  assert.equal(loudnessFor(path), null, 'and forgotten with the file, so the map cannot grow');
+  assert.equal(existsSync(path), false);
+});
+
+test('the settings home: normalization and crossfade default on, nonsense reads as the default', () => {
+  // playerSettings.json is hand-edited (there is no UI yet), so a typo must not silently
+  // remove a feature - only an explicit 0 turns the crossfade off.
+  assert.equal(clampCrossfadeSec(undefined), DEFAULT_CROSSFADE_SEC);
+  assert.equal(clampCrossfadeSec(null), DEFAULT_CROSSFADE_SEC);
+  assert.equal(clampCrossfadeSec('nonsense'), DEFAULT_CROSSFADE_SEC);
+  assert.equal(clampCrossfadeSec(0), 0, 'an explicit zero is off');
+  assert.equal(clampCrossfadeSec('0'), 0);
+  assert.equal(clampCrossfadeSec(4), 4);
+  assert.equal(clampCrossfadeSec(-3), 0);
+  assert.equal(clampCrossfadeSec(99), MAX_CROSSFADE_SEC);
+
+  const settings = getMusicSettings();
+  assert.equal(typeof settings.normalizeAudio, 'boolean');
+  assert.equal(typeof settings.crossfadeSec, 'number');
 });
