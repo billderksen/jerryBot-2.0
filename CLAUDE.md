@@ -35,6 +35,7 @@ setAddSongHandler(fn)           // Web dashboard adds songs to queue
 
 ### Key Modules
 - `src/utils/musicQueue.js` - Audio playback engine (queue, seek, loop, 24/7 mode, server-side radio auto-play — runs in the queue itself, no browser tab needed). All YouTube search/playback goes through the system `yt-dlp` binary (play-dl was removed)
+- `src/utils/queueState.js` - Queue snapshot file IO + the pure restore arithmetic (staleness, position clamp, join/hold decision). See [Queue Persistence](#queue-persistence-surviving-a-restart)
 - `src/utils/voiceRecorder.js` - Streams a target user's voice channel audio to disk (`.wav`), 30-minute hard cap
 - `src/utils/pictionaryGame.js` - Drawing game with room management
 - `src/utils/pestenGame.js` - Dutch card game with bot AI players
@@ -66,6 +67,7 @@ JSON files in `data/` directory:
 - `recentlyPlayed.json` - Song history (7-day window)
 - `listeningStats.json` - Play counts per song
 - `playerSettings.json` - User preferences (volume, loop mode)
+- `queueState.json` - The live music queue, so a restart can put it back (see [Queue Persistence](#queue-persistence-surviving-a-restart))
 - `*Leaderboard.json` - Game scores
 - `levels.json` - User XP, levels, and role rewards
 - `birthdays.json` - User birthdays and announcement channel config
@@ -117,6 +119,35 @@ Piper TTS deliberately has **no** env overrides: `scripts/setup-voice.sh` instal
 - `/admin` - Bot control panel (requires Control Panel role, manages birthday/recap/twitch/activity-log channels, AI chat model/prompt/tokens, OSRS tracker players, music status, server overview)
 
 All routes except `/login` and the OAuth callback go through `requireAuth`: unauthenticated requests get a JSON `401` under `/api/*` and a `302` redirect to `/login` for page routes.
+
+## Queue Persistence (surviving a restart)
+
+The music queue is written to `data/queueState.json` and read back at startup, so a deploy or a crash mid-song does not end the evening.
+
+**Writers** — `flushQueueState()` from `index.js`'s `flushState()` (synchronous, no awaits: it also runs on `uncaughtException`), plus a 5s-debounced `scheduleQueueStateSave()` on every meaningful mutation and a 10s refresh while a song plays. The refresh is what a SIGKILL/crash falls back on, and it keeps the saved position fresh — a crash resumes up to 10s **early**, never late. `saveQueueStateNow()` writes immediately without the shutdown latch.
+
+**Snapshot** (per guild): current song, queue, pause-corrected position in seconds, volume, voice channel id, whether the user had paused, and a timestamp. `queue.snapshot()` builds it; a song with no URL is dropped.
+
+**Restore** — `restoreQueueState()` runs once from `ClientReady` (after `initVoiceAssistant`, so the join is seen by the assistant's own voice-state listener). `planQueueRestore()` in `queueState.js` makes the whole decision:
+
+| Situation | What happens |
+|---|---|
+| Snapshot > 30 min old, or untimestamped | Discarded with a log |
+| Humans in the saved channel | Join, restore the queue, resume the song from its saved position (clamped to `duration - 1`) via `play({ startAtSeconds })` |
+| Channel empty of humans, channel gone, user had paused, or nothing was playing | Restore the queue only — no join, no playback, logged with the reason |
+| A `/play` got there first | Left alone |
+
+The file is cleared before the restore acts on it (a restore that crashed would otherwise be retried forever) and on a user `/stop` or `leave()` — a restart must not undo a decision somebody made. A connection that dies on its own deliberately leaves it in place.
+
+A restored-but-not-joined queue exists without a voice connection, which is why `play.js`, `playlist.js` and `index.js`'s `handleAddSong` all join when `!queue.connection` rather than only when the queue is new.
+
+## 24/7 Auto-Rejoin
+
+With 24/7 mode **on**, an unrecoverable voice connection error still tears down cleanly (normal mode is unchanged — queue stopped, bot out) and then tries to get back: a snapshot is taken at teardown time, written to disk, and `scheduleRejoin()` retries the same channel at 10s, 30s, 60s, then every 5 min, giving up at 30 min (8 attempts, the last at ~26.7 min). On success it rejoins and resumes the interrupted song from where it stopped, reusing the same restore plan with the age and audience checks turned off.
+
+Attempts abort instantly if: someone starts music in that guild (`createQueue` cancels the pending rejoin), 24/7 is toggled off (`toggle24_7`), or the bot shuts down (`flushQueueState`). Every attempt re-checks all of it, and again after the join lands — a join can take 15s, plenty of time for a `/play` to claim the queue. A failed attempt leaves no queue holding a dead connection.
+
+Pure helpers, all tested: `planRejoinDelay(attempt, elapsedMs)`, `rejoinAbortReason({...})`. `isRejoinPending(guildId)` says whether an effort is in flight.
 
 ## Level/XP System
 

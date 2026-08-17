@@ -32,10 +32,21 @@ import {
   chooseRadioSeed,
   RADIO_MEMORY_SIZE,
   flushQueueState,
+  saveQueueStateNow,
   forgetQueueState,
   restoreQueueState,
   describeRestoreHold,
   getRecentlyPlayed,
+  planRejoinDelay,
+  rejoinAbortReason,
+  scheduleRejoin,
+  cancelRejoin,
+  cancelAllRejoins,
+  isRejoinPending,
+  setDiscordClient,
+  REJOIN_BACKOFF_MS,
+  REJOIN_INTERVAL_MS,
+  REJOIN_GIVE_UP_MS,
 } from '../src/utils/musicQueue.js';
 import {
   setQueueStatePath,
@@ -2497,7 +2508,7 @@ test('persistence: stopping the music on purpose is not something a restart undo
   const queue = createQueue('persist-stop');
   queue.voiceChannel = { id: 'voice-stop', name: 'Muziek' };
   queue.songs = [{ title: 'playing', url: URL_A, duration: 100 }];
-  assert.equal(flushQueueState(), true);
+  assert.equal(saveQueueStateNow(), true);
   assert.ok(existsSync(getQueueStatePath()));
 
   queue.stop();
@@ -2512,7 +2523,7 @@ test('persistence: a queue that has run dry drops its own entry instead of leavi
   queue.currentSong = { title: 'the last song', url: URL_A, duration: 100 };
   queue.isPlaying = true;
   queue.songStartTime = Date.now() - 1000;
-  assert.equal(flushQueueState(), true);
+  assert.equal(saveQueueStateNow(), true);
   assert.ok(loadQueueState().guilds['persist-dry'], 'it was saved while it played');
 
   // 24/7 mode keeps an empty queue alive rather than leaving; without this, a restart would
@@ -2520,7 +2531,7 @@ test('persistence: a queue that has run dry drops its own entry instead of leavi
   queue.currentSong = null;
   queue.isPlaying = false;
   queue.songs = [];
-  flushQueueState();
+  saveQueueStateNow();
 
   assert.equal(existsSync(getQueueStatePath()), false, 'nothing left worth restoring, so nothing left on disk');
   queue.cleanup();
@@ -2539,14 +2550,277 @@ test('persistence: a teardown leaves the saved queue alone, so a restart can sti
   queue.currentSong = { title: 'interrupted', url: URL_A, duration: 100 };
   queue.isPlaying = true;
   queue.songStartTime = Date.now() - 2000;
-  flushQueueState();
+  queue.current24_7 = () => false; // the 24/7 rejoin is its own story, below
+  saveQueueStateNow();
 
   queue.teardownConnection('error unrecoverable', connection);
 
   assert.equal(loadQueueState().guilds['persist-teardown'].currentSong.title, 'interrupted');
   // ...and a later write does not overwrite it with emptiness: there is no live queue for this
   // guild any more, and "no queue" is not the same fact as "a queue with nothing in it"
-  flushQueueState();
+  saveQueueStateNow();
   assert.equal(loadQueueState().guilds['persist-teardown'].currentSong.title, 'interrupted');
   forgetQueueState();
+});
+
+// --- 24/7: getting back in after a connection dies ----------------------------
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Waits for something the rejoin does on a timer, without sitting out real backoff time
+async function waitUntil(fn, what) {
+  for (let i = 0; i < 300; i++) {
+    if (fn()) return;
+    await sleep(2);
+  }
+  assert.fail(`timed out waiting for ${what}`);
+}
+
+// The snapshot a teardown hands the rejoin, taken from a real queue so the shape is the one the
+// code actually produces rather than one a test made up
+function snapshotOf({ guildId = 'rejoin', channelId = 'voice-247', positionSec = 42, songs = [], current = { title: 'Interrupted', url: URL_A, duration: 300 } } = {}) {
+  const queue = new MusicQueue(guildId);
+  queue.voiceChannel = { id: channelId, name: 'Muziek' };
+  queue.voiceChannelName = 'Muziek';
+  queue.currentSong = current;
+  queue.songs = songs;
+  queue.volume = 0.5;
+  if (current) {
+    queue.isPlaying = true;
+    queue.songStartTime = Date.now() - (positionSec * 1000);
+  }
+  return queue.snapshot({ includeEmpty: true });
+}
+
+test('24/7 rejoin: the backoff starts quickly, then waits out a real outage, then gives up', () => {
+  assert.deepEqual(REJOIN_BACKOFF_MS, [10_000, 30_000, 60_000]);
+  assert.equal(REJOIN_INTERVAL_MS, 5 * 60_000);
+  assert.equal(REJOIN_GIVE_UP_MS, 30 * 60_000);
+
+  // Walk the whole schedule the way armRejoin does, and read off when each attempt lands
+  const landsAtSeconds = [];
+  let elapsedMs = 0;
+  for (let attempt = 1; attempt < 100; attempt++) {
+    const plan = planRejoinDelay(attempt, elapsedMs);
+    if (!plan.retry) break;
+    elapsedMs += plan.delayMs;
+    landsAtSeconds.push(elapsedMs / 1000);
+  }
+
+  assert.deepEqual(landsAtSeconds, [10, 40, 100, 400, 700, 1000, 1300, 1600]);
+  assert.ok(elapsedMs <= REJOIN_GIVE_UP_MS, 'every attempt lands inside the half hour');
+  // The one after the last would land past it, which is what stopped the walk
+  assert.equal(planRejoinDelay(9, elapsedMs).retry, false);
+});
+
+test('24/7 rejoin: an attempt that would land past the give-up point is not scheduled at all', () => {
+  assert.deepEqual(planRejoinDelay(4, 29 * 60_000), { retry: false, delayMs: 0 });
+  // ...and nonsense is not a reason to schedule anything either
+  assert.equal(planRejoinDelay(0, 0).retry, false);
+  assert.equal(planRejoinDelay(NaN, 0).retry, false);
+});
+
+test('24/7 rejoin: every reason to stop trying is checked, in the order that matters', () => {
+  assert.equal(rejoinAbortReason({}), null, 'nothing wrong: carry on');
+  assert.match(rejoinAbortReason({ cancelled: true }), /cancelled/);
+  assert.match(rejoinAbortReason({ shuttingDown: true }), /shutting down/);
+  assert.match(rejoinAbortReason({ is24_7: false }), /24\/7 mode was turned off/);
+  assert.match(rejoinAbortReason({ claimed: true }), /music was started/);
+  // A cancelled effort says so even when everything else is also true - the first answer is the
+  // one that happened first
+  assert.match(rejoinAbortReason({ cancelled: true, is24_7: false, claimed: true }), /cancelled/);
+});
+
+test('24/7 rejoin: the plan the rejoin asks for is the restore plan with the checks that do not apply turned off', () => {
+  // An hour-old snapshot, and nobody in the channel: both of which stop the startup restore
+  // dead. 24/7 has already decided to be in that channel, and an outage is exactly the reason
+  // the snapshot is old.
+  const snapshot = { ...snapshotOf({ guildId: 'rejoin-plan' }), savedAt: Date.now() - (60 * 60 * 1000) };
+
+  const atStartup = planQueueRestore(snapshot, { humansPresent: 0 });
+  assert.equal(atStartup.restore, false);
+  assert.equal(atStartup.reason, 'stale');
+
+  const forTheRejoin = planQueueRestore(snapshot, { maxAgeMs: Infinity, channelFound: true, requireHumans: false });
+  assert.equal(forTheRejoin.join, true);
+  assert.equal(forTheRejoin.reason, 'resume');
+  assert.ok(Math.abs(forTheRejoin.resumeAt - 42) < 1);
+});
+
+test('24/7 rejoin: a connection that dies keeps the interrupted song and schedules a way back', () => {
+  const queue = createQueue('rejoin-teardown');
+  queue.current24_7 = () => true;
+  queue.trackAndClearListening = () => {};
+  const connection = new FakeConnection(VoiceConnectionStatus.Ready);
+  queue.connection = connection;
+  queue.listenerConnection = connection;
+  queue.voiceChannel = { id: 'voice-teardown-247', name: 'Muziek' };
+  queue.voiceChannelName = 'Muziek';
+  queue.currentSong = { title: 'Interrupted', url: URL_A, duration: 300 };
+  queue.songs = [{ title: 'Next up', url: URL_B, duration: 200 }];
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 40_000;
+
+  queue.teardownConnection('error unrecoverable', connection);
+
+  // The teardown itself is unchanged: the queue stopped and the connection is gone
+  assert.equal(queue.isPlaying, false);
+  assert.equal(connection.destroyCalls, 1);
+  assert.equal(isRejoinPending('rejoin-teardown'), true, 'but 24/7 means it is coming back');
+
+  // ...and the interrupted state is on disk, so a pm2 restart during the retry window (which
+  // can be half an hour long) finds the song rather than nothing
+  const saved = loadQueueState().guilds['rejoin-teardown'];
+  assert.equal(saved.currentSong.title, 'Interrupted');
+  assert.deepEqual(saved.songs.map(s => s.title), ['Next up']);
+  assert.ok(Math.abs(saved.positionSec - 40) < 1, `saved position was ${saved.positionSec}`);
+  assert.equal(saved.voiceChannelId, 'voice-teardown-247');
+
+  cancelRejoin('rejoin-teardown', 'end of test');
+  forgetQueueState();
+});
+
+test('24/7 rejoin: normal mode is untouched - a dead connection still just stops', () => {
+  const queue = createQueue('rejoin-normal-mode');
+  queue.current24_7 = () => false;
+  queue.trackAndClearListening = () => {};
+  const connection = new FakeConnection(VoiceConnectionStatus.Ready);
+  queue.connection = connection;
+  queue.listenerConnection = connection;
+  queue.voiceChannel = { id: 'voice-normal', name: 'Muziek' };
+  queue.currentSong = { title: 'Interrupted', url: URL_A, duration: 300 };
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 5_000;
+
+  queue.teardownConnection('error unrecoverable', connection);
+
+  assert.equal(isRejoinPending('rejoin-normal-mode'), false, 'nothing is scheduled, nothing is retried');
+  assert.equal(existsSync(getQueueStatePath()), false, 'and the teardown wrote nothing of its own');
+});
+
+test('24/7 rejoin: without 24/7, or without a channel to go back to, nothing is scheduled', () => {
+  const snapshot = snapshotOf({ guildId: 'rejoin-refused' });
+  assert.equal(scheduleRejoin('rejoin-refused', snapshot, 'error unrecoverable', { is24_7: () => false }), null);
+  assert.equal(isRejoinPending('rejoin-refused'), false);
+
+  const logged = captureConsole();
+  try {
+    assert.equal(scheduleRejoin('rejoin-nowhere', { ...snapshot, voiceChannelId: null }, 'error unrecoverable', { is24_7: () => true }), null);
+  } finally {
+    logged.restore();
+  }
+  assert.equal(isRejoinPending('rejoin-nowhere'), false);
+  assert.ok(logged.find(/channel it was in is not known/), logged.dump());
+});
+
+test('24/7 rejoin: an error storm is one effort, not five', () => {
+  const snapshot = snapshotOf({ guildId: 'rejoin-storm' });
+  const first = scheduleRejoin('rejoin-storm', snapshot, 'error unrecoverable', { is24_7: () => true, schedule: [60_000] });
+  const second = scheduleRejoin('rejoin-storm', snapshot, 'error unrecoverable', { is24_7: () => true, schedule: [60_000] });
+  assert.equal(second, first, 'the effort already running owns this guild');
+  assert.equal(first.attempt, 1, 'and it did not restart its own schedule');
+  cancelRejoin('rejoin-storm', 'end of test');
+});
+
+test('24/7 rejoin: a /play that gets there first calls the whole thing off, at once', async () => {
+  const snapshot = snapshotOf({ guildId: 'rejoin-raced' });
+  // A backoff long enough that the attempt has definitely not fired yet
+  scheduleRejoin('rejoin-raced', snapshot, 'error unrecoverable', { is24_7: () => true, schedule: [50] });
+  assert.equal(isRejoinPending('rejoin-raced'), true);
+
+  // ...which is exactly the window a user's /play lands in
+  const userQueue = createQueue('rejoin-raced');
+
+  assert.equal(isRejoinPending('rejoin-raced'), false, 'cancelled the moment music was started, not five minutes later');
+  await sleep(80);
+  assert.equal(userQueue.connection, null, 'and the attempt never ran, so nothing joined anything');
+  userQueue.cleanup();
+});
+
+test('24/7 rejoin: a shutdown ends the effort - the next process reads the snapshot instead', async () => {
+  const snapshot = snapshotOf({ guildId: 'rejoin-shutdown' });
+  scheduleRejoin('rejoin-shutdown', snapshot, 'error unrecoverable', { is24_7: () => true, schedule: [50] });
+  assert.equal(isRejoinPending('rejoin-shutdown'), true);
+
+  flushQueueState();
+
+  assert.equal(isRejoinPending('rejoin-shutdown'), false);
+  // The shutdown flush latches persistence off for the process it belongs to, so nothing new is
+  // scheduled either
+  assert.equal(scheduleRejoin('rejoin-shutdown', snapshot, 'error unrecoverable', { is24_7: () => true }), null);
+
+  // Put the module back the way a fresh process starts, for whatever runs after this
+  await restoreQueueState({ client: fakeClient() });
+  forgetQueueState();
+});
+
+test('24/7 rejoin: an attempt that lands goes back into the channel and picks the song up where it stopped', async () => {
+  const channel = fakeVoiceChannel('voice-247-live', { humans: 0, bots: 0 });
+  // Nobody in the channel on purpose: 24/7 is about being there, whether or not anybody is
+  // listening at the moment the connection comes back
+  setDiscordClient(fakeClient(channel));
+  const queue = createQueue('rejoin-live');
+  const calls = stubQueueForRestore(queue);
+
+  try {
+    const snapshot = snapshotOf({ guildId: 'rejoin-live', channelId: channel.id, positionSec: 42, songs: [{ title: 'Next up', url: URL_B, duration: 200 }] });
+    scheduleRejoin('rejoin-live', snapshot, 'error unrecoverable', { is24_7: () => true, schedule: [0] });
+
+    await waitUntil(() => calls.length > 0, 'the interrupted song to start downloading again');
+    assert.equal(calls[0].url, URL_A);
+    calls[0].finish();
+    await waitUntil(() => queue.played.length > 0, 'playback to start');
+
+    assert.deepEqual(queue.joined, ['voice-247-live']);
+    assert.ok(Math.abs(queue.played[0].seconds - 42) <= 1, `resumed at ${queue.played[0].seconds}s`);
+    assert.equal(queue.currentSong.title, 'Interrupted');
+    assert.deepEqual(queue.songs.map(s => s.title), ['Next up']);
+    assert.equal(queue.volume, 0.5);
+    assert.equal(isRejoinPending('rejoin-live'), false, 'the effort is over: it worked');
+  } finally {
+    setDiscordClient(null);
+    queue.cleanup();
+    await tick();
+  }
+  assert.deepEqual(cacheFilesFor('rejoin-live'), []);
+});
+
+test('24/7 rejoin: an attempt that cannot join tries again, and leaves no half-joined queue behind', async () => {
+  const channel = fakeVoiceChannel('voice-247-outage', { humans: 1 });
+  setDiscordClient(fakeClient(channel));
+  const queue = createQueue('rejoin-outage');
+  const calls = stubQueueForRestore(queue);
+  const connection = new FakeConnection(VoiceConnectionStatus.Signalling);
+  // What a Discord outage looks like from here: the join hands back a connection that never
+  // becomes Ready
+  queue.join = async () => {
+    queue.joined.push(channel.id);
+    queue.connection = connection;
+    return connection;
+  };
+
+  const logged = captureConsole();
+  try {
+    // The first attempt now, the second far enough out that this test does not have to wait
+    // for it - what matters is that it is scheduled at all
+    scheduleRejoin('rejoin-outage', snapshotOf({ guildId: 'rejoin-outage', channelId: channel.id }), 'error unrecoverable', {
+      is24_7: () => true,
+      schedule: [0, 60_000],
+      readyMs: 30,
+      giveUpMs: 10 * 60_000
+    });
+
+    await waitUntil(() => logged.find(/got no usable voice connection/), 'the attempt to fail');
+
+    assert.deepEqual(queue.joined, ['voice-247-outage'], 'it did try');
+    assert.equal(calls.length, 0, 'and downloaded nothing for a connection that never came up');
+    assert.equal(getQueue('rejoin-outage'), undefined, 'no queue is left holding a dead connection');
+    assert.equal(connection.destroyCalls, 1, 'and the half-open connection was closed');
+    assert.equal(isRejoinPending('rejoin-outage'), true, 'the effort continues');
+    assert.ok(logged.find(/rejoin attempt 2 for guild rejoin-outage in 60s/), logged.dump());
+  } finally {
+    logged.restore();
+    setDiscordClient(null);
+    cancelRejoin('rejoin-outage', 'end of test');
+  }
 });

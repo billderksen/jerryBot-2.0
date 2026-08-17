@@ -1522,10 +1522,23 @@ export class MusicQueue {
     }
 
     console.warn(`[MusicQueue] Voice connection ${reason} - stopping playback`);
+
+    // Failing clean is the right answer in normal mode: the queue stops, the bot is out, and
+    // nothing pretends to be playing. 24/7 mode is the standing instruction not to accept
+    // that, so the state is taken down here - before cleanup() empties it - and the rejoin
+    // below tries to put it back. `includeEmpty` because 24/7 is about being in the channel;
+    // there may be nothing playing to resume, and the bot should still be there.
+    const rejoinFrom = this.current24_7() ? this.snapshot({ includeEmpty: true }) : null;
+    // ...and written out too, so a pm2 restart during the retry window (which can be half an
+    // hour long) finds the interrupted song rather than nothing
+    if (rejoinFrom) saveTeardownSnapshot(this.guildId, rejoinFrom);
+
     // cleanup() raises `destroying` before it stops the player, so the Idle that follows never
     // reaches playNext(); this is the last chance to credit what was actually heard
     this.trackAndClearListening();
     this.cleanup();
+
+    if (rejoinFrom) scheduleRejoin(this.guildId, rejoinFrom, reason, { is24_7: () => this.current24_7() });
   }
 
   // A connection-level 'error' is not a state transition. @discordjs/voice re-emits it and
@@ -2722,11 +2735,22 @@ export class MusicQueue {
     return globalSettings.loopMode;
   }
 
+  // Whether 24/7 mode is on, read through a method for the same reason as currentLoopMode -
+  // and read live rather than captured, because a 24/7 rejoin that is still waiting out a
+  // backoff has to notice the moment somebody turns the mode off.
+  current24_7() {
+    return globalSettings.is24_7;
+  }
+
   // Toggle 24/7 mode (prevents auto-disconnect)
   toggle24_7() {
     globalSettings.is24_7 = !globalSettings.is24_7;
     saveSettings();
     console.log('24/7 mode:', globalSettings.is24_7 ? 'enabled' : 'disabled');
+    // Turning the mode off takes back the instruction a pending rejoin is acting on. The
+    // attempt would notice at its next checkpoint anyway - up to five minutes later - and a
+    // bot that walks back into a channel after being told not to is not a nice surprise.
+    if (!globalSettings.is24_7) cancelAllRejoins('24/7 mode was turned off');
     broadcastState();
     return globalSettings.is24_7;
   }
@@ -3080,6 +3104,12 @@ export function deferAutoLeave(guildId, ms) {
 // only way to see one here is from inside its own teardown, and that is not an instance to
 // hand out.
 export function createQueue(guildId, guildInfo = null) {
+  // Somebody is starting music in this guild, which is the one thing a pending 24/7 rejoin must
+  // never fight: it would walk into a channel and pour a snapshot over a queue that is now
+  // somebody else's. The rejoin's own call raises `claiming` first, so it does not cancel itself.
+  const rejoining = rejoins.get(guildId);
+  if (rejoining && !rejoining.claiming) cancelRejoin(guildId, 'music was started in this guild again');
+
   const existing = queues.get(guildId);
   if (existing && !existing.destroying) {
     console.log(`[MusicQueue] Reusing the live queue for guild ${guildId} rather than replacing it`);
@@ -3129,7 +3159,9 @@ let persistenceStopped = false;
 // mode keeps it alive and empty), and leaving the finished song on disk would have a restart
 // replay it. So a live queue with nothing to save deletes its own entry, and a guild with no
 // live queue at all is left exactly as it was.
-function writeQueueState() {
+//
+// @returns {boolean} whether the file was touched
+export function saveQueueStateNow() {
   // Nothing to say. Notably this is also the state right after a teardown, which is why that
   // path's snapshot survives on disk instead of being overwritten with emptiness.
   if (queues.size === 0) return false;
@@ -3170,7 +3202,7 @@ export function scheduleQueueStateSave() {
     // Cleared before the write, so a throw cannot leave the handle set and stop every later
     // save from being scheduled (the same reasoning as scheduleSaveStats)
     queueStateTimeout = null;
-    writeQueueState();
+    saveQueueStateNow();
   }), QUEUE_STATE_SAVE_DEBOUNCE_MS);
   // The bot's gateway socket keeps the loop alive, so unref costs nothing there and keeps a
   // pending save from holding `node --test` open for five seconds
@@ -3193,16 +3225,23 @@ export function forgetQueueState() {
   }
 }
 
-// Force an immediate synchronous write of the live queue state. Called from index.js's
-// shutdown flush, which runs on the signal path and on uncaughtException - so no awaits here.
+// The end of this process's life: write the live queue state out and stop doing anything about
+// it afterwards. Called from index.js's shutdown flush, which runs on the signal path and on
+// uncaughtException - so no awaits here. restoreQueueState() is the other half of the pair, and
+// lifts the latch again for a process that is starting up rather than ending.
+//
+// For a write with none of that finality, use saveQueueStateNow().
 export function flushQueueState() {
   persistenceStopped = true;
   if (queueStateTimeout) {
     clearTimeout(queueStateTimeout);
     queueStateTimeout = null;
   }
+  // A 24/7 rejoin belongs to the process that lost the connection. The next one reads the same
+  // snapshot off disk at startup and decides for itself.
+  cancelAllRejoins('the bot is shutting down');
   try {
-    return writeQueueState();
+    return saveQueueStateNow();
   } catch (err) {
     console.error('[MusicQueue] Could not flush the queue state:', err.message);
     return false;
@@ -3216,7 +3255,7 @@ const queueStateRefresh = setInterval(safeTimer('the queue state refresh', () =>
   if (persistenceStopped) return;
   for (const queue of queues.values()) {
     if (queue.isPlaying) {
-      writeQueueState();
+      saveQueueStateNow();
       return;
     }
   }
@@ -3368,6 +3407,294 @@ export async function restoreQueueState({ client = null, now = Date.now(), maxAg
     }
   }
   return plans;
+}
+
+// --- 24/7: getting back in after a connection dies ---------------------------
+//
+// An unrecoverable connection error ends with teardownConnection: the queue stops, the bot is
+// out, nothing pretends to be playing. That is right in normal mode - a voice link Discord will
+// not give back is not something to sit and spin on.
+//
+// 24/7 mode is the standing instruction not to accept it. So after the same clean teardown, the
+// bot tries to get back into the same channel and pick the interrupted song up where it stopped,
+// on a schedule that starts quickly and then backs off to something that can wait out a real
+// Discord outage without hammering it.
+export const REJOIN_BACKOFF_MS = [10_000, 30_000, 60_000];
+export const REJOIN_INTERVAL_MS = 5 * 60_000;
+export const REJOIN_GIVE_UP_MS = 30 * 60_000;
+// How long a rejoin attempt gives the connection to reach Ready. Longer than the 5s a live
+// connection's error recovery allows, because this is a fresh join during an outage rather than
+// a wobble on an established link - Signalling can legitimately take a while.
+const REJOIN_READY_MS = 15_000;
+
+// How long to wait before attempt `attempt` (1-based), given how long the whole effort has been
+// going. Pure, so the shape of the schedule is pinned by a test rather than by reading it out
+// of a log an hour later: 10s, 30s, 60s, then every 5 minutes, and no attempt is scheduled that
+// would land past the give-up point.
+export function planRejoinDelay(attempt, elapsedMs = 0, {
+  schedule = REJOIN_BACKOFF_MS,
+  intervalMs = REJOIN_INTERVAL_MS,
+  giveUpMs = REJOIN_GIVE_UP_MS
+} = {}) {
+  if (!Number.isFinite(attempt) || attempt < 1) return { retry: false, delayMs: 0 };
+  const delayMs = schedule[attempt - 1] ?? intervalMs;
+  if (!Number.isFinite(delayMs)) return { retry: false, delayMs: 0 };
+  if ((Number.isFinite(elapsedMs) ? elapsedMs : Infinity) + delayMs > giveUpMs) {
+    return { retry: false, delayMs: 0 };
+  }
+  return { retry: true, delayMs };
+}
+
+// Why a scheduled rejoin should stop trying - null means carry on. Pure, and checked at every
+// point the effort could have been overtaken: when the timer fires, and again once the join has
+// come back (which takes up to REJOIN_READY_MS, plenty of time for a user to start music).
+export function rejoinAbortReason({
+  cancelled = false,
+  shuttingDown = false,
+  is24_7 = true,
+  claimed = false
+} = {}) {
+  if (cancelled) return 'it was cancelled';
+  if (shuttingDown) return 'the bot is shutting down';
+  if (!is24_7) return '24/7 mode was turned off';
+  if (claimed) return 'music was started in this guild again';
+  return null;
+}
+
+// One rejoin effort per guild, at most.
+const rejoins = new Map();
+
+// Put the interrupted state on disk at teardown time. Not the debounced save: by the time it
+// fired there would be no live queue left to snapshot, and the point is that a restart during
+// the retry window still finds the song.
+function saveTeardownSnapshot(guildId, snapshot) {
+  // An interrupted *channel* is the rejoin's business; a restart can only act on an interrupted
+  // song, so with nothing playing and nothing queued there is nothing to write down
+  if (!snapshot?.currentSong && !(snapshot?.songs?.length > 0)) return false;
+  try {
+    const stored = loadQueueState();
+    const guilds = stored.version === QUEUE_STATE_VERSION ? { ...stored.guilds } : {};
+    guilds[guildId] = snapshot;
+    saveQueueState(guilds);
+    return true;
+  } catch (err) {
+    console.error('[MusicQueue] Could not save the interrupted queue:', err.message);
+    return false;
+  }
+}
+
+// Start trying to get back into `snapshot.voiceChannelId`.
+//
+// @param is24_7 - reads the mode live, so a toggle during a backoff is noticed
+// @param schedule - the backoff, passed in for the same reason the download retry's is: the
+//   loop can then be exercised without sitting out ten real seconds
+export function scheduleRejoin(guildId, snapshot, why, {
+  is24_7 = () => globalSettings.is24_7,
+  schedule = REJOIN_BACKOFF_MS,
+  intervalMs = REJOIN_INTERVAL_MS,
+  giveUpMs = REJOIN_GIVE_UP_MS,
+  readyMs = REJOIN_READY_MS
+} = {}) {
+  if (persistenceStopped) return null;
+  if (!is24_7()) return null;
+  if (!snapshot?.voiceChannelId) {
+    console.warn(`[MusicQueue] 24/7: cannot rejoin guild ${guildId} - the channel it was in is not known`);
+    return null;
+  }
+  // A connection error storm is one teardown per connection, and the effort already running
+  // owns this guild. Its own identity checks decide what happens next.
+  const existing = rejoins.get(guildId);
+  if (existing) return existing;
+
+  const session = {
+    guildId,
+    snapshot,
+    is24_7,
+    schedule,
+    intervalMs,
+    giveUpMs,
+    readyMs,
+    startedAt: Date.now(),
+    attempt: 0,
+    timer: null,
+    cancelled: false,
+    // Raised only around the session's own createQueue call, so the hook that cancels a rejoin
+    // when somebody starts music can tell the two apart
+    claiming: false
+  };
+  rejoins.set(guildId, session);
+  console.warn(`[MusicQueue] 24/7: voice connection ${why} - trying to get back into "${snapshot.voiceChannelName || snapshot.voiceChannelId}"`);
+  armRejoin(session);
+  return session;
+}
+
+function armRejoin(session) {
+  const attempt = session.attempt + 1;
+  const elapsedMs = Date.now() - session.startedAt;
+  const plan = planRejoinDelay(attempt, elapsedMs, {
+    schedule: session.schedule,
+    intervalMs: session.intervalMs,
+    giveUpMs: session.giveUpMs
+  });
+
+  if (!plan.retry) {
+    console.error(`[MusicQueue] 24/7: giving up on rejoining guild ${session.guildId} after ${Math.round(elapsedMs / 60000)} min and ${session.attempt} attempt(s) - start the music again to try once more`);
+    endRejoin(session);
+    return false;
+  }
+
+  session.attempt = attempt;
+  session.timer = setTimeout(safeTimer('the 24/7 rejoin', () => {
+    session.timer = null;
+    unattended(runRejoinAttempt(session), `the 24/7 rejoin of guild ${session.guildId}`);
+  }), plan.delayMs);
+  // The gateway socket keeps the process alive, so this timer never needs to
+  if (session.timer.unref) session.timer.unref();
+  console.log(`[MusicQueue] 24/7: rejoin attempt ${attempt} for guild ${session.guildId} in ${Math.round(plan.delayMs / 1000)}s`);
+  return true;
+}
+
+function endRejoin(session) {
+  if (session.timer) {
+    clearTimeout(session.timer);
+    session.timer = null;
+  }
+  if (rejoins.get(session.guildId) === session) rejoins.delete(session.guildId);
+}
+
+// Stop trying, for a reason that is not "the attempt failed".
+export function cancelRejoin(guildId, reason) {
+  const session = rejoins.get(guildId);
+  if (!session) return false;
+  session.cancelled = true;
+  endRejoin(session);
+  console.log(`[MusicQueue] 24/7: stopped trying to rejoin guild ${guildId} - ${reason}`);
+  return true;
+}
+
+export function cancelAllRejoins(reason) {
+  let stopped = 0;
+  for (const guildId of [...rejoins.keys()]) {
+    if (cancelRejoin(guildId, reason)) stopped++;
+  }
+  return stopped;
+}
+
+// Whether a rejoin is still pending for this guild - for tests and for anything that wants to
+// know why the bot is not in a channel it was told to stay in.
+export function isRejoinPending(guildId) {
+  return rejoins.has(guildId);
+}
+
+function stopRejoinIfOvertaken(session, { claimed = false } = {}) {
+  const reason = rejoinAbortReason({
+    cancelled: session.cancelled,
+    shuttingDown: persistenceStopped,
+    is24_7: session.is24_7(),
+    claimed
+  });
+  if (!reason) return null;
+  console.log(`[MusicQueue] 24/7: rejoin of guild ${session.guildId} stopped - ${reason}`);
+  endRejoin(session);
+  return reason;
+}
+
+async function runRejoinAttempt(session) {
+  const guildId = session.guildId;
+  // Music in this guild again means somebody started it while this was waiting, and that queue -
+  // not this snapshot - is what the room is listening to. The bare existence of a queue is not
+  // the test: createQueue cancels a pending rejoin the moment anybody creates one, so the
+  // `cancelled` check has already covered that, and a queue with nothing in it is more likely
+  // to be this effort's own from a moment ago.
+  const live = queues.get(guildId);
+  const claimed = !!live && !live.destroying && (live.isPlaying || live.songs.length > 0);
+  if (stopRejoinIfOvertaken(session, { claimed })) return false;
+
+  const channel = await resolveVoiceChannel(discordClient, session.snapshot.voiceChannelId);
+  if (!channel) {
+    console.warn(`[MusicQueue] 24/7: attempt ${session.attempt} for guild ${guildId} found no channel ${session.snapshot.voiceChannelId} - trying again`);
+    return armRejoin(session);
+  }
+
+  session.claiming = true;
+  let queue;
+  try {
+    queue = createQueue(guildId, { name: session.snapshot.guildName, icon: session.snapshot.guildIcon });
+  } finally {
+    session.claiming = false;
+  }
+
+  let ready = false;
+  try {
+    const connection = await queue.join(channel);
+    ready = await waitForReadyConnection(connection, session.readyMs, CONNECTION_SETTLE_MS);
+  } catch (err) {
+    console.error(`[MusicQueue] 24/7: attempt ${session.attempt} for guild ${guildId} failed to join:`, err?.message || err);
+  }
+
+  if (!ready) {
+    console.warn(`[MusicQueue] 24/7: attempt ${session.attempt} for guild ${guildId} got no usable voice connection`);
+    // Nothing half-joined is left behind: a mapped queue holding a dead connection is one no
+    // /play would ever join properly. cleanup() rather than leave(), because leave() would
+    // also throw away the saved state a restart during the retry window needs.
+    dropFailedRejoinQueue(queue, guildId);
+    return armRejoin(session);
+  }
+
+  // The join took up to REJOIN_READY_MS, which is plenty of time for a /play to have landed on
+  // this very queue. If it did, the queue is theirs and the snapshot must not be poured over it.
+  if (stopRejoinIfOvertaken(session, { claimed: queue.isPlaying || queue.songs.length > 0 })) return true;
+
+  console.log(`[MusicQueue] 24/7: back in "${channel.name}" for guild ${guildId} after ${session.attempt} attempt(s)`);
+  // Done: the connection is what this was for. Ended before playback starts so that a start
+  // which takes a while (the download) cannot be mistaken for an attempt still in flight.
+  endRejoin(session);
+
+  // The same arithmetic the startup restore uses, with the two checks that do not apply turned
+  // off: 24/7 has already decided to be in that channel whether or not anybody is listening,
+  // and a song interrupted half an hour ago by an outage is exactly what should come back.
+  const plan = planQueueRestore(session.snapshot, {
+    maxAgeMs: Infinity,
+    channelFound: true,
+    requireHumans: false
+  });
+  if (!plan.restore) {
+    console.log(`[MusicQueue] 24/7: nothing to put back for guild ${guildId} - staying in the channel`);
+    return true;
+  }
+
+  putQueueBack(queue, plan);
+  if (!plan.currentSong) {
+    console.log(`[MusicQueue] 24/7: ${plan.songs.length} song(s) back in the queue for guild ${guildId}, not started - ${describeRestoreHold(plan.reason, channel.name)}`);
+    broadcastState();
+    return true;
+  }
+
+  const outcome = await startRestoredSong(queue, plan);
+  if (outcome.started) {
+    console.log(`[MusicQueue] 24/7: resumed "${plan.currentSong.title}" at ${Math.round(plan.resumeAt)}s where the connection dropped`);
+  } else {
+    console.warn(`[MusicQueue] 24/7: "${plan.currentSong.title}" did not start again (${outcome.reason}${outcome.detail ? `: ${outcome.detail}` : ''})`);
+  }
+  return true;
+}
+
+// Take back the queue a failed attempt created, without touching the saved state.
+function dropFailedRejoinQueue(queue, guildId) {
+  if (queues.get(guildId) !== queue) return false;
+  // Music in it means it is not this effort's queue any more, and the connection object is one
+  // per guild - the one the attempt joined on is the one their playback is using. Their own
+  // error handling owns it from here; touching either would be taking somebody else's music away.
+  if (queue.isPlaying || queue.songs.length > 0) return false;
+  try {
+    if (queue.connection && queue.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+      queue.connection.destroy();
+    }
+  } catch (err) {
+    console.error('[MusicQueue] 24/7: could not close the half-open connection:', err.message);
+  }
+  queue.cleanup();
+  return true;
 }
 
 // Guilds with a clip in flight on the queueless path below
