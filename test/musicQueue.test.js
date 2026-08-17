@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'events';
+import { existsSync, readdirSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice';
 import {
   MusicQueue,
@@ -16,6 +18,9 @@ import {
   planDownloadRetry,
   runGatedDownload,
   describeDownloadFailure,
+  DownloadAbortedError,
+  formatDownloadTiming,
+  formatTransition,
   DOWNLOAD_TIMEOUT_MS,
 } from '../src/utils/musicQueue.js';
 
@@ -420,12 +425,23 @@ test('downloadErrorText: reads the reason wherever execa left it', () => {
   assert.equal(downloadErrorText(null), '');
 });
 
-test('planDownloadRetry: three attempts on a 403, waiting 3s then 7s', () => {
+test('planDownloadRetry: three attempts on a 403, waiting 500ms then 3s', () => {
+  // The first hop is near-immediate because a retry re-resolves a fresh googlevideo URL,
+  // which is what actually clears these 403s - the old 3s wait bought nothing and was paid
+  // on roughly half of all downloads. Three attempts still, and the second wait stays long.
   const text = 'HTTP Error 403: Forbidden';
-  assert.deepEqual(DOWNLOAD_403_BACKOFF_MS, [3000, 7000]);
-  assert.deepEqual(planDownloadRetry(1, text), { retry: true, delayMs: 3000 });
-  assert.deepEqual(planDownloadRetry(2, text), { retry: true, delayMs: 7000 });
+  assert.deepEqual(DOWNLOAD_403_BACKOFF_MS, [500, 3000]);
+  assert.deepEqual(planDownloadRetry(1, text), { retry: true, delayMs: 500 });
+  assert.deepEqual(planDownloadRetry(2, text), { retry: true, delayMs: 3000 });
   assert.deepEqual(planDownloadRetry(3, text), { retry: false, delayMs: 0 }, 'the schedule is exhausted');
+});
+
+test('planDownloadRetry: the fast first hop cannot silently become the whole schedule', () => {
+  // A 403 that survives a re-resolution is a different animal, and hammering it three times
+  // in 1.5s would be the burst behaviour the gate was built to stop
+  assert.equal(DOWNLOAD_403_BACKOFF_MS.length, 2, 'still three attempts in all');
+  assert.ok(DOWNLOAD_403_BACKOFF_MS[0] <= 1000, 'the first retry is near-immediate');
+  assert.ok(DOWNLOAD_403_BACKOFF_MS[1] >= 3000, 'the second still waits');
 });
 
 test('planDownloadRetry: anything that is not a 403 keeps the single-attempt behaviour', () => {
@@ -641,8 +657,11 @@ test('an invalidated download is stopped, not just ignored', () => {
 // (a live yt-dlp call). It is covered by its own tests elsewhere.
 function buildDownloadQueue(guildId) {
   const queue = new MusicQueue(guildId);
-  // Keeps play() off the shared recently-played and listening-stats files
-  queue.playingFromHistory = true;
+  // Keeps play() off the shared recently-played and listening-stats files. Pinned rather
+  // than assigned: play() clears the flag as it consumes it, so a plain `= true` only ever
+  // protected the first song, and a test that played a second one wrote fictional play
+  // counts into data/listeningStats.json - and armed the 30s debounced save that writes it.
+  Object.defineProperty(queue, 'playingFromHistory', { get: () => true, set: () => {} });
   queue.played = [];
   queue.playNextCalls = 0;
   queue.playFromCache = function (seconds) { this.played.push({ path: this.cachedAudioPath, seconds }); };
@@ -669,9 +688,9 @@ function captureConsole() {
   };
 }
 
-const aSong = (title = 'Gragas - Gangsta Paradise (AI Cover)') => ({
+const aSong = (title = 'Gragas - Gangsta Paradise (AI Cover)', url = 'https://www.youtube.com/watch?v=qrCRgIu2QtU') => ({
   title,
-  url: 'https://www.youtube.com/watch?v=qrCRgIu2QtU',
+  url,
   duration: 180,
   requestedBy: 'test'
 });
@@ -784,6 +803,538 @@ test('(c) a 403 storm skips the song once, saying why', async () => {
   assert.equal(queue.playNextCalls, 1);
   assert.ok(
     logged.find(/Skipping "a rate-limited one": YouTube rate-limited this download \(3 attempts\)/),
+    logged.dump()
+  );
+});
+
+// --- next-song prefetch ------------------------------------------------------
+
+const URL_A = 'https://www.youtube.com/watch?v=qrCRgIu2QtU';
+const URL_B = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+const URL_C = 'https://www.youtube.com/watch?v=9bZkp7q19f0';
+const URL_D = 'https://www.youtube.com/watch?v=kJQP7kiw5Fk';
+
+// Every /tmp file this guild's queue is responsible for. Guild ids are unique per test, so
+// this is an exact answer to "did anything get left behind?"
+const cacheFilesFor = (guildId) =>
+  readdirSync(tmpdir()).filter(f => f.startsWith('godcord') && f.includes(guildId));
+
+// A queue whose playNext() does what the real one does to the state the prefetch cares
+// about - end this song, drop its file, start the next - without the recently-played file,
+// the listening stats, the 500ms settle, or the radio's live yt-dlp call.
+//
+// The advancing promise is exposed because the real playNext() is fired and forgotten from
+// stopForUserAction(), so a test that skips has no other way to wait for the transition.
+function buildTransitionQueue(guildId) {
+  const queue = buildDownloadQueue(guildId);
+  queue.credited = 0;
+  queue.trackAndClearListening = () => { queue.credited++; };
+  queue.advancing = Promise.resolve();
+  queue.playNext = function () {
+    this.playNextCalls++;
+    this.skipRequested = false;
+    this.advancing = (async () => {
+      this.cleanupCachedAudio();
+      this.currentSong = null;
+      this.isPlaying = false;
+      if (this.songs.length > 0) await this.play();
+    })();
+    return this.advancing;
+  };
+  return queue;
+}
+
+// Replaces yt-dlp, and only yt-dlp. The gate's callers, the abort checks, the real /tmp
+// paths and the real unlinking all stay, so these tests watch actual files appear and go.
+//
+// Each call is a handle: finish() writes the file the download would have produced, fail()
+// makes it fail, and kill() (through the child the queue parks) does what cancelling does.
+function stubFetches(queue) {
+  const calls = [];
+  queue.fetchAudioTo = (cachePath, url, title, opts) => {
+    // What runGatedDownload checks before it spends an attempt
+    const reason = opts.abortReason();
+    if (reason) return Promise.reject(new DownloadAbortedError(reason));
+
+    const call = { cachePath, url, title, priority: opts.priority, label: opts.label, settled: false, killed: false };
+    call.promise = new Promise((resolve, reject) => {
+      const settle = (act) => {
+        if (call.settled) return;
+        call.settled = true;
+        if (queue[opts.childSlot] === call.child) queue[opts.childSlot] = null;
+        act();
+      };
+      call.finish = () => settle(() => { writeFileSync(cachePath, 'audio'); resolve({ attempts: 1, ms: 7 }); });
+      call.fail = (error = new Error('ERROR: Video unavailable')) => settle(() => reject(error));
+    });
+    call.child = { kill: () => { call.killed = true; call.fail(new Error('Command failed with exit code 255')); } };
+    queue[opts.childSlot] = call.child;
+    calls.push(call);
+    return call.promise;
+  };
+  return calls;
+}
+
+// Start the first song and get it playing, so there is something for a prefetch to run under
+async function startFirstSong(queue, calls) {
+  const starting = queue.play();
+  await tick();
+  calls[0].finish();
+  await starting;
+}
+
+test('prefetch: the next song starts downloading as soon as this one is playing', async () => {
+  const queue = buildTransitionQueue('prefetch-starts');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('now playing', URL_A), aSong('up next', URL_B)];
+
+  await startFirstSong(queue, calls);
+
+  assert.equal(calls.length, 2, 'the song that started, and the one after it');
+  assert.equal(calls[1].url, URL_B);
+  assert.equal(calls[1].priority, DOWNLOAD_PRIORITY.CACHE, 'behind anything a listener is waiting on');
+  assert.equal(calls[0].priority, DOWNLOAD_PRIORITY.PLAY);
+  assert.equal(queue.prefetch.url, URL_B);
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-starts'), []);
+});
+
+test('prefetch: nothing is prefetched when nothing is playing, or when nothing is queued', async () => {
+  const queue = buildTransitionQueue('prefetch-idle');
+  const calls = stubFetches(queue);
+
+  // An idle queue's songs[0] is the song play() is about to start for itself, at play
+  // priority - prefetching it would be the second concurrent fetch the gate exists to stop
+  queue.songs = [aSong('the only one', URL_A)];
+  queue.maintainPrefetch();
+  assert.equal(calls.length, 0);
+  assert.equal(queue.prefetch, null);
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls.length, 1, 'and with the queue now empty, there is no next song to fetch');
+  assert.equal(queue.prefetch, null);
+
+  queue.cleanup();
+});
+
+test('prefetch: a transition that finds the song already downloaded plays it without a download', async () => {
+  const queue = buildTransitionQueue('prefetch-hit');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  calls[1].finish();
+  await tick();
+
+  const readyPath = calls[1].cachePath;
+  assert.ok(existsSync(readyPath), 'the next song is on disk before anybody needs it');
+
+  await queue.playNext();
+
+  assert.equal(calls.length, 2, 'the transition downloaded nothing at all');
+  assert.equal(queue.played.length, 2);
+  assert.equal(queue.played[1].path, readyPath, 'it played the file that was already waiting');
+  assert.equal(queue.cachedAudioPath, readyPath, 'which is the seek cache from the first second');
+  assert.equal(queue.prefetch, null, 'and the entry was consumed, not left attached');
+  assert.equal(queue.prefetchHits, 1);
+  assert.equal(queue.prefetchMisses, 1, 'the first song had nothing prefetched, as the first never can');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-hit'), []);
+});
+
+test('prefetch: a next song that stops being next has its file thrown away, not played', async () => {
+  const queue = buildTransitionQueue('prefetch-stale');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  calls[1].finish();
+  await tick();
+  const stalePath = calls[1].cachePath;
+  assert.ok(existsSync(stalePath));
+
+  // The user drops the song that was next; a different one takes its place
+  queue.songs.push(aSong('third', URL_C));
+  assert.equal(queue.removeFromQueue(1), true);
+
+  assert.equal(existsSync(stalePath), false, 'the file for a song that is no longer next is gone');
+  assert.equal(calls.length, 3, 'and the song that is next now is downloading');
+  assert.equal(calls[2].url, URL_C);
+
+  calls[2].finish();
+  await tick();
+  await queue.playNext();
+
+  assert.equal(queue.played[1].path, calls[2].cachePath, 'the third song played its own audio');
+  assert.notEqual(queue.played[1].path, stalePath, 'and never the file fetched for the song it replaced');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-stale'), []);
+});
+
+test('prefetch: a replacement never reuses the dropped fetch\'s filename', async () => {
+  // Dropping a prefetch and starting its replacement happen in the same millisecond, and the
+  // dropped one deletes its file as it unwinds - on a shared name, that delete lands on the
+  // new download's output and the song plays half a file or none at all.
+  const queue = buildTransitionQueue('prefetch-unique-names');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  queue.songs[0] = aSong('third', URL_C);
+  queue.maintainPrefetch();
+
+  assert.equal(calls.length, 3);
+  assert.notEqual(calls[2].cachePath, calls[1].cachePath, 'the replacement got a name of its own');
+  assert.notEqual(calls[1].cachePath, calls[0].cachePath, 'and a prefetch never shares one with a play download');
+
+  calls[2].finish();
+  await tick();
+  assert.ok(existsSync(calls[2].cachePath), 'the dropped fetch did not delete the new one\'s file');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-unique-names'), []);
+});
+
+test('prefetch: a reorder that changes what plays next re-points it', async () => {
+  const queue = buildTransitionQueue('prefetch-reorder');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B), aSong('third', URL_C)];
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls[1].url, URL_B);
+
+  // Move the third song to the front of the queue
+  assert.equal(queue.reorder(2, 1), true);
+
+  assert.equal(calls[1].killed, true, 'the fetch for the song that was next was stopped');
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].url, URL_C, 'and the song that is next now took its place');
+  assert.equal(queue.prefetch.url, URL_C);
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-reorder'), []);
+});
+
+test('prefetch: never two in flight, however much the queue is stirred', async () => {
+  const queue = buildTransitionQueue('prefetch-single');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B), aSong('third', URL_C)];
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls.length, 2, 'one prefetch, of the second song, still running');
+
+  queue.maintainPrefetch();
+  queue.maintainPrefetch();
+  queue.addSong(aSong('fourth', URL_D));
+  queue.reorder(2, 3);   // shuffles the tail, leaves the next song alone
+
+  assert.equal(calls.length, 2, 'the next song never changed, so the running fetch is still the right one');
+  assert.equal(calls.filter(c => !c.settled).length, 1, 'and exactly one download is in flight');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-single'), []);
+});
+
+test('prefetch: one that fails is silent - it costs the song neither a retry nor a life', async () => {
+  const queue = buildTransitionQueue('prefetch-fails');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  calls[1].fail(Object.assign(new Error('Command failed with exit code 1'), { rateLimited: true, attempts: 3 }));
+  await tick();
+
+  assert.equal(queue.consecutiveFailures, 0, 'a background fetch does not spend the song\'s failures');
+  assert.deepEqual(queue.songs.map(s => s.url), [URL_B], 'nor drop it from the queue');
+  assert.equal(queue.playNextCalls, 0, 'nor move the queue on');
+
+  // ...and the song still plays: the start downloads it properly, exactly as it did before
+  const advancing = queue.playNext();
+  await tick();
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].url, URL_B);
+  assert.equal(calls[2].priority, DOWNLOAD_PRIORITY.PLAY, 'at play priority, with the play path\'s retries');
+  calls[2].finish();
+  await advancing;
+
+  assert.equal(queue.played[1].path, calls[2].cachePath);
+  assert.equal(queue.prefetchHits, 0);
+  assert.equal(queue.prefetchMisses, 2);
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-fails'), []);
+});
+
+test('prefetch: a failed one is not started again on the next queue mutation', async () => {
+  // Otherwise a song YouTube is refusing turns every reorder into another doomed download
+  const queue = buildTransitionQueue('prefetch-no-respin');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  calls[1].fail();
+  await tick();
+
+  queue.maintainPrefetch();
+  queue.addSong(aSong('third', URL_C));
+  assert.equal(calls.length, 2, 'the song that is next has had its go');
+
+  queue.cleanup();
+});
+
+test('prefetch: stopping mid-prefetch stops the fetch and leaves no file behind', async () => {
+  const queue = buildTransitionQueue('prefetch-stop');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls.length, 2, 'the prefetch is in flight');
+
+  queue.stop();
+  await tick();
+
+  assert.equal(calls[1].killed, true, 'the yt-dlp fetching a song nobody will hear was stopped');
+  assert.equal(queue.prefetch, null);
+  assert.equal(queue.prefetchProcess, null, 'no zombie left parked in the slot');
+  assert.deepEqual(queue.songs, []);
+  assert.deepEqual(cacheFilesFor('prefetch-stop'), [], 'and /tmp is clean');
+
+  queue.cleanup();
+});
+
+test('prefetch: a teardown mid-prefetch takes the file with it', async () => {
+  const queue = buildTransitionQueue('prefetch-teardown');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  calls[1].finish();
+  await tick();
+  assert.ok(existsSync(calls[1].cachePath));
+
+  queue.cleanup();
+  await tick();
+
+  assert.equal(queue.prefetch, null);
+  assert.deepEqual(cacheFilesFor('prefetch-teardown'), [], 'both the playing song\'s file and the next one\'s');
+});
+
+test('prefetch: a skip takes over the running fetch rather than restarting it', async () => {
+  const queue = buildTransitionQueue('prefetch-takeover');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls.length, 2, 'the second song is still downloading');
+
+  queue.skip();
+  await tick();
+
+  assert.equal(calls.length, 2, 'the seconds already spent on it were not thrown away');
+  assert.equal(calls[1].killed, false);
+  assert.equal(queue.prefetch.consumedGen, queue.cacheGeneration, 'the start owns that fetch now');
+
+  calls[1].finish();
+  await queue.advancing;
+  assert.equal(queue.played[1].path, calls[1].cachePath);
+  assert.equal(queue.prefetchHits, 1, 'and it still counts as a hit');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-takeover'), []);
+});
+
+test('prefetch: cancelling a start that took over a running fetch stops that fetch too', async () => {
+  // A consumed prefetch is this song's download, but it is parked in the other slot. Without
+  // this it runs on unwatched, holding the one slot the song the user actually wants needs.
+  const queue = buildTransitionQueue('prefetch-consumed-kill');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B), aSong('third', URL_C)];
+
+  await startFirstSong(queue, calls);
+  queue.skip();
+  await tick();
+  assert.notEqual(queue.prefetchProcess, null, 'its yt-dlp is running, for the song that is starting');
+
+  queue.skip();  // ...and the user changes their mind again
+
+  assert.equal(calls[1].killed, true, 'the fetch the abandoned start had taken over was stopped');
+  assert.equal(queue.prefetchProcess, null);
+
+  await tick();
+  assert.equal(calls.length, 3, 'and the third song is being fetched for its own start');
+  assert.equal(calls[2].url, URL_C);
+  calls[2].finish();
+  await queue.advancing;
+  assert.equal(queue.played[1].path, calls[2].cachePath, 'no file was played for the wrong song');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-consumed-kill'), []);
+});
+
+test('prefetch: two skips in a row leave one fetch in flight and nothing orphaned', async () => {
+  const queue = buildTransitionQueue('prefetch-double-skip');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B), aSong('third', URL_C)];
+
+  await startFirstSong(queue, calls);
+  calls[1].finish();
+  await tick();
+
+  queue.skip();
+  await queue.advancing;
+  assert.equal(queue.played[1].path, calls[1].cachePath, 'the second song played its prefetched file');
+  assert.equal(calls.length, 3, 'and the third started prefetching');
+
+  queue.skip();
+  await tick();
+
+  assert.equal(calls.length, 3, 'the running fetch was taken over, not restarted');
+  assert.equal(calls.filter(c => !c.settled).length, 1, 'still exactly one download in flight');
+  assert.equal(cacheFilesFor('prefetch-double-skip').length, 0, 'the two finished songs took their files with them');
+
+  calls[2].finish();
+  await queue.advancing;
+  assert.equal(queue.played[2].path, calls[2].cachePath);
+  assert.equal(queue.prefetchHits, 2);
+  assert.equal(queue.prefetchMisses, 1);
+  assert.equal(cacheFilesFor('prefetch-double-skip').length, 1, 'only the song that is playing');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-double-skip'), []);
+});
+
+test('prefetch: a user song replacing the radio fill that was next re-points it', async () => {
+  const queue = buildTransitionQueue('prefetch-radio');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A)];
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls.length, 1, 'nothing queued after it, so nothing to prefetch');
+
+  // The server-side radio tops the queue up while the song plays
+  queue.addSong({ ...aSong('radio pick', URL_B), requestedBy: '📻 Radio' });
+  assert.equal(calls.length, 2, 'which starts downloading straight away, rather than at the gap');
+  calls[1].finish();
+  await tick();
+  const radioPath = calls[1].cachePath;
+
+  // ...and then a human queues something, which drops the radio picks
+  queue.addSong(aSong('a real request', URL_C));
+
+  assert.deepEqual(queue.songs.map(s => s.url), [URL_C]);
+  assert.equal(existsSync(radioPath), false, 'the dropped radio pick took its file with it');
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].url, URL_C);
+
+  calls[2].finish();
+  await tick();
+  await queue.playNext();
+  assert.equal(queue.played[1].path, calls[2].cachePath, 'the request played, not the radio pick');
+  assert.equal(queue.prefetchHits, 1);
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-radio'), []);
+});
+
+test('prefetch: a whole playlist leaves exactly one file on disk at a time', async () => {
+  const queue = buildTransitionQueue('prefetch-playlist');
+  const calls = stubFetches(queue);
+  queue.songs = [
+    aSong('one', URL_A), aSong('two', URL_B), aSong('three', URL_C), aSong('four', URL_D)
+  ];
+
+  await startFirstSong(queue, calls);
+  for (let song = 1; song < 4; song++) {
+    calls[calls.length - 1].finish();   // the prefetch lands while the song plays
+    await tick();
+    assert.equal(cacheFilesFor('prefetch-playlist').length, 2, 'the song playing, and the one after it');
+    await queue.playNext();
+  }
+
+  assert.equal(queue.played.length, 4, 'all four played');
+  assert.equal(queue.prefetchHits, 3, 'and only the first cost a wait');
+  assert.equal(queue.prefetchMisses, 1);
+  assert.deepEqual(cacheFilesFor('prefetch-playlist').length, 1, 'no orphans piled up along the way');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('prefetch-playlist'), []);
+});
+
+// --- timing instrumentation --------------------------------------------------
+
+test('formatDownloadTiming: one line, with the numbers that say whether this is working', () => {
+  assert.equal(
+    formatDownloadTiming('Gragas - Gangsta Paradise (AI Cover)', 4210, 1),
+    '[MusicQueue] downloaded "Gragas - Gangsta Paradise (AI Cover)" in 4210ms (1 attempt)'
+  );
+  assert.equal(
+    formatDownloadTiming('Summertime Sadness', 9800, 2, true),
+    '[MusicQueue] downloaded "Summertime Sadness" in 9800ms (2 attempts, prefetched)'
+  );
+});
+
+test('formatTransition: the hit rate reads straight out of the log', () => {
+  assert.equal(formatTransition(true, 'Second', 12, 3), '[MusicQueue] transition: prefetch HIT for "Second" (12 hit / 3 miss)');
+  assert.equal(formatTransition(false, 'Second', 12, 4), '[MusicQueue] transition: prefetch MISS for "Second" (12 hit / 4 miss)');
+});
+
+test('instrumentation: a transition logs the timing and whether it was a hit', async () => {
+  const queue = buildTransitionQueue('prefetch-logging');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('Gragas Cover', URL_B)];
+
+  const logged = captureConsole();
+  try {
+    await startFirstSong(queue, calls);
+    calls[1].finish();
+    await tick();
+    await queue.playNext();
+  } finally {
+    logged.restore();
+  }
+
+  assert.ok(logged.find(/downloaded "first" in \d+ms \(1 attempt\)$/), logged.dump());
+  assert.ok(logged.find(/downloaded "Gragas Cover" in \d+ms \(1 attempt, prefetched\)$/), logged.dump());
+  assert.ok(logged.find(/transition: prefetch MISS for "first" \(0 hit \/ 1 miss\)/), logged.dump());
+  assert.ok(logged.find(/transition: prefetch HIT for "Gragas Cover" \(1 hit \/ 1 miss\)/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('instrumentation: a skip says how long the listener waited for the song that never played', async () => {
+  const queue = buildDownloadQueue('skip-reason-timing');
+  queue.downloadSongToCache = async () => {
+    throw Object.assign(new Error('Command failed with exit code 1'), {
+      rateLimited: true, attempts: 3, downloadMs: 4123
+    });
+  };
+  queue.songs = [aSong('a rate-limited one')];
+
+  const logged = captureConsole();
+  try {
+    await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.ok(
+    logged.find(/Skipping "a rate-limited one": YouTube rate-limited this download \(3 attempts\) after 4123ms/),
     logged.dump()
   );
 });

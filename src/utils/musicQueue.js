@@ -136,14 +136,31 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // never touches a googlevideo URL, and the one fetch that remains fails somewhere a retry
 // can reach. The cheap listing calls (radio mixes, search autocomplete) stay ungated - they
 // are not what YouTube is counting.
+//
+// That fixed the skips (about 7 dead songs in 15 became 1) and left one cost behind: the
+// download now happens in the gap between songs, where it is audible silence. Roughly half
+// of them 403 on the first attempt, so the gap was the download plus a backoff - up to 13
+// seconds of nothing. Since a song's audio is a file that exists before playback starts,
+// the same fetch can just as well happen a song early, and that is what the prefetch below
+// does: while song N plays, queue[0] is downloaded in the background at CACHE priority, so
+// when N ends its successor is already on disk and the transition costs nothing. A prefetch
+// is never authoritative - if it is missing, stale or failed, the start downloads the song
+// itself exactly as it did before, with the same retries and the same say over the breaker.
 
 // Waits before the 2nd and 3rd attempt, so three attempts in all. Passed around as a
 // parameter so the retry loop can be tested without sitting out ten real seconds.
-export const DOWNLOAD_403_BACKOFF_MS = [3000, 7000];
+//
+// The first hop is near-immediate on purpose. Each attempt runs a fresh yt-dlp, which
+// re-resolves a new googlevideo URL, and the 403s in the logs are the pattern kind that a
+// re-resolution clears rather than a cooldown that has to be waited out - so the old 3s
+// first wait bought nothing and cost 3s on about half of all downloads. The second wait
+// stays long, because a 403 that survives a re-resolution is the kind worth waiting on.
+export const DOWNLOAD_403_BACKOFF_MS = [500, 3000];
 
-// Starting a song outranks any background fetch. Only the play path downloads today, so the
-// ladder matters across guilds (one gate, several queues) and is what a future next-song
-// prefetch would queue at.
+// Starting a song outranks any background fetch, which is what keeps the next-song prefetch
+// from ever standing between a listener and the song they are waiting for: a prefetch that
+// is merely queued is jumped, and one that is already running is killed outright when the
+// song it was for stops being next (see invalidatePrefetch).
 export const DOWNLOAD_PRIORITY = { CACHE: 0, PLAY: 1 };
 
 // A download that stops making progress must not hold the gate for the rest of the evening.
@@ -245,6 +262,59 @@ export function describeDownloadFailure(error) {
   if (error?.rateLimited) return `YouTube rate-limited this download (${error.attempts} attempts)`;
   if (error?.timedOut) return `the download did not finish within ${DOWNLOAD_TIMEOUT_MS / 1000}s`;
   return error?.message || 'unknown error';
+}
+
+// One line per finished fetch. The whole point of the prefetch is time the listener does not
+// spend in silence, and there was no way to read that off the logs at all: how long a
+// download took, how many attempts it cost, and whether it happened early enough to matter
+// are exactly the three numbers that say whether it is working.
+export function formatDownloadTiming(title, ms, attempts, prefetched = false) {
+  const plural = attempts === 1 ? 'attempt' : 'attempts';
+  return `[MusicQueue] downloaded "${title}" in ${ms}ms (${attempts} ${plural}${prefetched ? ', prefetched' : ''})`;
+}
+
+// Whether the song that just started was already on disk, logged at every transition so the
+// hit rate reads straight out of `pm2 logs` without a counter to poll or an endpoint to add.
+export function formatTransition(hit, title, hits, misses) {
+  return `[MusicQueue] transition: prefetch ${hit ? 'HIT' : 'MISS'} for "${title}" (${hits} hit / ${misses} miss)`;
+}
+
+// Where one song's audio goes while it is being fetched.
+//
+// The timestamp alone is not unique, and two downloads sharing a name is not a cosmetic
+// problem: dropping a prefetch and starting its replacement happen in the same tick, and the
+// dropped one deletes its file on the way out - which would be the file the new one is
+// writing. The counter is what actually keeps them apart.
+let cacheFileSeq = 0;
+function cacheFilePath(prefix, guildId) {
+  cacheFileSeq += 1;
+  return join(tmpdir(), `${prefix}${guildId}_${Date.now()}_${cacheFileSeq}.opus`);
+}
+
+// Delete a cache file and the part-file yt-dlp may have left beside it. Quiet about a file
+// that is not there: for a download that was killed before it wrote anything, that is the
+// normal case, and every caller is on a path where something has already gone away.
+function removeCacheFile(path) {
+  if (!path) return;
+  for (const candidate of [path, `${path}.part`]) {
+    try {
+      if (existsSync(candidate)) unlinkSync(candidate);
+    } catch (err) {
+      console.error(`[MusicQueue] Could not remove ${candidate}:`, err.message);
+    }
+  }
+}
+
+// kill(), guarded. A child that has already exited can throw, and every caller here is a
+// cancellation path - a skip, a stop, a teardown - which is no place to take the bot down.
+function killChild(child, what) {
+  if (!child) return false;
+  try {
+    child.kill();
+  } catch (err) {
+    console.error(`[MusicQueue] Failed to stop the ${what}:`, err.message);
+  }
+  return true;
 }
 
 // Run one yt-dlp fetch through the gate, retrying a 403 on the backoff schedule.
@@ -1019,6 +1089,14 @@ export class MusicQueue {
     this.playingFromHistory = false; // Flag to prevent re-adding history songs
     this.cacheGeneration = 0; // Bumped whenever the current song changes - stale downloads are discarded
     this.downloadProcess = null; // yt-dlp child of the in-flight download, so it can be stopped
+    // The one background download of the song that plays next, or null. Deliberately not
+    // keyed to cacheGeneration: a prefetch has to survive the song change that consumes it,
+    // which is the one event that always bumps that counter. See maintainPrefetch().
+    this.prefetch = null;
+    this.prefetchToken = 0; // Bumped whenever a prefetch stops being wanted - stale ones abort
+    this.prefetchProcess = null; // yt-dlp child of the in-flight prefetch, so it can be stopped
+    this.prefetchHits = 0; // Transitions that found the song already downloaded...
+    this.prefetchMisses = 0; // ...and those that had to fetch it in the gap, as before
     this.autoLeaveTimer = null; // Handle for the empty-queue auto-disconnect timer
     this.consecutiveFailures = 0; // Consecutive play() failures - trips a breaker at 3
     this.destroying = false; // True while cleanup() runs, so player events don't restart anything
@@ -1259,6 +1337,9 @@ export class MusicQueue {
     this.songs.push(song);
     console.log(`Song added: ${song.title}, Queue length now: ${this.songs.length}`);
     broadcastState();
+    // Adding to an empty queue makes this the next song; adding a user song to a queue of
+    // radio fills replaces the next song outright. Both are handled by asking.
+    this.maintainPrefetch();
   }
 
   playPrevious() {
@@ -1377,23 +1458,38 @@ export class MusicQueue {
     const songTitle = this.currentSong.title;
 
     try {
+      // A prefetch that finished while the last song played makes this instant, which is the
+      // whole point of it. Every kind of miss - no prefetch, one for a song the queue has
+      // since moved off, one that failed - falls through to the download below and behaves
+      // exactly as it did before the prefetch existed.
+      const prefetched = await this.takePrefetched(songUrl, gen);
+
       // Download first, then play the file. The audio is fetched exactly once, by the one
       // component that can retry a 403 - ffmpeg is never pointed at a googlevideo URL,
       // where a 403 arrives as an instantly-silent song and an unexplained skip.
-      const cachePath = await this.downloadSongToCache(songUrl, songTitle, gen);
+      const cachePath = prefetched ? prefetched.path : await this.downloadSongToCache(songUrl, songTitle, gen);
 
       // The queue can have moved on while yt-dlp ran; playing this now would hijack
       // whatever song took its place
       const movedOn = this.downloadAbortReason(gen);
       if (movedOn) {
-        try { unlinkSync(cachePath); } catch (e) {}
+        removeCacheFile(cachePath);
         throw new DownloadAbortedError(movedOn);
       }
 
       // The downloaded file *is* the cache, so seeking is instant from the first second
       this.cachedAudioPath = cachePath;
       this.playFromCache(0);
+
+      // Counted here rather than at the consume, so a start that was abandoned partway does
+      // not report a transition the listener never had
+      if (prefetched) this.prefetchHits++; else this.prefetchMisses++;
+      console.log(formatTransition(!!prefetched, songTitle, this.prefetchHits, this.prefetchMisses));
+
       broadcastState(); // the dashboard's cached indicator is true from the start now
+
+      // ...and now that the slot is free again, start on the one after this
+      this.maintainPrefetch();
 
     } catch (error) {
       // Not a failure: a stop, a skip or a teardown got here first and owns the queue's
@@ -1409,7 +1505,10 @@ export class MusicQueue {
       // All the retries happened inside runGatedDownload, so a 403 storm arrives here once
       // and counts as one failure against the breaker below
       const reason = describeDownloadFailure(error);
-      console.error(`[MusicQueue] Skipping "${songTitle}": ${reason}`);
+      // How long the listener spent in silence for a song that never played - the number
+      // that says what a backoff schedule actually costs when it does not pay off
+      const spent = error?.downloadMs === undefined ? '' : ` after ${error.downloadMs}ms`;
+      console.error(`[MusicQueue] Skipping "${songTitle}": ${reason}${spent}`);
       if (!error?.rateLimited) console.error('Error playing song:', error);
       // Drop the failed song BEFORE playNext() - otherwise loop mode 'song' re-queues it
       // and we spin on the same broken URL forever
@@ -1432,23 +1531,29 @@ export class MusicQueue {
     }
   }
 
-  // Fetch one song's audio to a local file, through the download gate, retrying a YouTube
-  // 403. Returns the path to the finished file; deletes the part-file on any failure.
+  // Fetch one song's audio to `cachePath`, through the download gate, retrying a YouTube
+  // 403. Deletes the part-file on any failure and tags the error with what the attempt cost.
   //
-  // A method rather than a free function so tests can drive play() end to end without the
-  // network, and so the whole download sits behind one seam.
-  async downloadSongToCache(songUrl, songTitle, gen) {
+  // Shared by the play path and the next-song prefetch, which are the same yt-dlp call and
+  // differ only in three things: what they queue at, what makes them stale, and where their
+  // child process is parked so the right cancellation can find it.
+  //
+  // @param childSlot - property name to park the running child on ('downloadProcess' or
+  //   'prefetchProcess'). Two slots rather than one because the two cancellations are not
+  //   the same: a song change cancels the play download and must leave the prefetch alone.
+  // @returns {Promise<{attempts: number, ms: number}>} what the fetch cost, for the timing line
+  async fetchAudioTo(cachePath, songUrl, songTitle, { priority, label, abortReason, childSlot }) {
     if (!isAllowedMediaUrl(songUrl)) {
       throw new Error(`Refusing to pass unsupported URL to yt-dlp: ${songUrl}`);
     }
 
-    const cachePath = join(tmpdir(), `godcord_${this.guildId}_${Date.now()}.opus`);
-    console.log(`Downloading audio to: ${cachePath}`);
-    this.isCaching = true;
+    const startedAt = Date.now();
+    let attempts = 0;
 
     try {
       // Highest quality opus (quality 0 = best, ~256kbps VBR)
-      await runGatedDownload(() => {
+      await runGatedDownload((attempt) => {
+        attempts = attempt;
         // .exec() hands back the child process rather than its parsed output, so a
         // cancelled or timed-out download can actually be stopped instead of running on
         // unwatched, holding the one slot the next song needs before it can make a sound
@@ -1464,15 +1569,11 @@ export class MusicQueue {
           format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
           postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
         }, { timeout: DOWNLOAD_TIMEOUT_MS });
-        this.downloadProcess = child;
+        this[childSlot] = child;
         return child.finally(() => {
-          if (this.downloadProcess === child) this.downloadProcess = null;
+          if (this[childSlot] === child) this[childSlot] = null;
         });
-      }, {
-        priority: DOWNLOAD_PRIORITY.PLAY,
-        label: `download of "${songTitle}"`,
-        abortReason: () => this.downloadAbortReason(gen)
-      });
+      }, { priority, label, abortReason });
 
       // yt-dlp exiting 0 without leaving the file where we asked for it would otherwise
       // reach playFromCache(), which logs and returns - and the queue would sit forever on
@@ -1481,14 +1582,187 @@ export class MusicQueue {
         throw new Error(`yt-dlp reported success but left no file at ${cachePath}`);
       }
 
-      return cachePath;
+      return { attempts, ms: Date.now() - startedAt };
     } catch (error) {
+      // So the skip line can say how much of the gap this song spent failing, which is the
+      // number that says whether a backoff schedule is worth what it costs
+      if (error && typeof error === 'object') {
+        error.downloadMs = Date.now() - startedAt;
+        error.downloadAttempts = attempts;
+      }
       // Whatever went wrong, yt-dlp may have left a part-file behind
-      try { unlinkSync(cachePath); } catch (e) {}
+      removeCacheFile(cachePath);
       throw error;
+    }
+  }
+
+  // Download the song that is starting now, at play priority. Returns the path to the
+  // finished file.
+  //
+  // A method rather than a free function so tests can drive play() end to end without the
+  // network, and so the whole download sits behind one seam.
+  async downloadSongToCache(songUrl, songTitle, gen) {
+    const cachePath = cacheFilePath('godcord_', this.guildId);
+    console.log(`Downloading audio to: ${cachePath}`);
+    this.isCaching = true;
+
+    try {
+      const cost = await this.fetchAudioTo(cachePath, songUrl, songTitle, {
+        priority: DOWNLOAD_PRIORITY.PLAY,
+        label: `download of "${songTitle}"`,
+        abortReason: () => this.downloadAbortReason(gen),
+        childSlot: 'downloadProcess'
+      });
+      console.log(formatDownloadTiming(songTitle, cost.ms, cost.attempts));
+      return cachePath;
     } finally {
       this.isCaching = false;
     }
+  }
+
+  // --- next-song prefetch ----------------------------------------------------
+  //
+  // The song a prefetch should be for right now, or null when there is nothing to prefetch.
+  // Only while something is actually playing: with the queue idle, songs[0] is the song
+  // play() is about to shift and start for itself, at play priority, and racing it with a
+  // second download of the same audio is the collision this whole gate exists to prevent.
+  prefetchTarget() {
+    if (this.destroying || !this.isPlaying) return null;
+    return this.songs[0] || null;
+  }
+
+  // Keep exactly one background download lined up on the song that plays next, and nothing
+  // lined up on a song that no longer does.
+  //
+  // Idempotent, cheap and self-checking, so every queue mutation can just call it and let it
+  // work out whether anything changed; it never throws, so no caller needs to guard it.
+  maintainPrefetch() {
+    try {
+      const target = this.prefetchTarget();
+      const entry = this.prefetch;
+
+      // A prefetch of a song that is no longer next is dead weight twice over: its file will
+      // never be played, and while it runs it holds the one download slot. A consumed one is
+      // not ours to judge - the play path owns it now and cancels it on its own terms.
+      if (entry && entry.consumedGen === null && entry.url !== target?.url) {
+        this.invalidatePrefetch(target ? `"${target.title}" is next now` : 'nothing is queued after this one');
+      }
+
+      // Either there is nothing to prefetch, or the one we have is already the right one -
+      // or a consumed one is still finishing, and one download in flight is the whole rule
+      if (!target || this.prefetch) return;
+
+      this.startPrefetch(target);
+    } catch (err) {
+      // Lining up the next song is an optimisation on top of a path that works without it,
+      // so a problem here must never reach the caller - some of them are Discord commands
+      console.error('[MusicQueue] Prefetch bookkeeping failed:', err.message);
+    }
+  }
+
+  startPrefetch(song) {
+    const entry = {
+      url: song.url,
+      title: song.title,
+      // A name of its own, so the current song's cleanup can never unlink the next song's file
+      path: cacheFilePath('godcord_pre_', this.guildId),
+      token: this.prefetchToken,
+      consumedGen: null, // set to the play generation that took this file over
+      startedAt: Date.now(),
+      attempts: 0,
+      ms: null
+    };
+    this.prefetch = entry;
+    entry.promise = this.runPrefetch(entry);
+    console.log(`[MusicQueue] prefetching next song "${song.title}"`);
+  }
+
+  // Never rejects and never resolves to a file that is not there: a prefetch that fails is
+  // simply a miss, and a miss is exactly the behaviour that shipped. The play path downloads
+  // the song for real when it starts - with its own retries, and with the only say over the
+  // failure breaker - so nothing in here may count a failure or move the queue on.
+  //
+  // @returns {Promise<string|null>} the finished file, or null
+  async runPrefetch(entry) {
+    try {
+      const cost = await this.fetchAudioTo(entry.path, entry.url, entry.title, {
+        priority: DOWNLOAD_PRIORITY.CACHE,
+        label: `prefetch of "${entry.title}"`,
+        abortReason: () => this.prefetchAbortReason(entry),
+        childSlot: 'prefetchProcess'
+      });
+      entry.attempts = cost.attempts;
+      entry.ms = cost.ms;
+      console.log(formatDownloadTiming(entry.title, cost.ms, cost.attempts, true));
+      return entry.path;
+    } catch (error) {
+      entry.attempts = error?.downloadAttempts || entry.attempts;
+      const why = error?.aborted ? error.message : describeDownloadFailure(error);
+      console.log(`[MusicQueue] prefetch of "${entry.title}" did not finish (${why}) - it will download when the song starts`);
+      // Left attached, and failed: that stops the next queue mutation from starting the
+      // same doomed fetch again. It goes when the song it was for stops being next.
+      return null;
+    }
+  }
+
+  // Why a prefetch should stop - null means carry on. Checked before every attempt and again
+  // with the gate slot in hand, so a prefetch cannot outlive the reason it was started.
+  prefetchAbortReason(entry) {
+    if (this.destroying) return 'the queue is being torn down';
+    // Once the play path has taken the file over, the fetch lives and dies with that start:
+    // it is this song's download now, and must survive the song change that consumed it
+    if (entry.consumedGen !== null) return this.downloadAbortReason(entry.consumedGen);
+    if (entry.token !== this.prefetchToken) return 'the next song changed';
+    return null;
+  }
+
+  // Drop the prefetch: stop it, delete its file, and leave nothing that could be played for
+  // the wrong song. The token bump is what an in-flight fetch reads at its next checkpoint;
+  // the kill is what stops it holding the slot until then.
+  invalidatePrefetch(reason) {
+    const entry = this.prefetch;
+    if (!entry) return false;
+    this.prefetch = null;
+    this.prefetchToken++;
+    const child = this.prefetchProcess;
+    this.prefetchProcess = null;
+    killChild(child, 'prefetch');
+    removeCacheFile(entry.path);
+    console.log(`[MusicQueue] dropped the prefetch of "${entry.title}" - ${reason}`);
+    return true;
+  }
+
+  // Hand the starting song its already-downloaded file, if the prefetch was for that song.
+  //
+  // Identity is the URL, not a position or a token: the queue can be reordered, added to and
+  // cut down arbitrarily between the prefetch starting and the song starting, and the only
+  // question that matters at the end of all that is whether this file is this song's audio.
+  //
+  // A prefetch that is still running for the right song is awaited rather than restarted -
+  // that is the rapid-skip case, where throwing away a download that is seconds from done to
+  // start the identical one again would be slower than having no prefetch at all.
+  //
+  // @returns {Promise<{path, ms, attempts}|null>} null on any kind of miss
+  async takePrefetched(songUrl, gen) {
+    const entry = this.prefetch;
+    if (!entry || entry.url !== songUrl) {
+      // Whatever it was fetching is not what is starting, so from here it is only holding
+      // the slot the song that *is* starting needs
+      if (entry) this.invalidatePrefetch(`"${entry.title}" is not the song that started`);
+      return null;
+    }
+
+    entry.consumedGen = gen;
+    const path = await entry.promise;
+    if (this.prefetch === entry) this.prefetch = null;
+
+    if (path && existsSync(path)) {
+      return { path, ms: entry.ms ?? Date.now() - entry.startedAt, attempts: entry.attempts || 1 };
+    }
+    // It failed, or its file went while we waited. Either way nothing usable came of it and
+    // it must not be left behind as an orphan.
+    removeCacheFile(entry.path);
+    return null;
   }
 
   // Play from the downloaded audio file at a specific position
@@ -1582,14 +1856,18 @@ export class MusicQueue {
   // Stop the in-flight download, if there is one.
   abortDownload() {
     const child = this.downloadProcess;
-    if (!child) return false;
     this.downloadProcess = null;
-    try {
-      child.kill();
-    } catch (err) {
-      console.error('[MusicQueue] Failed to stop the download:', err.message);
+    let stopped = killChild(child, 'download');
+
+    // A prefetch the play path has taken over is this song's download too, and it is parked
+    // in the other slot. Without this, cancelling a start that consumed a still-running
+    // prefetch would leave its yt-dlp holding the one slot the next song needs.
+    if (this.prefetch && this.prefetch.consumedGen !== null) {
+      const prefetchChild = this.prefetchProcess;
+      this.prefetchProcess = null;
+      stopped = killChild(prefetchChild, 'prefetch') || stopped;
     }
-    return true;
+    return stopped;
   }
 
   // Clear the empty-queue auto-disconnect timer (if one is pending)
@@ -2107,6 +2385,9 @@ export class MusicQueue {
     
     // Remove songs before the target index
     this.songs = this.songs.slice(queueIndex);
+    // Before the stop below, so the download the jumped-over song was holding is let go of
+    // rather than staying in the way of the song the user actually asked for
+    this.maintainPrefetch();
 
     // Stop current song to trigger playNext (jumping is a skip, so loop must not re-queue)
     this.stopForUserAction();
@@ -2124,7 +2405,8 @@ export class MusicQueue {
     // Remove the song at the specified index
     this.songs.splice(queueIndex, 1);
     console.log(`Removed song at index ${index} from queue`);
-    
+
+    this.maintainPrefetch();
     // Broadcast updated state
     broadcastState();
     return true;
@@ -2140,6 +2422,7 @@ export class MusicQueue {
     }
     
     console.log('Queue shuffled');
+    this.maintainPrefetch();
     broadcastState();
     return true;
   }
@@ -2171,6 +2454,7 @@ export class MusicQueue {
     this.songs.splice(to, 0, song);
     
     console.log(`Reordered queue: moved "${song.title}" from position ${fromIndex} to ${toIndex}`);
+    this.maintainPrefetch();
     broadcastState();
     return true;
   }
@@ -2181,6 +2465,10 @@ export class MusicQueue {
     this.trackAndClearListening();
 
     this.songs = [];
+    // Nothing is queued any more, so the background download is fetching a song that will
+    // never play. Before stopForUserAction(), so it is not still holding the slot when the
+    // Idle that follows runs playNext().
+    this.maintainPrefetch();
     this.stopForUserAction();
     // Reset logged song tracker since we're stopping
     if (resetLastLoggedSongCallback) {
@@ -2217,8 +2505,11 @@ export class MusicQueue {
       this.currentFFmpeg = null;
     }
 
-    // Delete the /tmp cache file for the song we were playing
+    // Delete the /tmp cache file for the song we were playing...
     this.cleanupCachedAudio();
+    // ...and the one for the song that was going to play next. Unconditional rather than via
+    // maintainPrefetch(): a queue being torn down has no next song to reason about.
+    this.invalidatePrefetch('the queue is being torn down');
 
     // After player.stop(), since the Idle -> playNext() above may have armed a fresh one
     this.clearAutoLeaveTimer();
