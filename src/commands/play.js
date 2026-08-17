@@ -38,6 +38,20 @@ async function searchYouTube(query) {
   return results[0] || null;
 }
 
+// What to tell the user about the song they just asked for, from what play() says happened to
+// it. play() drops a song it cannot fetch and moves the queue on by itself, so "the await
+// resolved" is not "it is playing" - an age-gated, region-locked or rate-limited song used to
+// be announced as now playing and then never make a sound.
+function describeStart(outcome, song) {
+  const tag = song.source === 'spotify' ? ' 🎧' : '';
+  if (outcome?.started) return `🎵 Now playing: **${song.title}**${tag}`;
+  if (outcome?.reason === 'failed') {
+    return `❌ Couldn't play **${song.title}**${tag} — ${outcome.detail}. Skipped it.`;
+  }
+  // Something else took the queue over while this was starting (a skip, a stop, another song)
+  return `➕ Added to queue: **${song.title}**${tag}`;
+}
+
 export default {
   data: new SlashCommandBuilder()
     .setName('play')
@@ -201,20 +215,16 @@ export default {
         queue = createQueue(interaction.guildId, guildInfo);
         await queue.join(voiceChannel);
         queue.addSong(song);
-        await queue.play();
+        const outcome = await queue.play();
 
-        await interaction.editReply({
-          content: `🎵 Now playing: **${song.title}**${song.source === 'spotify' ? ' 🎧' : ''}`
-        });
+        await interaction.editReply({ content: describeStart(outcome, song) });
       } else {
         queue.addSong(song);
-        
+
         // If not currently playing, start playback
         if (!queue.isPlaying) {
-          await queue.play();
-          await interaction.editReply({
-            content: `🎵 Now playing: **${song.title}**${song.source === 'spotify' ? ' 🎧' : ''}`
-          });
+          const outcome = await queue.play();
+          await interaction.editReply({ content: describeStart(outcome, song) });
         } else {
           await interaction.editReply({
             content: `➕ Added to queue: **${song.title}**${song.source === 'spotify' ? ' 🎧' : ''}\nPosition: ${queue.songs.length}`

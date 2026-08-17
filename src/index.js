@@ -75,15 +75,42 @@ setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong);
 
 // Handle music control commands. Registered for the web dashboard and reused by
 // the "Hey Jerry" voice assistant, so both go through one code path.
+//
+// pause and resume answer with `{ ok, message }` because they are the two controls whose
+// success is not observable from the state broadcast that follows: the engine only pauses a
+// player that is exactly Playing, and a no-op produces no transition and so no broadcast at
+// all - the caller has to be told, or the button just looks broken. Every other command keeps
+// its silent no-op.
 function handleMusicCommand(command, guildId) {
   const queueGuildId = guildId || lastGuildId;
   const queue = getQueue(queueGuildId);
-  if (!queue) return;
-  
+  if (!queue) {
+    if (command === 'pause' || command === 'resume') {
+      return { ok: false, message: 'Nothing is currently playing.' };
+    }
+    return;
+  }
+
   if (command === 'pause') {
-    queue.pause();
+    const result = queue.pause();
+    if (result.paused) return { ok: true };
+    const excuses = {
+      loading: 'That song is still loading — nothing to pause yet.',
+      'already-paused': 'The music is already paused.',
+      'no-voice': 'The voice connection is down, so the music is already stopped.',
+      'nothing-playing': 'Nothing is currently playing.'
+    };
+    return { ok: false, message: excuses[result.reason] || 'Could not pause the music right now.' };
   } else if (command === 'resume') {
-    queue.resume();
+    const result = queue.resume();
+    if (result.resumed) return { ok: true };
+    const excuses = {
+      loading: 'That song is still loading — it will start on its own.',
+      'not-paused': 'The music is already playing.',
+      'no-voice': 'The voice connection is down — nothing to resume onto.',
+      'nothing-playing': 'Nothing is currently playing.'
+    };
+    return { ok: false, message: excuses[result.reason] || 'Could not resume the music right now.' };
   } else if (command === 'skip') {
     queue.skip();
   } else if (command === 'previous') {
@@ -186,10 +213,19 @@ async function handleAddSong(song, guildId) {
   }
   
   queue.addSong(song);
-  
+
   if (!queue.isPlaying) {
-    await queue.play();
-    return { success: true, message: 'Now playing' };
+    // play() drops a song it cannot fetch (age-gated, region-locked, 403 after three
+    // attempts) and moves the queue on by itself. Reporting success for that is what put a
+    // green "Added" toast and a spoken "Oké, ik speel X" on songs that never made a sound.
+    const outcome = await queue.play();
+    if (outcome?.started) return { success: true, message: 'Now playing' };
+    if (outcome?.reason === 'failed') {
+      return { success: false, error: `Could not play "${song.title}": ${outcome.detail}` };
+    }
+    // Superseded by another start, or something was already playing by the time we got here -
+    // the song is in the queue either way
+    return { success: true, message: 'Added to queue' };
   }
 
   return { success: true, message: 'Added to queue' };

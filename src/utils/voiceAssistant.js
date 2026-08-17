@@ -1287,7 +1287,21 @@ async function searchSong(query, userId, displayName) {
 
 function runCommand(command, guildId) {
   if (!runMusicCommand) throw new Error('no music command handler was wired up');
-  runMusicCommand(command, guildId);
+  // pause/resume answer `{ ok, message }`; everything else answers nothing (see
+  // handleMusicCommand in index.js)
+  return runMusicCommand(command, guildId);
+}
+
+// Jerry said "Oké" to pause, resume, skip and volume whether or not there was anything to act
+// on: with no queue at all, handleMusicCommand returns without doing a thing, and a spoken
+// confirmation reads as far more authoritative than the ephemeral "Nothing is currently
+// playing!" the equivalent slash commands have always replied. The spoken line is Dutch, the
+// embed summary English, as everywhere else here.
+async function requireSomethingPlaying(guildId, action) {
+  const { getQueue } = await import('./musicQueue.js');
+  const queue = getQueue(guildId);
+  if (queue && queue.currentSong) return null;
+  return { reply: 'Er speelt niets', summary: `${action} — nothing is playing`, failed: true };
 }
 
 /**
@@ -1325,20 +1339,31 @@ async function dispatch(state, { userId, displayName, intent, spokenReplies }) {
 
     case 'skip':
     case 'pause':
-    case 'resume':
-      runCommand(intent.action, guildId);
+    case 'resume': {
+      const nothing = await requireSomethingPlaying(guildId, intent.action);
+      if (nothing) return nothing;
+      // pause/resume can still legitimately do nothing - the song may be seconds into its
+      // download with no audio to pause yet - and they say so rather than being confirmed
+      const result = runCommand(intent.action, guildId);
+      if (result && result.ok === false) {
+        return { reply: 'Dat lukte niet', summary: `${intent.action} — ${result.message}`, failed: true };
+      }
       return { reply: 'Oké', summary: intent.action };
+    }
 
-    case 'volume':
+    case 'volume': {
+      const nothing = await requireSomethingPlaying(guildId, `volume ${intent.volume}%`);
+      if (nothing) return nothing;
       runCommand(`volume:${intent.volume}`, guildId);
       return { reply: 'Oké', summary: `volume ${intent.volume}%` };
+    }
 
     case 'nowplaying': {
       const { getQueue } = await import('./musicQueue.js');
       const song = getQueue(guildId)?.currentSong;
       return song
         ? { reply: `Er speelt nu ${song.title}`, summary: `nowplaying: ${song.title}` }
-        : { reply: 'Er speelt nu niets', summary: 'nowplaying: niets' };
+        : { reply: 'Er speelt nu niets', summary: 'nowplaying — nothing is playing' };
     }
 
     case 'queue': {

@@ -1583,7 +1583,7 @@ wss.on('connection', (ws, req) => {
               return;
             }
           }
-          handleWebCommand(data.command, data.guildId, ws.user.username);
+          handleWebCommand(data.command, data.guildId, ws.user.username, ws);
         }
 
         // Handle Pictionary messages
@@ -1674,11 +1674,20 @@ export function setAddSongHandler(handler) {
   addSongHandler = handler;
 }
 
-function handleWebCommand(command, guildId, username = 'Web Dashboard') {
+// @param ws - the client that asked, if there is one. Commands that can silently do nothing
+//   (pause/resume during the download gap, or with nothing playing) answer with a reason, and
+//   it goes back to that one client as an error toast: those two produce no player transition
+//   when they no-op, so there is no state broadcast to correct the button with.
+function handleWebCommand(command, guildId, username = 'Web Dashboard', ws = null) {
+  let result;
   if (commandHandler) {
-    commandHandler(command, guildId);
+    result = commandHandler(command, guildId);
   }
-  
+
+  if (result && result.ok === false && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'error', message: result.message }));
+  }
+
   // Log the action
   if (activityLogger && activityLogger.logWebAction) {
     const { logWebAction } = activityLogger;

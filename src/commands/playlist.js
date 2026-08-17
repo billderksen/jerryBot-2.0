@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { getQueue, createQueue } from '../utils/musicQueue.js';
+import { getQueue, createQueue, ytDlpExec, ytCookieOpts } from '../utils/musicQueue.js';
+import { isAllowedMediaUrl } from '../utils/urlValidation.js';
 import { createPlaylist, deletePlaylist, addSong, removeSong, getPlaylists, getPlaylist, getAllPlaylistNames, getPlaylistSongNames } from '../utils/playlists.js';
 
 export default {
@@ -95,6 +96,15 @@ export default {
     if (sub === 'add') {
       const playlistId = interaction.options.getString('playlist');
       const url = interaction.options.getString('url');
+
+      // The same allowlist every other entry point applies before a URL goes anywhere near
+      // yt-dlp (play.js, /api/queue/add, /api/youtube/playlist) - see urlValidation.js for
+      // what an unrecognised positional argument does there. Checked before anything else is
+      // read or written, since nothing about a URL this command cannot use is worth doing.
+      if (url && !isAllowedMediaUrl(url)) {
+        return interaction.reply({ content: '❌ Invalid or unsupported URL.', flags: MessageFlags.Ephemeral });
+      }
+
       const pl = getPlaylist(userId, playlistId);
       if (!pl) {
         return interaction.reply({ content: '❌ Playlist not found.', flags: MessageFlags.Ephemeral });
@@ -102,7 +112,35 @@ export default {
 
       let song;
       if (url) {
-        song = { url, title: url, duration: 0 };
+        // Real metadata, the way /api/queue/add does it: without this the stored "song" had
+        // the raw input as its title and a duration of 0, which then rendered as an ugly
+        // raw-URL entry everywhere the playlist is shown - on disk, permanently.
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        try {
+          const videoInfo = await ytDlpExec(url, {
+            ...ytCookieOpts,
+            dumpSingleJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            skipDownload: true
+          });
+          song = {
+            url: videoInfo.webpage_url || url,
+            title: videoInfo.title || url,
+            duration: videoInfo.duration || 0,
+            thumbnail: videoInfo.thumbnail || null,
+            source: 'youtube'
+          };
+        } catch (error) {
+          console.error('[playlist] Could not look up song info:', error.message);
+          return interaction.editReply({ content: '❌ Could not read that video — it may be private, unavailable or age-restricted.' });
+        }
+
+        const addResult = addSong(userId, playlistId, song);
+        if (!addResult.success) {
+          return interaction.editReply({ content: `❌ ${addResult.error}` });
+        }
+        return interaction.editReply({ content: `✅ Added **${song.title}** to **${pl.name}**` });
       } else {
         const queue = getQueue(interaction.guildId);
         if (!queue || !queue.currentSong) {
@@ -184,12 +222,19 @@ export default {
         queue.addSong(song);
       }
 
+      let startNote = '';
       if (!queue.isPlaying) {
-        await queue.play();
+        // play() drops a song it cannot fetch and starts the one after it, so the first song
+        // of a playlist can fail without the queue stopping - worth saying, since "Queued"
+        // otherwise reads as "and the first one is playing"
+        const outcome = await queue.play();
+        if (outcome && !outcome.started && outcome.reason === 'failed') {
+          startNote = `\n⚠️ Couldn't start **${outcome.song?.title ?? 'the first song'}** — ${outcome.detail}. Skipped it.`;
+        }
       }
 
       const label = sub === 'shuffle' ? 'Shuffled' : 'Queued';
-      return interaction.editReply({ content: `🎵 ${label} **${pl.name}** (${songs.length} songs)` });
+      return interaction.editReply({ content: `🎵 ${label} **${pl.name}** (${songs.length} songs)${startNote}` });
     }
 
     if (sub === 'list') {

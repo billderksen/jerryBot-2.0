@@ -1360,3 +1360,272 @@ test('a download killed by the cancellation is not reported as a broken song', a
   assert.equal(queue.playNextCalls, 0, 'and not advanced twice - whoever cancelled owns that');
   assert.ok(logged.find(/Gave up starting/), logged.dump());
 });
+
+// --- what play() tells its callers -------------------------------------------
+//
+// play() self-heals: a song it cannot fetch is dropped and the queue moves on. Callers used
+// to read "the await resolved" as "the song is playing", so an age-gated or rate-limited song
+// was announced as now playing on Discord, toasted as added on the dashboard and confirmed
+// out loud by Jerry, with nothing ever correcting any of them.
+
+test('play() outcome: a song that actually started says so, with the song it started', async () => {
+  const queue = buildDownloadQueue('outcome-started');
+  queue.downloadSongToCache = async () => '/tmp/godcord_outcome.opus';
+  queue.songs = [aSong('the one that plays')];
+
+  const outcome = await queue.play();
+
+  assert.equal(outcome.started, true);
+  assert.equal(outcome.song.title, 'the one that plays');
+});
+
+test('play() outcome: a song that could not be fetched is reported as failed, with the reason', async () => {
+  const queue = buildDownloadQueue('outcome-failed');
+  queue.downloadSongToCache = async () => { throw new Error('ERROR: Video unavailable'); };
+  queue.songs = [aSong('a dead one')];
+
+  const logged = captureConsole();
+  let outcome;
+  try {
+    outcome = await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(outcome.started, false);
+  assert.equal(outcome.reason, 'failed');
+  assert.equal(outcome.detail, 'ERROR: Video unavailable');
+  assert.equal(outcome.song.title, 'a dead one', 'the caller can name the song it lost');
+  // The self-heal is untouched: the queue still advanced by itself
+  assert.equal(queue.playNextCalls, 1);
+});
+
+test('play() outcome: a rate-limited song reports the one-line reason, not a stack', async () => {
+  const queue = buildDownloadQueue('outcome-ratelimited');
+  queue.downloadSongToCache = async () => {
+    throw Object.assign(new Error('Command failed with exit code 1'), { rateLimited: true, attempts: 3 });
+  };
+  queue.songs = [aSong('a throttled one')];
+
+  const logged = captureConsole();
+  let outcome;
+  try {
+    outcome = await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(outcome.reason, 'failed');
+  assert.equal(outcome.detail, 'YouTube rate-limited this download (3 attempts)');
+});
+
+test('play() outcome: a start the user overtook is superseded, not a failure', async () => {
+  // A skip mid-download must not make the reply say the song broke - nothing broke, and
+  // whoever cancelled owns the queue's state now
+  const queue = buildDownloadQueue('outcome-superseded');
+  let released;
+  queue.downloadSongToCache = () => new Promise(resolve => {
+    queue.downloadProcess = { kill: () => {} };
+    released = () => resolve('/tmp/godcord_superseded.opus');
+  });
+  queue.songs = [aSong('overtaken'), aSong('next up')];
+
+  const starting = queue.play();
+  await tick();
+  queue.skip();
+  released();
+
+  const logged = captureConsole();
+  let outcome;
+  try {
+    outcome = await starting;
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(outcome.started, false);
+  assert.equal(outcome.reason, 'superseded');
+  assert.equal(queue.consecutiveFailures, 0, 'and it cost the breaker nothing');
+});
+
+test('play() outcome: nothing to start is said plainly, not as a failure', async () => {
+  const queue = buildDownloadQueue('outcome-nothing');
+
+  assert.deepEqual(await queue.play(), { started: false, reason: 'empty-queue' });
+
+  queue.isPlaying = true;
+  queue.songs = [aSong()];
+  assert.deepEqual(await queue.play(), { started: false, reason: 'already-playing' });
+});
+
+// --- pause honesty ----------------------------------------------------------
+
+test('pause(): a player with no audio yet says it is loading rather than claiming a pause', () => {
+  const { queue } = buildQueue('pause-loading');
+  // isPlaying goes up the moment a song starts downloading, seconds before any audio exists
+  queue.isPlaying = true;
+
+  const result = queue.pause();
+
+  assert.equal(result.paused, false);
+  assert.equal(result.reason, 'loading');
+  assert.equal(queue.pausedAt, null, 'and the playback clock was not stopped for a pause that never happened');
+});
+
+test('pause(): with nothing playing at all, it says so', () => {
+  const { queue } = buildQueue('pause-idle');
+  assert.deepEqual(queue.pause(), { paused: false, reason: 'nothing-playing' });
+});
+
+test('resume(): a queue that exists but is idle is not reported as resumed', () => {
+  const { queue } = buildQueue('resume-idle');
+  assert.deepEqual(queue.resume(), { resumed: false, reason: 'nothing-playing' });
+});
+
+// A music player that behaves the way @discordjs/voice does for the two calls the duck path
+// makes: pause() only pauses a Playing player, unpause() only un-pauses a Paused one, and
+// both emit their status synchronously from the state setter.
+class FakePlayer extends EventEmitter {
+  constructor(status = AudioPlayerStatus.Playing) {
+    super();
+    this.state = { status };
+    this.unpauseCalls = 0;
+  }
+
+  pause() {
+    if (this.state.status !== AudioPlayerStatus.Playing) return false;
+    this.state = { status: AudioPlayerStatus.Paused };
+    this.emit(AudioPlayerStatus.Paused);
+    return true;
+  }
+
+  unpause() {
+    if (this.state.status !== AudioPlayerStatus.Paused) return false;
+    this.unpauseCalls++;
+    this.state = { status: AudioPlayerStatus.Playing };
+    this.emit(AudioPlayerStatus.Playing);
+    return true;
+  }
+
+  stop() { return true; }
+}
+
+// Drives one ducked clip over playing music. The clip's player and resource are fakes, since
+// awaitClipEnd only ever reads the player's status and listens for Idle/error.
+function buildDuckedQueue(guildId) {
+  const { queue, connection } = buildQueue(guildId);
+  connection.subscribe = () => ({ unsubscribe() {} });
+
+  queue.player = new FakePlayer(AudioPlayerStatus.Playing);
+  queue.songStartTime = Date.now() - 5_000;
+  queue.isPlaying = true;
+  queue.currentSong = { title: 'Summertime Sadness', url: 'https://example.com/x', duration: 200 };
+
+  const clipPlayer = new EventEmitter();
+  clipPlayer.state = { status: AudioPlayerStatus.Playing, playbackDuration: 5 };
+  clipPlayer.play = () => {};
+  clipPlayer.stop = () => {};
+  queue.ttsPlayer = clipPlayer;
+
+  const resource = { playStream: new EventEmitter(), playbackDuration: 42 };
+  return { queue, clipPlayer, resource };
+}
+
+test('duck: an ordinary clip puts the music back when it finishes', async () => {
+  const { queue, clipPlayer, resource } = buildDuckedQueue('duck-plain');
+
+  const ducking = queue.duckAndPlay(() => resource);
+  await tick();
+  assert.equal(queue.player.state.status, AudioPlayerStatus.Paused, 'the clip holds the music down');
+
+  clipPlayer.emit(AudioPlayerStatus.Idle);
+  assert.equal(await ducking, true);
+  assert.equal(queue.player.unpauseCalls, 1);
+  assert.equal(queue.player.state.status, AudioPlayerStatus.Playing);
+});
+
+test('duck: a /pause during the clip is held, then honoured - the music stays paused', async () => {
+  // player.pause() is Playing-only and the music is already Paused by the clip, so the pause
+  // used to be a silent no-op that the clip's own resume then undid, while /pause answered
+  // "Paused the music."
+  const { queue, clipPlayer, resource } = buildDuckedQueue('duck-pause');
+
+  const ducking = queue.duckAndPlay(() => resource);
+  await tick();
+
+  const result = queue.pause();
+  assert.deepEqual(result, { paused: true, reason: 'held-until-clip-ends' });
+  assert.equal(queue.pendingUserPause, true);
+
+  clipPlayer.emit(AudioPlayerStatus.Idle);
+  await ducking;
+
+  assert.equal(queue.player.unpauseCalls, 0, 'the clip did not put the music back');
+  assert.equal(queue.player.state.status, AudioPlayerStatus.Paused, 'the pause the user asked for holds');
+  assert.equal(queue.pendingUserPause, false, 'and the request was consumed, not left to affect the next clip');
+});
+
+test('duck: a resume during the clip takes the held pause back', async () => {
+  const { queue, clipPlayer, resource } = buildDuckedQueue('duck-pause-undone');
+
+  const ducking = queue.duckAndPlay(() => resource);
+  await tick();
+
+  queue.pause();
+  queue.resume(); // changed their mind while Jerry was still talking
+  assert.equal(queue.pendingUserPause, false);
+
+  clipPlayer.emit(AudioPlayerStatus.Idle);
+  await ducking;
+
+  assert.equal(queue.player.state.status, AudioPlayerStatus.Playing, 'the music came back as usual');
+});
+
+// --- the playback clock across an ordinary voice reconnect -------------------
+
+test('AutoPaused: the dead air of a reconnect is claimed as paused time, not as playback', () => {
+  // @discordjs/voice parks the player whenever no subscribed connection is Ready, which is
+  // every Disconnected -> Signalling -> Ready reconnect and needs no 'error' at all. The
+  // resource is held rather than consumed, so the audio resumes where it stopped - but
+  // songStartTime runs through the whole outage.
+  const { queue } = buildQueue('autopause-clock');
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 10_000;
+
+  queue.player.emit(AudioPlayerStatus.AutoPaused);
+
+  assert.notEqual(queue.pausedAt, null, 'the clock stopped with the audio');
+  const frozen = queue.getPlaybackElapsedMs();
+  assert.ok(Math.abs(frozen - 10_000) < 100, `froze at ${frozen}ms`);
+});
+
+test('AutoPaused: a user pause already in effect keeps the gap it owns', () => {
+  const { queue } = buildQueue('autopause-user-pause');
+  queue.songStartTime = Date.now() - 10_000;
+  const userPause = Date.now() - 4_000;
+  queue.pausedAt = userPause;
+
+  queue.player.emit(AudioPlayerStatus.AutoPaused);
+
+  assert.equal(queue.pausedAt, userPause, 'the pause in effect was not overwritten');
+});
+
+test('AutoPaused: the reconnect closes the gap exactly once, resume() included', () => {
+  // The ordering that makes this safe: player.unpause() emits Playing *synchronously*, so the
+  // Playing handler closes the gap first and resume()'s own bookkeeping then finds it closed.
+  const { queue } = buildQueue('autopause-resume');
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 10_000;
+
+  queue.player.emit(AudioPlayerStatus.AutoPaused);
+  assert.notEqual(queue.pausedAt, null);
+  queue.pausedAt = Date.now() - 3_000; // as if the outage had lasted three seconds
+
+  queue.player.unpause = () => { queue.player.emit(AudioPlayerStatus.Playing); return true; };
+  const result = queue.resume();
+
+  assert.equal(result.resumed, true);
+  assert.equal(queue.pausedAt, null, 'the clock is running again');
+  assert.ok(Math.abs(queue.totalPausedMs - 3_000) < 100, `credited ${queue.totalPausedMs}ms, once`);
+  assert.ok(Math.abs(queue.getPlaybackElapsedMs() - 7_000) < 100, 'and the position is what was heard');
+});

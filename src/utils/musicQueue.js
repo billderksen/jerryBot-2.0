@@ -1105,6 +1105,7 @@ export class MusicQueue {
     this.recentRadioUrls = []; // Last 5 server-side radio auto-adds, to avoid looping on the same tracks
     this.ttsPlayer = null; // Dedicated player for ducked clips, created on first use (see duckAndPlay)
     this.duckActive = false; // True while a ducked clip is playing over the music
+    this.pendingUserPause = false; // A /pause asked for during a clip, honoured when it ends
     // Note: loopMode, is24_7, and sleepEndTime are now in globalSettings for persistence
 
     // Handle player state changes - use arrow function to preserve 'this'
@@ -1136,8 +1137,16 @@ export class MusicQueue {
         this.totalPausedMs = 0;
         this.songStartTime = Date.now() - (this.seekOffset / speed * 1000);
         console.log('Song start time set:', new Date(this.songStartTime), 'with offset:', this.seekOffset, 'at speed:', speed);
+      } else if (this.pausedAt !== null) {
+        // The other half of the AutoPaused claim below: audio is flowing again, so whatever
+        // stopped the clock is over and the stretch of silence belongs to paused time. This
+        // is also the path a resume() takes - player.unpause() emits Playing *synchronously*,
+        // so the gap is closed here and resume()'s own bookkeeping then finds pausedAt
+        // already null and no-ops. Counted once, either way.
+        this.totalPausedMs += Date.now() - this.pausedAt;
+        this.pausedAt = null;
       }
-      
+
       broadcastState();
     });
 
@@ -1150,8 +1159,17 @@ export class MusicQueue {
     // Ready. Nothing else announces it: the position interval notices on its next tick and
     // just stops, without a final broadcast, so the dashboard's last word on the song stays
     // "playing" and every browser keeps running its progress bar over silence.
+    // ...and it is dead air, so it is paused time. The resource is held rather than consumed
+    // while the player is parked, so when the connection comes back the audio carries on
+    // exactly where it stopped - but songStartTime runs through the whole outage. Left
+    // unclaimed, every ordinary voice reconnect (Disconnected -> Signalling -> Ready, which
+    // needs no 'error' at all) leaves the progress bar permanently ahead of the sound and
+    // over-credits listeningStats.json by the length of the gap. Closed by the Playing
+    // handler above. Skipped when the clock is already stopped: a user pause, a ducked clip
+    // or a connection-error recovery owns that pause and closes it itself.
     this.player.on(AudioPlayerStatus.AutoPaused, () => {
       console.log('Player auto-paused - no voice connection ready to receive audio');
+      if (this.songStartTime && this.pausedAt === null) this.pausedAt = Date.now();
       broadcastState();
     });
 
@@ -1393,11 +1411,24 @@ export class MusicQueue {
     return true;
   }
 
+  // Start the next song, and say what happened to it.
+  //
+  // play() self-heals: a song that cannot be fetched is dropped and the queue moves on by
+  // itself. So "the promise resolved" has never meant "this song is playing", and every
+  // caller that read it that way told the user it was. The outcome describes *this* song's
+  // fate only - the self-heal is untouched, and the start it triggers reports its own.
+  //
+  // @returns {Promise<{started: true, song} | {started: false, reason, song?, detail?}>}
+  //   reason is one of:
+  //     'already-playing'  a song was already running; this call started nothing
+  //     'empty-queue'      there was nothing to start
+  //     'superseded'       a skip, stop or teardown took over while this song downloaded
+  //     'failed'           the song could not be fetched (`detail` says why); queue moved on
   async play() {
     console.log(`play() called - isPlaying: ${this.isPlaying}, songs in queue: ${this.songs.length}`);
     if (this.isPlaying || this.songs.length === 0) {
       console.log('Skipping play() - already playing or no songs');
-      return;
+      return { started: false, reason: this.isPlaying ? 'already-playing' : 'empty-queue' };
     }
 
     // A song is starting, so the empty-queue disconnect no longer applies
@@ -1491,6 +1522,8 @@ export class MusicQueue {
       // ...and now that the slot is free again, start on the one after this
       this.maintainPrefetch();
 
+      return { started: true, song: this.currentSong };
+
     } catch (error) {
       // Not a failure: a stop, a skip or a teardown got here first and owns the queue's
       // state now, so this call touches nothing and advances nothing. Read from the
@@ -1498,8 +1531,9 @@ export class MusicQueue {
       // arrives here as an ordinary subprocess failure.
       const movedOn = this.downloadAbortReason(gen);
       if (error?.aborted || movedOn) {
-        console.log(`[MusicQueue] Gave up starting "${songTitle}" - ${error?.aborted ? error.message : movedOn}`);
-        return;
+        const why = error?.aborted ? error.message : movedOn;
+        console.log(`[MusicQueue] Gave up starting "${songTitle}" - ${why}`);
+        return { started: false, reason: 'superseded', detail: why };
       }
 
       // All the retries happened inside runGatedDownload, so a 403 storm arrives here once
@@ -1528,6 +1562,7 @@ export class MusicQueue {
       }
 
       this.playNext();
+      return { started: false, reason: 'failed', song: failedSong, detail: reason };
     }
   }
 
@@ -2097,7 +2132,10 @@ export class MusicQueue {
     }
   }
 
-  pause() {
+  // Pause the audio and stop the playback clock, with no interpretation of why. Used by the
+  // ducking path, which pauses the music for its own reasons and must not be mistaken for a
+  // user asking for a pause (see pause() below).
+  pauseAudio() {
     const paused = this.player.pause();
     // Only start the clock on a real transition, so a double /pause cannot lose time
     if (paused && this.pausedAt === null) {
@@ -2106,13 +2144,51 @@ export class MusicQueue {
     return paused;
   }
 
+  // A user asked for the music to be paused. Says what actually happened, because "asked for
+  // a pause" and "the music is now paused" are not the same event: @discordjs/voice only
+  // pauses a player that is exactly Playing, so during the download gap there is no audio to
+  // pause yet, and during a ducked clip the music is already paused by the clip. Both of
+  // those used to answer "paused" and change nothing.
+  //
+  // @returns {{paused: boolean, reason: string}} reason is one of 'paused',
+  //   'held-until-clip-ends', 'already-paused', 'no-voice', 'loading', 'nothing-playing'
+  pause() {
+    // A clip holds the music down and its finally() puts it back. Pausing here would be a
+    // no-op the clip then undoes, so the request is recorded and consumed at the unduck:
+    // the music stays paused, which is what was asked for, just a few seconds later.
+    if (this.duckActive) {
+      this.pendingUserPause = true;
+      return { paused: true, reason: 'held-until-clip-ends' };
+    }
+
+    const statusBefore = this.player.state.status;
+    if (this.pauseAudio()) return { paused: true, reason: 'paused' };
+
+    if (statusBefore === AudioPlayerStatus.AutoPaused) return { paused: false, reason: 'no-voice' };
+    if (statusBefore === AudioPlayerStatus.Paused) return { paused: false, reason: 'already-paused' };
+    // isPlaying is set the moment a song starts downloading, seconds before any audio exists
+    if (this.isPlaying) return { paused: false, reason: 'loading' };
+    return { paused: false, reason: 'nothing-playing' };
+  }
+
+  // @returns {{resumed: boolean, reason: string}} reason is one of 'resumed', 'not-paused',
+  //   'no-voice', 'loading', 'nothing-playing'
   resume() {
+    // Asking for a resume takes back a pause that was still waiting for a clip to end
+    this.pendingUserPause = false;
+
+    const statusBefore = this.player.state.status;
     const resumed = this.player.unpause();
     if (resumed && this.pausedAt !== null) {
       this.totalPausedMs += Date.now() - this.pausedAt;
       this.pausedAt = null;
     }
-    return resumed;
+    if (resumed) return { resumed: true, reason: 'resumed' };
+
+    // Un-parking is the library's job and only a Ready connection does it
+    if (statusBefore === AudioPlayerStatus.AutoPaused) return { resumed: false, reason: 'no-voice' };
+    if (this.isPlaying) return { resumed: false, reason: this.songStartTime ? 'not-paused' : 'loading' };
+    return { resumed: false, reason: 'nothing-playing' };
   }
 
   // Play a short clip (wake beep, spoken reply) over the music, then put the music
@@ -2148,6 +2224,10 @@ export class MusicQueue {
     // web dashboard through broadcastState(), and a callback throwing out there would
     // otherwise strand this flag set and refuse every later clip.
     this.duckActive = true;
+    // A /pause that arrives while the clip is talking is recorded here rather than acted on,
+    // and consumed in the finally below. Cleared on entry so a request from a previous clip
+    // cannot keep the music down through this one.
+    this.pendingUserPause = false;
     let duckPaused = false;
     let onMusicPlaying = null;
     let swapped = false;
@@ -2177,7 +2257,7 @@ export class MusicQueue {
       // nothing recording that we did it, and the music would never come back.
       const wasPaused = this.player.state.status === AudioPlayerStatus.Paused;
       try {
-        this.pause();
+        this.pauseAudio();
       } finally {
         duckPaused = !wasPaused && this.player.state.status === AudioPlayerStatus.Paused;
       }
@@ -2191,7 +2271,7 @@ export class MusicQueue {
       // owe whenever this handler leaves the player paused.
       onMusicPlaying = () => {
         try {
-          this.pause();
+          this.pauseAudio();
         } finally {
           if (this.player.state.status === AudioPlayerStatus.Paused) duckPaused = true;
         }
@@ -2227,7 +2307,17 @@ export class MusicQueue {
         if (swapped && this.connection && this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
           this.connection.subscribe(this.player);
         }
-        if (duckPaused) this.resume();
+        // Read (and cleared) before resume(), which would otherwise take the request back on
+        // the user's behalf: a pause asked for during the clip is honoured by simply not
+        // putting the music back, which leaves the player paused with the clock already
+        // stopped by the duck's own pause.
+        const userAskedForPause = this.pendingUserPause;
+        this.pendingUserPause = false;
+        if (userAskedForPause) {
+          console.log('[MusicQueue] Leaving the music paused after the clip - a pause was asked for during it');
+        } else if (duckPaused) {
+          this.resume();
+        }
       } catch (error) {
         console.error('[MusicQueue] duckAndPlay: restoring the music after the clip failed:', error.message);
       } finally {
