@@ -201,6 +201,10 @@ export default {
           icon: interaction.guild.iconURL({ size: 128 })
         };
         queue = createQueue(interaction.guildId, guildInfo);
+      }
+      // A queue can exist without being in a channel: a restart restores the queue but stays
+      // out of an empty channel (see musicQueue's restoreQueueState).
+      if (!queue.connection) {
         await queue.join(voiceChannel);
       }
 

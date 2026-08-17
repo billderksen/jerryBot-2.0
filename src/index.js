@@ -13,7 +13,7 @@ import { readdirSync, appendFileSync } from 'fs';
 import { loadJsonSync, saveJsonSync } from './utils/jsonStore.js';
 import { chatWithAI, getChatConfig } from './utils/openrouter.js';
 import { startWebServer, updateState, updatePosition, getWebClientCount, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, setMemberFetcher, setDiscordClient as setWebDiscordClient, broadcastListeners } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setWebPositionCallback, setWebClientCountCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast, flushStats } from './utils/musicQueue.js';
+import { getQueue, createQueue, setWebUpdateCallback, setWebPositionCallback, setWebClientCountCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast, flushStats, flushQueueState, restoreQueueState } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 import { initTracker } from './utils/osrsTracker.js';
 import { initTwitchTracker } from './utils/twitchTracker.js';
@@ -210,11 +210,15 @@ async function handleAddSong(song, guildId) {
       name: guild.name,
       icon: guild.iconURL({ size: 128 })
     } : null;
-    
+
     queue = createQueue(lastGuildId, guildInfo);
+  }
+  // A queue can exist without being in a channel: a restart restores the queue but stays out
+  // of an empty channel (see restoreQueueState). Asking for a song is what puts the bot there.
+  if (!queue.connection) {
     await queue.join(lastVoiceChannel);
   }
-  
+
   queue.addSong(song);
 
   if (!queue.isPlaying) {
@@ -482,6 +486,12 @@ client.once(Events.ClientReady, readyClient => {
   // Initialize the "Hey Jerry" voice assistant. Last, so the music/web handlers
   // it dispatches through are already wired up.
   initVoiceAssistant(readyClient, { runMusicCommand: handleMusicCommand, addSong: handleAddSong });
+
+  // Put back whatever was playing when this process last went down. After the voice assistant,
+  // so the join it may do is picked up by the assistant's own voice-state listener rather than
+  // waiting for its next reconcile sweep. Not awaited - ClientReady is synchronous, and this
+  // joins a channel and downloads a song.
+  restoreQueueState().catch(err => console.error('[Startup] Restoring the music queue failed:', err?.message || err));
 
   // Periodically refresh listeners to catch any nickname changes (every 30 seconds)
   setInterval(() => {
@@ -786,6 +796,8 @@ function flushState() {
   try { stopDiscordTracker(); } catch (e) { console.error('[Shutdown] discordTracker:', e); }
   try { flushLastSeen(); } catch (e) { console.error('[Shutdown] lastSeen:', e); }
   try { flushStats(); } catch (e) { console.error('[Shutdown] musicStats:', e); }
+  // What is playing right now, so the next process can pick it up where this one left off
+  try { flushQueueState(); } catch (e) { console.error('[Shutdown] queueState:', e); }
   try { stopVoiceAssistant(); } catch (e) { console.error('[Shutdown] voiceAssistant:', e); }
 }
 

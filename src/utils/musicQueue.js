@@ -66,6 +66,19 @@ import { fileURLToPath } from 'url';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 import { isAllowedMediaUrl } from './urlValidation.js';
 import { isRecording, stopRecording } from './voiceRecorder.js';
+import {
+  QUEUE_STATE_VERSION,
+  QUEUE_STATE_MAX_AGE_MS,
+  buildGuildSnapshot,
+  serializeSong,
+  serializeSongs,
+  clampResumePosition,
+  planQueueRestore,
+  loadQueueState,
+  saveQueueState,
+  clearQueueState,
+  getQueueStatePath
+} from './queueState.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1603,6 +1616,7 @@ export class MusicQueue {
     this.songs.push(song);
     console.log(`Song added: ${song.title}, Queue length now: ${this.songs.length}`);
     broadcastState();
+    scheduleQueueStateSave();
     // Adding to an empty queue makes this the next song; adding a user song to a queue of
     // radio fills replaces the next song outright. Both are handled by asking.
     this.maintainPrefetch();
@@ -1666,13 +1680,16 @@ export class MusicQueue {
   // caller that read it that way told the user it was. The outcome describes *this* song's
   // fate only - the self-heal is untouched, and the start it triggers reports its own.
   //
+  // @param startAtSeconds - where in the song to begin, for a start that is really a
+  //   continuation (see restoreQueueState). Clamped into the song exactly as a seek is, and
+  //   handed to the same -ss machinery, so the playback clock accounts for it by itself.
   // @returns {Promise<{started: true, song} | {started: false, reason, song?, detail?}>}
   //   reason is one of:
   //     'already-playing'  a song was already running; this call started nothing
   //     'empty-queue'      there was nothing to start
   //     'superseded'       a skip, stop or teardown took over while this song downloaded
   //     'failed'           the song could not be fetched (`detail` says why); queue moved on
-  async play() {
+  async play({ startAtSeconds = 0 } = {}) {
     console.log(`play() called - isPlaying: ${this.isPlaying}, songs in queue: ${this.songs.length}`);
     if (this.isPlaying || this.songs.length === 0) {
       console.log('Skipping play() - already playing or no songs');
@@ -1774,7 +1791,7 @@ export class MusicQueue {
 
       // The downloaded file *is* the cache, so seeking is instant from the first second
       this.cachedAudioPath = cachePath;
-      this.playFromCache(0);
+      this.playFromCache(clampResumePosition(startAtSeconds, this.currentSong?.duration));
 
       // Counted here rather than at the consume, so a start that was abandoned partway does
       // not report a transition the listener never had
@@ -1785,6 +1802,8 @@ export class MusicQueue {
 
       // ...and now that the slot is free again, start on the one after this
       this.maintainPrefetch();
+      // A new song, a new position: this is the state a restart would have to put back
+      scheduleQueueStateSave();
 
       return { started: true, song: this.currentSong };
 
@@ -2432,6 +2451,10 @@ export class MusicQueue {
     this.currentResource = null;
     this.isPlaying = false;
     broadcastState();
+    // The song that just ended is no longer what a restart should come back to. Covers both
+    // branches below: the next song's start saves again, and a queue that has run dry drops
+    // its saved entry rather than leaving a finished song there to be replayed.
+    scheduleQueueStateSave();
 
     if (this.songs.length > 0) {
       console.log('Playing next song...');
@@ -2675,6 +2698,7 @@ export class MusicQueue {
       this.currentResource.volume.setVolume(actualVolume);
     }
     broadcastState();
+    scheduleQueueStateSave();
   }
 
   skip() {
@@ -2761,6 +2785,8 @@ export class MusicQueue {
 
     // Broadcast state with seek position
     broadcastState(target);
+    // A jump is bigger than the refresh interval would smooth over, so it is recorded now
+    scheduleQueueStateSave();
     return true;
   }
 
@@ -2839,6 +2865,7 @@ export class MusicQueue {
     this.maintainPrefetch();
     // Broadcast updated state
     broadcastState();
+    scheduleQueueStateSave();
     return true;
   }
 
@@ -2854,6 +2881,7 @@ export class MusicQueue {
     console.log('Queue shuffled');
     this.maintainPrefetch();
     broadcastState();
+    scheduleQueueStateSave();
     return true;
   }
 
@@ -2886,6 +2914,7 @@ export class MusicQueue {
     console.log(`Reordered queue: moved "${song.title}" from position ${fromIndex} to ${toIndex}`);
     this.maintainPrefetch();
     broadcastState();
+    scheduleQueueStateSave();
     return true;
   }
 
@@ -2904,6 +2933,9 @@ export class MusicQueue {
     if (resetLastLoggedSongCallback) {
       resetLastLoggedSongCallback();
     }
+    // Last, because stopForUserAction() can run playNext() synchronously and that asks for a
+    // save. A user who stopped the music does not want a restart to start it again.
+    forgetQueueState();
     broadcastState();
   }
 
@@ -2917,6 +2949,10 @@ export class MusicQueue {
       this.connection.destroy();
     }
     this.cleanup();
+    // Leaving is always somebody's decision - a /stop, a sleep timer, an empty channel - and
+    // never a failure. A connection that died on its own tears down instead (see
+    // teardownConnection), and that one deliberately leaves the saved state where it is.
+    forgetQueueState();
   }
 
   cleanup() {
@@ -2966,6 +3002,42 @@ export class MusicQueue {
     }
     this.destroying = false;
     broadcastState();
+  }
+
+  // Everything this queue would need to come back exactly where it left off, or null when
+  // there is nothing worth coming back to.
+  //
+  // The position is taken from the same pause-corrected clock the dashboard reads, so what a
+  // restart resumes is what the room actually heard - not the wall-clock age of the song,
+  // which counts every pause, every reconnect and every ducked "Hey Jerry" answer as playback.
+  //
+  // @param includeEmpty - return a snapshot even with nothing queued or playing. Used by the
+  //   24/7 rejoin, whose job is to be in the channel whether or not there is a song to resume.
+  snapshot({ includeEmpty = false } = {}) {
+    const speed = globalSettings.mixerFilters?.speed || 1.0;
+    const currentSong = serializeSong(this.currentSong);
+    const songs = serializeSongs(this.songs);
+    if (!currentSong && songs.length === 0 && !includeEmpty) return null;
+
+    return buildGuildSnapshot({
+      guildId: this.guildId,
+      guildName: this.guildName,
+      guildIcon: this.guildIcon,
+      voiceChannelId: this.voiceChannel?.id || null,
+      voiceChannelName: this.voiceChannelName,
+      currentSong,
+      songs,
+      positionSec: this.getPlaybackElapsedMs() / 1000 * speed,
+      volume: this.volume,
+      // Only an explicit pause counts as "the user wanted silence". AutoPaused is the player
+      // parking itself because no connection is Ready, which is exactly the state a dying
+      // voice link leaves behind - reading that as a pause would mean a 24/7 rejoin came back
+      // to a queue that refused to play.
+      wasPaused: this.player.state.status === AudioPlayerStatus.Paused,
+      loopMode: globalSettings.loopMode,
+      is24_7: globalSettings.is24_7,
+      radioEnabled: globalSettings.radioEnabled
+    });
   }
 
   getQueue() {
@@ -3020,6 +3092,282 @@ export function createQueue(guildId, guildInfo = null) {
   const queue = new MusicQueue(guildId, guildInfo);
   queues.set(guildId, queue);
   return queue;
+}
+
+// --- surviving a restart -----------------------------------------------------
+//
+// The queue lived only in memory, and the bot is restarted for every deploy - so a deploy in
+// the middle of an evening was the end of it: the room went quiet, the queue was gone, and
+// there was nothing to put back. It happened three times in one week.
+//
+// So the live queue is written to data/queueState.json, and read back at startup. Two writers,
+// for the two ways a process ends:
+//
+//   - the shutdown flush (flushQueueState, called from index.js's flushState), which is
+//     synchronous and await-free because it also runs on the uncaughtException path; and
+//   - a debounced save on every meaningful mutation plus a slow refresh while a song plays,
+//     which is what a SIGKILL or a crash falls back on. Those never reach the flush, so
+//     without the periodic write they would lose the whole queue rather than a few seconds.
+//
+// The refresh is what keeps the *position* honest. A crash loses whatever playback happened
+// since the last write, so the song resumes up to QUEUE_STATE_REFRESH_MS early - never late,
+// which matters: coming back early replays a few seconds, coming back late skips them.
+const QUEUE_STATE_SAVE_DEBOUNCE_MS = 5000;
+const QUEUE_STATE_REFRESH_MS = 10_000;
+
+let queueStateTimeout = null;
+// Raised by the shutdown flush. From then on nothing may schedule another write - the flush
+// has already had the last word on the file, and a timer that fired afterwards would be
+// writing state from a process that is on its way out.
+let persistenceStopped = false;
+
+// Write the state of every live queue, merged over what is already on disk.
+//
+// Merged rather than replaced because "no live queue for this guild" and "a live queue with
+// nothing in it" are different facts. The first is what a connection teardown leaves behind,
+// and that entry is exactly what a restart wants; the second means the queue ran dry (24/7
+// mode keeps it alive and empty), and leaving the finished song on disk would have a restart
+// replay it. So a live queue with nothing to save deletes its own entry, and a guild with no
+// live queue at all is left exactly as it was.
+function writeQueueState() {
+  // Nothing to say. Notably this is also the state right after a teardown, which is why that
+  // path's snapshot survives on disk instead of being overwritten with emptiness.
+  if (queues.size === 0) return false;
+
+  const stored = loadQueueState();
+  const guilds = stored.version === QUEUE_STATE_VERSION ? { ...stored.guilds } : {};
+  let changed = false;
+
+  for (const [guildId, queue] of queues) {
+    const snapshot = queue.snapshot();
+    if (snapshot) {
+      guilds[guildId] = snapshot;
+      changed = true;
+    } else if (guilds[guildId]) {
+      delete guilds[guildId];
+      changed = true;
+    }
+  }
+
+  if (!changed) return false;
+
+  try {
+    if (Object.keys(guilds).length === 0) return clearQueueState();
+    saveQueueState(guilds);
+    return true;
+  } catch (err) {
+    console.error('[MusicQueue] Could not save the queue state:', err.message);
+    return false;
+  }
+}
+
+// Ask for the queue state to be written soon. Called from every mutation that changes what a
+// restart would need to put back; idempotent and cheap, so no caller has to reason about
+// whether a write is already pending.
+export function scheduleQueueStateSave() {
+  if (persistenceStopped || queueStateTimeout) return false;
+  queueStateTimeout = setTimeout(safeTimer('the queue state save', () => {
+    // Cleared before the write, so a throw cannot leave the handle set and stop every later
+    // save from being scheduled (the same reasoning as scheduleSaveStats)
+    queueStateTimeout = null;
+    writeQueueState();
+  }), QUEUE_STATE_SAVE_DEBOUNCE_MS);
+  // The bot's gateway socket keeps the loop alive, so unref costs nothing there and keeps a
+  // pending save from holding `node --test` open for five seconds
+  if (queueStateTimeout.unref) queueStateTimeout.unref();
+  return true;
+}
+
+// The queue is gone on purpose - a /stop, a leave, a sleep timer expiring. A restart must not
+// undo a decision the user made, so the saved state goes with it.
+export function forgetQueueState() {
+  if (queueStateTimeout) {
+    clearTimeout(queueStateTimeout);
+    queueStateTimeout = null;
+  }
+  try {
+    return clearQueueState();
+  } catch (err) {
+    console.error('[MusicQueue] Could not clear the queue state:', err.message);
+    return false;
+  }
+}
+
+// Force an immediate synchronous write of the live queue state. Called from index.js's
+// shutdown flush, which runs on the signal path and on uncaughtException - so no awaits here.
+export function flushQueueState() {
+  persistenceStopped = true;
+  if (queueStateTimeout) {
+    clearTimeout(queueStateTimeout);
+    queueStateTimeout = null;
+  }
+  try {
+    return writeQueueState();
+  } catch (err) {
+    console.error('[MusicQueue] Could not flush the queue state:', err.message);
+    return false;
+  }
+}
+
+// The slow refresh behind the debounce. Only ever writes while something is actually playing:
+// with the bot idle there is no position to keep fresh, and the mutation saves have already
+// recorded everything else.
+const queueStateRefresh = setInterval(safeTimer('the queue state refresh', () => {
+  if (persistenceStopped) return;
+  for (const queue of queues.values()) {
+    if (queue.isPlaying) {
+      writeQueueState();
+      return;
+    }
+  }
+}), QUEUE_STATE_REFRESH_MS);
+if (queueStateRefresh.unref) queueStateRefresh.unref();
+
+// The voice channel a snapshot names, or null if it is not there any more.
+async function resolveVoiceChannel(client, channelId) {
+  if (!client || !channelId) return null;
+  let channel = client.channels?.cache?.get(channelId) || null;
+  if (!channel) {
+    // Not in the cache is not the same as gone - ask Discord before writing the channel off
+    try {
+      channel = await client.channels.fetch(channelId);
+    } catch {
+      channel = null;
+    }
+  }
+  if (!channel) return null;
+  if (typeof channel.isVoiceBased === 'function' && !channel.isVoiceBased()) return null;
+  return channel;
+}
+
+// People who would actually hear the music. Bots don't count - the bot itself is in there.
+function countHumans(channel) {
+  try {
+    if (!channel?.members?.filter) return 0;
+    return channel.members.filter(member => !member.user?.bot).size;
+  } catch (err) {
+    console.error('[MusicQueue] Could not count the listeners in the saved channel:', err.message);
+    return 0;
+  }
+}
+
+// Why a restored queue is sitting there rather than playing, in the words a human reads in
+// `pm2 logs`. Exported so the reasons the restore can give are pinned by a test rather than
+// only by the branch that produced them.
+export function describeRestoreHold(reason, channelName = null) {
+  const where = channelName ? `"${channelName}"` : 'the saved voice channel';
+  switch (reason) {
+    case 'channel-gone': return `${where} no longer exists`;
+    case 'channel-empty': return `there is nobody in ${where} to hear it`;
+    case 'was-paused': return 'the music was paused when the bot went down';
+    case 'queue-only': return 'nothing was playing, only queued';
+    default: return reason;
+  }
+}
+
+// Put one guild's saved queue back.
+async function restoreGuildQueue(client, guildId, guildState, { now, maxAgeMs }) {
+  const channel = await resolveVoiceChannel(client, guildState.voiceChannelId);
+  const plan = planQueueRestore(guildState, {
+    now,
+    maxAgeMs,
+    channelFound: !!channel,
+    humansPresent: countHumans(channel)
+  });
+
+  if (!plan.restore) {
+    if (plan.reason === 'stale') {
+      const minutes = Math.round(plan.ageMs / 60000);
+      console.log(`[MusicQueue] restore: the saved queue for guild ${guildId} is ${Number.isFinite(minutes) ? minutes : '?'} min old - discarded`);
+    } else {
+      console.log(`[MusicQueue] restore: nothing worth restoring for guild ${guildId}`);
+    }
+    return plan;
+  }
+
+  const queue = createQueue(guildId, { name: guildState.guildName, icon: guildState.guildIcon });
+  // Somebody was quicker than the restore - a /play that landed while this was resolving the
+  // channel owns the queue now, and a snapshot poured over it would take their song away
+  if (queue.isPlaying || queue.songs.length > 0) {
+    console.log(`[MusicQueue] restore: guild ${guildId} is already playing - the saved queue was left alone`);
+    return { restore: false, reason: 'already-playing' };
+  }
+
+  if (!plan.join) {
+    putQueueBack(queue, plan);
+    console.log(`[MusicQueue] restore: ${plan.songs.length} song(s) back in the queue for guild ${guildId}, not joining - ${describeRestoreHold(plan.reason, guildState.voiceChannelName)}`);
+    broadcastState();
+    return plan;
+  }
+
+  await queue.join(channel);
+  putQueueBack(queue, plan);
+  const outcome = await startRestoredSong(queue, plan);
+  if (outcome.started) {
+    console.log(`[MusicQueue] restore: resumed "${plan.currentSong.title}" at ${Math.round(plan.resumeAt)}s in "${channel.name}" with ${plan.songs.length - 1} song(s) behind it`);
+  } else {
+    // A song whose video has since gone falls into the ordinary failure path - skipped with a
+    // reason, queue moved on - so there is nothing to do here but say what happened
+    console.warn(`[MusicQueue] restore: "${plan.currentSong.title}" did not start (${outcome.reason}${outcome.detail ? `: ${outcome.detail}` : ''})`);
+  }
+  return { ...plan, started: !!outcome.started };
+}
+
+// The songs and the volume, back the way they were. `plan.songs` already has the song that was
+// playing at the front, so a start from here is the ordinary start path - it shifts that song
+// off and plays it, with all the prefetching, logging and self-healing that normally follows.
+function putQueueBack(queue, plan) {
+  queue.songs = plan.songs.map(song => ({ ...song }));
+  queue.volume = plan.volume;
+}
+
+async function startRestoredSong(queue, plan) {
+  // This is the same play continuing, not a new one: the song is already in recentlyPlayed and
+  // already counted in the listening stats. The flag play() reads to skip both is the one
+  // history navigation uses, for exactly the same reason.
+  queue.playingFromHistory = true;
+  return queue.play({ startAtSeconds: plan.resumeAt });
+}
+
+// Read the saved queue state and act on it. Called once, from index.js's ClientReady, after
+// the music and voice wiring is in place.
+//
+// The join this may do is an ordinary join(), so everything hanging off one happens by itself:
+// the voice assistant's own VoiceStateUpdate listener syncs its subscriptions and deafen state,
+// and join() stops an active recording first. Nothing here duplicates any of it.
+//
+// @returns {Promise<object[]>} one plan per saved guild, for tests and for the caller's logs
+export async function restoreQueueState({ client = null, now = Date.now(), maxAgeMs = QUEUE_STATE_MAX_AGE_MS } = {}) {
+  const discord = client || discordClient;
+  // The shutdown latch belonged to the process that wrote the file. A process that is starting
+  // up has not had its last word yet, so saves are on again from here.
+  persistenceStopped = false;
+  const stored = loadQueueState();
+
+  if (stored.version !== QUEUE_STATE_VERSION) {
+    console.log(`[MusicQueue] restore: ${getQueueStatePath()} was written by an older version (${stored.version}) - discarded`);
+    forgetQueueState();
+    return [];
+  }
+
+  const guildIds = Object.keys(stored.guilds || {});
+  if (guildIds.length === 0) return [];
+
+  // Cleared before anything is acted on, not after: a restore that manages to crash the
+  // process would otherwise be retried on every restart, forever. The debounced save puts the
+  // file back within seconds of playback resuming.
+  forgetQueueState();
+
+  const plans = [];
+  for (const guildId of guildIds) {
+    try {
+      plans.push(await restoreGuildQueue(discord, guildId, stored.guilds[guildId], { now, maxAgeMs }));
+    } catch (err) {
+      console.error(`[MusicQueue] restore: could not put the saved queue for guild ${guildId} back:`, err?.message || err);
+      plans.push({ restore: false, reason: 'failed' });
+    }
+  }
+  return plans;
 }
 
 // Guilds with a clip in flight on the queueless path below

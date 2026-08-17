@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'events';
 import { existsSync, readdirSync, writeFileSync, statSync, utimesSync } from 'fs';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice';
 import {
   MusicQueue,
@@ -30,7 +31,24 @@ import {
   filterEligibleRadioTracks,
   chooseRadioSeed,
   RADIO_MEMORY_SIZE,
+  flushQueueState,
+  forgetQueueState,
+  restoreQueueState,
+  describeRestoreHold,
+  getRecentlyPlayed,
 } from '../src/utils/musicQueue.js';
+import {
+  setQueueStatePath,
+  getQueueStatePath,
+  loadQueueState,
+  planQueueRestore,
+  clampResumePosition,
+  QUEUE_STATE_MAX_AGE_MS,
+} from '../src/utils/queueState.js';
+
+// Everything below writes queue snapshots to a disposable file rather than to the live bot's
+// data/queueState.json - which the restore path would then read on the next real startup.
+setQueueStatePath(join(tmpdir(), `jerrybot-test-queueState-${process.pid}.json`));
 
 // A voice connection is, as far as this module's lifecycle code is concerned, an EventEmitter
 // with a `state.status` that emits the status name on every transition (see VoiceConnection's
@@ -2058,4 +2076,477 @@ test('chooseRadioSeed: a single-entry history is chosen regardless of randomFn',
   const onlyEntry = { url: 'https://www.youtube.com/watch?v=only', title: 'Only' };
   assert.equal(chooseRadioSeed([onlyEntry], null, () => 0), onlyEntry);
   assert.equal(chooseRadioSeed([onlyEntry], null, () => 0.9999), onlyEntry);
+});
+
+// --- surviving a restart ------------------------------------------------------
+
+// A voice channel, as far as the restore path is concerned: an id, a name, and members it can
+// count the humans in. The members collection filters for real, so countHumans is exercised
+// rather than mocked out.
+class FakeMembers extends Map {
+  filter(fn) {
+    const out = new FakeMembers();
+    for (const [key, value] of this) if (fn(value)) out.set(key, value);
+    return out;
+  }
+}
+
+function fakeVoiceChannel(id, { humans = 1, bots = 1, name = 'Muziek' } = {}) {
+  const members = new FakeMembers();
+  for (let i = 0; i < humans; i++) members.set(`human-${i}`, { user: { id: `human-${i}`, bot: false } });
+  for (let i = 0; i < bots; i++) members.set(`bot-${i}`, { user: { id: `bot-${i}`, bot: true } });
+  return { id, name, members, isVoiceBased: () => true };
+}
+
+const fakeClient = (...channels) => ({
+  channels: {
+    cache: new Map(channels.map(channel => [channel.id, channel])),
+    fetch: async () => { throw new Error('not found'); }
+  }
+});
+
+// A queue that knows which channel it is in, which is what a snapshot has to write down
+function buildSnapshotQueue(guildId, { channelId = 'voice-1', channelName = 'Muziek' } = {}) {
+  const queue = new MusicQueue(guildId);
+  queue.voiceChannel = { id: channelId, name: channelName };
+  queue.voiceChannelName = channelName;
+  return queue;
+}
+
+// Force the player's reported status without playing a resource: `state` is an accessor on
+// AudioPlayer, so an own property shadows it and the bookkeeping behind the setter is skipped.
+function pinPlayerStatus(queue, status) {
+  Object.defineProperty(queue.player, 'state', { value: { status }, configurable: true });
+}
+
+test('snapshot: what gets written down is where the listener actually is, not how long ago the song started', () => {
+  const queue = buildSnapshotQueue('snapshot-position');
+  queue.currentSong = { title: 'Playing now', url: URL_A, duration: 300 };
+  queue.songs = [{ title: 'Next up', url: URL_B, duration: 200 }];
+  queue.isPlaying = true;
+  queue.volume = 0.35;
+  // A minute since it started, twenty seconds of which nobody heard (a pause, a reconnect, a
+  // ducked "Hey Jerry" answer). The listener is forty seconds in.
+  queue.songStartTime = Date.now() - 60_000;
+  queue.totalPausedMs = 20_000;
+
+  const snapshot = queue.snapshot();
+
+  assert.ok(Math.abs(snapshot.positionSec - 40) < 1, `position was ${snapshot.positionSec}`);
+  assert.equal(snapshot.currentSong.title, 'Playing now');
+  assert.deepEqual(snapshot.songs.map(s => s.url), [URL_B]);
+  assert.equal(snapshot.voiceChannelId, 'voice-1');
+  assert.equal(snapshot.volume, 0.35);
+  assert.equal(snapshot.wasPaused, false);
+  assert.ok(snapshot.savedAt > 0, 'and it is timestamped, so a restart can tell if it is stale');
+});
+
+test('snapshot: an idle, empty queue has nothing worth coming back to', () => {
+  const queue = buildSnapshotQueue('snapshot-empty');
+  assert.equal(queue.snapshot(), null);
+  // ...unless the caller is the 24/7 rejoin, whose job is the channel rather than the song
+  const forced = queue.snapshot({ includeEmpty: true });
+  assert.equal(forced.voiceChannelId, 'voice-1');
+  assert.equal(forced.currentSong, null);
+  assert.deepEqual(forced.songs, []);
+});
+
+test('snapshot: a song with no URL is not worth restoring, so it is not written down', () => {
+  const queue = buildSnapshotQueue('snapshot-unplayable');
+  queue.songs = [{ title: 'no url at all' }, { title: 'fine', url: URL_A, duration: 10 }];
+  assert.deepEqual(queue.snapshot().songs.map(s => s.title), ['fine']);
+});
+
+test('snapshot: an explicit pause is recorded, the player parking itself is not', () => {
+  const paused = buildSnapshotQueue('snapshot-paused');
+  paused.currentSong = { title: 'held', url: URL_A, duration: 100 };
+  pinPlayerStatus(paused, AudioPlayerStatus.Paused);
+  assert.equal(paused.snapshot().wasPaused, true, 'the user asked for silence');
+
+  const parked = buildSnapshotQueue('snapshot-autopaused');
+  parked.currentSong = { title: 'held by a dead link', url: URL_A, duration: 100 };
+  pinPlayerStatus(parked, AudioPlayerStatus.AutoPaused);
+  // AutoPaused is exactly what a dying voice connection leaves behind. Reading it as a pause
+  // would mean a 24/7 rejoin came back to a queue that refused to play.
+  assert.equal(parked.snapshot().wasPaused, false);
+});
+
+test('restore math: the round trip puts the queue back in order, with the current song at the front', () => {
+  const queue = buildSnapshotQueue('roundtrip-order');
+  queue.currentSong = { title: 'was playing', url: URL_A, duration: 300 };
+  queue.songs = [{ title: 'second', url: URL_B, duration: 100 }, { title: 'third', url: URL_C, duration: 100 }];
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 30_000;
+  queue.volume = 0.6;
+
+  const plan = planQueueRestore(queue.snapshot(), { humansPresent: 2 });
+
+  assert.equal(plan.restore, true);
+  assert.equal(plan.join, true);
+  assert.equal(plan.reason, 'resume');
+  assert.deepEqual(plan.songs.map(s => s.url), [URL_A, URL_B, URL_C], 'the song that was playing goes back at the front, where play() will shift it off');
+  assert.equal(plan.currentSong.url, URL_A);
+  assert.ok(Math.abs(plan.resumeAt - 30) < 1, `resumeAt was ${plan.resumeAt}`);
+  assert.equal(plan.volume, 0.6);
+});
+
+test('restore math: a position past the end of the song is clamped into it', () => {
+  // -ss past the end produces a stream that ends immediately, which the queue would skip for
+  // no visible reason. The same clamp seek() applies, for the same reason.
+  assert.equal(clampResumePosition(300, 180), 179);
+  assert.equal(clampResumePosition(179.5, 180), 179);
+  assert.equal(clampResumePosition(60, 180), 60);
+  // An unknown length (a live stream, a lookup with no duration) is no reason to refuse an offset
+  assert.equal(clampResumePosition(60, 0), 60);
+  assert.equal(clampResumePosition(60, undefined), 60);
+  // Nonsense, and a song that had not started, both come back from the beginning
+  assert.equal(clampResumePosition(-5, 180), 0);
+  assert.equal(clampResumePosition('nonsense', 180), 0);
+  assert.equal(clampResumePosition(0, 180), 0);
+});
+
+test('restore math: a snapshot the position clamp lands at the very end still comes back inside the song', () => {
+  const state = {
+    savedAt: Date.now(),
+    currentSong: { title: 'nearly over', url: URL_A, duration: 200 },
+    songs: [],
+    positionSec: 9999
+  };
+  const plan = planQueueRestore(state, { humansPresent: 1 });
+  assert.equal(plan.resumeAt, 199);
+});
+
+test('restore math: a snapshot older than the window is discarded rather than acted on', () => {
+  const state = {
+    savedAt: Date.now() - (31 * 60 * 1000),
+    currentSong: { title: 'last night', url: URL_A, duration: 300 },
+    songs: [],
+    positionSec: 30
+  };
+
+  const stale = planQueueRestore(state, { humansPresent: 3 });
+  assert.equal(stale.restore, false);
+  assert.equal(stale.reason, 'stale');
+  assert.ok(stale.ageMs > QUEUE_STATE_MAX_AGE_MS);
+
+  // ...and one from inside the window is not
+  const fresh = planQueueRestore({ ...state, savedAt: Date.now() - (29 * 60 * 1000) }, { humansPresent: 3 });
+  assert.equal(fresh.restore, true);
+  assert.equal(fresh.join, true);
+});
+
+test('restore math: a snapshot with no timestamp cannot be judged, so it is not trusted', () => {
+  const plan = planQueueRestore({ currentSong: { title: 'x', url: URL_A, duration: 10 }, songs: [] }, {});
+  assert.equal(plan.restore, false);
+  assert.equal(plan.reason, 'stale');
+});
+
+test('restore math: an empty channel gets the queue back but no bot in it', () => {
+  const state = {
+    savedAt: Date.now(),
+    voiceChannelId: 'voice-1',
+    currentSong: { title: 'was playing', url: URL_A, duration: 300 },
+    songs: [{ title: 'second', url: URL_B, duration: 100 }],
+    positionSec: 42
+  };
+
+  const plan = planQueueRestore(state, { humansPresent: 0 });
+
+  assert.equal(plan.restore, true);
+  assert.equal(plan.join, false, 'nobody is there to hear it');
+  assert.equal(plan.reason, 'channel-empty');
+  assert.deepEqual(plan.songs.map(s => s.url), [URL_A, URL_B], 'nothing is lost - the song that was playing is queued again');
+  assert.equal(plan.currentSong, null, 'and nothing is started');
+  assert.equal(plan.resumeAt, 0);
+});
+
+test('restore math: a channel that has gone, and a pause, are both held the same way', () => {
+  const base = {
+    savedAt: Date.now(),
+    currentSong: { title: 'was playing', url: URL_A, duration: 300 },
+    songs: [],
+    positionSec: 42
+  };
+
+  const gone = planQueueRestore(base, { channelFound: false, humansPresent: 0 });
+  assert.equal(gone.reason, 'channel-gone');
+  assert.equal(gone.join, false);
+  assert.deepEqual(gone.songs.map(s => s.url), [URL_A]);
+
+  // A pause is an instruction, and a restart is not a reason to overrule it
+  const held = planQueueRestore({ ...base, wasPaused: true }, { humansPresent: 4 });
+  assert.equal(held.reason, 'was-paused');
+  assert.equal(held.join, false);
+  assert.deepEqual(held.songs.map(s => s.url), [URL_A]);
+
+  // Songs queued but nothing playing: there is nothing to join a channel for
+  const queueOnly = planQueueRestore({ ...base, currentSong: null, songs: [{ title: 'waiting', url: URL_B, duration: 5 }] }, { humansPresent: 4 });
+  assert.equal(queueOnly.reason, 'queue-only');
+  assert.equal(queueOnly.join, false);
+});
+
+test('restore math: nothing saved is not a restore', () => {
+  assert.equal(planQueueRestore(null, {}).restore, false);
+  assert.equal(planQueueRestore({ savedAt: Date.now(), songs: [], currentSong: null }, {}).reason, 'nothing-saved');
+});
+
+test('restore: every reason a restored queue is sitting there says so in words', () => {
+  assert.match(describeRestoreHold('channel-empty', 'Muziek'), /nobody in "Muziek"/);
+  assert.match(describeRestoreHold('channel-gone'), /no longer exists/);
+  assert.match(describeRestoreHold('was-paused'), /paused/);
+  assert.match(describeRestoreHold('queue-only'), /nothing was playing/);
+});
+
+test('play(): a start that is really a continuation opens the file at the saved position', async () => {
+  const queue = buildDownloadQueue('play-from-offset');
+  queue.downloadSongToCache = async () => '/tmp/godcord_offset.opus';
+  queue.songs = [{ title: 'resumed', url: URL_A, duration: 300 }];
+
+  await queue.play({ startAtSeconds: 96.4 });
+
+  assert.equal(queue.played.length, 1);
+  assert.equal(queue.played[0].seconds, 96.4, 'handed straight to the same -ss machinery a seek uses');
+
+  // ...and a start past the end of the song is clamped, not left to end instantly
+  const clamped = buildDownloadQueue('play-from-offset-clamped');
+  clamped.downloadSongToCache = async () => '/tmp/godcord_offset2.opus';
+  clamped.songs = [{ title: 'nearly over', url: URL_A, duration: 120 }];
+  await clamped.play({ startAtSeconds: 500 });
+  assert.equal(clamped.played[0].seconds, 119);
+});
+
+test('play(): an ordinary start is unchanged - no offset, from the beginning', async () => {
+  const queue = buildDownloadQueue('play-no-offset');
+  queue.downloadSongToCache = async () => '/tmp/godcord_plain.opus';
+  queue.songs = [{ title: 'from the top', url: URL_A, duration: 300 }];
+  await queue.play();
+  assert.equal(queue.played[0].seconds, 0);
+});
+
+// The restore path looks the guild's queue up in the module's own map, so the stubs go on the
+// instance that is already in it rather than on a queue built beside it.
+function stubQueueForRestore(queue) {
+  const joined = [];
+  queue.joined = joined;
+  queue.join = async (channel) => {
+    joined.push(channel.id);
+    const connection = new FakeConnection(VoiceConnectionStatus.Ready);
+    queue.connection = connection;
+    queue.listenerConnection = connection;
+    queue.voiceChannel = channel;
+    queue.voiceChannelName = channel.name;
+    return connection;
+  };
+  queue.played = [];
+  queue.playFromCache = function (seconds) { this.played.push({ path: this.cachedAudioPath, seconds }); };
+  queue.trackAndClearListening = () => {};
+  queue.tryRadioFill = async () => false;
+  return stubFetches(queue);
+}
+
+// Waits for the resumed song's download to be asked for, without sitting out real time
+async function waitForCall(calls, index = 0) {
+  for (let i = 0; i < 50 && calls.length <= index; i++) await tick();
+  assert.ok(calls.length > index, `download ${index} was never asked for`);
+  return calls[index];
+}
+
+test('restore: a restart mid-song comes back to the same channel, at the same position, with the queue behind it', async () => {
+  const channel = fakeVoiceChannel('voice-restore', { humans: 1 });
+  const client = fakeClient(channel);
+  const historyBefore = getRecentlyPlayed().length;
+
+  // --- the process that is about to be restarted
+  const before = createQueue('restore-roundtrip');
+  before.voiceChannel = { id: channel.id, name: channel.name };
+  before.voiceChannelName = channel.name;
+  before.volume = 0.35;
+  before.currentSong = { title: 'Interrupted', url: URL_A, duration: 300 };
+  before.songs = [{ title: 'Next up', url: URL_B, duration: 200 }];
+  before.isPlaying = true;
+  before.songStartTime = Date.now() - 75_000;
+
+  assert.equal(flushQueueState(), true, 'the shutdown flush wrote the queue out');
+  before.cleanup(); // the process ends: nothing live is left behind
+
+  // --- the process that comes back
+  const after = createQueue('restore-roundtrip');
+  const calls = stubQueueForRestore(after);
+
+  const restoring = restoreQueueState({ client });
+  const download = await waitForCall(calls);
+  assert.equal(download.url, URL_A, 'the song that was interrupted is the one being fetched');
+  download.finish();
+  const [plan] = await restoring;
+
+  assert.equal(plan.restore, true);
+  assert.equal(plan.started, true);
+  assert.deepEqual(after.joined, ['voice-restore']);
+  assert.equal(after.currentSong.title, 'Interrupted');
+  assert.deepEqual(after.songs.map(s => s.title), ['Next up'], 'and what was queued behind it is still queued');
+  assert.equal(after.volume, 0.35);
+  assert.equal(after.played.length, 1);
+  assert.ok(Math.abs(after.played[0].seconds - 75) <= 1, `resumed at ${after.played[0].seconds}s`);
+  assert.equal(getRecentlyPlayed().length, historyBefore, 'a resumed song is the same play continuing, not a new one in the history');
+  assert.equal(existsSync(getQueueStatePath()), false, 'and the file is gone, so a second restart cannot restore it again');
+
+  after.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('restore-roundtrip'), [], 'nothing left in /tmp');
+});
+
+test('restore: a channel with nobody in it gets its queue back and no bot in the channel', async () => {
+  const channel = fakeVoiceChannel('voice-empty', { humans: 0, bots: 1 });
+  const client = fakeClient(channel);
+
+  const before = createQueue('restore-empty-channel');
+  before.voiceChannel = { id: channel.id, name: channel.name };
+  before.voiceChannelName = channel.name;
+  before.currentSong = { title: 'Was playing', url: URL_A, duration: 300 };
+  before.songs = [{ title: 'Next up', url: URL_B, duration: 200 }];
+  before.isPlaying = true;
+  before.songStartTime = Date.now() - 10_000;
+  flushQueueState();
+  before.cleanup();
+
+  const after = createQueue('restore-empty-channel');
+  const calls = stubQueueForRestore(after);
+
+  const logged = captureConsole();
+  let plans;
+  try {
+    plans = await restoreQueueState({ client });
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(plans[0].reason, 'channel-empty');
+  assert.deepEqual(after.joined, [], 'the bot stayed out of the empty channel');
+  assert.deepEqual(after.songs.map(s => s.title), ['Was playing', 'Next up'], 'but the queue is all there, ready for the next /play');
+  assert.equal(after.isPlaying, false);
+  assert.equal(calls.length, 0, 'and nothing was downloaded for a room with nobody in it');
+  assert.ok(logged.find(/nobody in "Muziek"/), logged.dump());
+
+  after.cleanup();
+});
+
+test('restore: a snapshot from last night is discarded, and never joins anything', async () => {
+  const channel = fakeVoiceChannel('voice-stale', { humans: 2 });
+  const client = fakeClient(channel);
+
+  const before = createQueue('restore-stale');
+  before.voiceChannel = { id: channel.id, name: channel.name };
+  before.currentSong = { title: 'Last night', url: URL_A, duration: 300 };
+  before.isPlaying = true;
+  before.songStartTime = Date.now() - 5_000;
+  flushQueueState();
+  before.cleanup();
+
+  const after = createQueue('restore-stale');
+  const calls = stubQueueForRestore(after);
+
+  const logged = captureConsole();
+  let plans;
+  try {
+    // Two hours later, by the clock the restore is given
+    plans = await restoreQueueState({ client, now: Date.now() + (2 * 60 * 60 * 1000) });
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(plans[0].restore, false);
+  assert.equal(plans[0].reason, 'stale');
+  assert.deepEqual(after.joined, []);
+  assert.deepEqual(after.songs, []);
+  assert.equal(calls.length, 0);
+  assert.ok(logged.find(/120 min old - discarded/), logged.dump());
+  assert.equal(existsSync(getQueueStatePath()), false, 'a discarded snapshot is not left to be reconsidered');
+
+  after.cleanup();
+});
+
+test('restore: a queue somebody has already started is not overwritten by the saved one', async () => {
+  const channel = fakeVoiceChannel('voice-race', { humans: 1 });
+  const client = fakeClient(channel);
+
+  const before = createQueue('restore-race');
+  before.voiceChannel = { id: channel.id, name: channel.name };
+  before.currentSong = { title: 'From the snapshot', url: URL_A, duration: 300 };
+  before.isPlaying = true;
+  before.songStartTime = Date.now() - 5_000;
+  flushQueueState();
+  before.cleanup();
+
+  // Somebody's /play got there first
+  const live = createQueue('restore-race');
+  const calls = stubQueueForRestore(live);
+  live.songs = [{ title: 'What the user asked for', url: URL_C, duration: 100 }];
+
+  const plans = await restoreQueueState({ client });
+
+  assert.equal(plans[0].restore, false);
+  assert.equal(plans[0].reason, 'already-playing');
+  assert.deepEqual(live.songs.map(s => s.title), ['What the user asked for'], 'their song is untouched');
+  assert.deepEqual(live.joined, []);
+  assert.equal(calls.length, 0);
+
+  live.cleanup();
+});
+
+test('persistence: stopping the music on purpose is not something a restart undoes', () => {
+  const queue = createQueue('persist-stop');
+  queue.voiceChannel = { id: 'voice-stop', name: 'Muziek' };
+  queue.songs = [{ title: 'playing', url: URL_A, duration: 100 }];
+  assert.equal(flushQueueState(), true);
+  assert.ok(existsSync(getQueueStatePath()));
+
+  queue.stop();
+
+  assert.equal(existsSync(getQueueStatePath()), false, 'a /stop takes the saved queue with it');
+  queue.cleanup();
+});
+
+test('persistence: a queue that has run dry drops its own entry instead of leaving a finished song there', () => {
+  const queue = createQueue('persist-dry');
+  queue.voiceChannel = { id: 'voice-dry', name: 'Muziek' };
+  queue.currentSong = { title: 'the last song', url: URL_A, duration: 100 };
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 1000;
+  assert.equal(flushQueueState(), true);
+  assert.ok(loadQueueState().guilds['persist-dry'], 'it was saved while it played');
+
+  // 24/7 mode keeps an empty queue alive rather than leaving; without this, a restart would
+  // replay the song that had already finished
+  queue.currentSong = null;
+  queue.isPlaying = false;
+  queue.songs = [];
+  flushQueueState();
+
+  assert.equal(existsSync(getQueueStatePath()), false, 'nothing left worth restoring, so nothing left on disk');
+  queue.cleanup();
+  forgetQueueState();
+});
+
+test('persistence: a teardown leaves the saved queue alone, so a restart can still put it back', () => {
+  // The one path that loses the connection without anybody asking for it. The queue is gone
+  // from memory, but what it was playing is exactly what a restart wants.
+  const queue = createQueue('persist-teardown');
+  const connection = new FakeConnection(VoiceConnectionStatus.Ready);
+  queue.connection = connection;
+  queue.listenerConnection = connection;
+  queue.trackAndClearListening = () => {};
+  queue.voiceChannel = { id: 'voice-teardown', name: 'Muziek' };
+  queue.currentSong = { title: 'interrupted', url: URL_A, duration: 100 };
+  queue.isPlaying = true;
+  queue.songStartTime = Date.now() - 2000;
+  flushQueueState();
+
+  queue.teardownConnection('error unrecoverable', connection);
+
+  assert.equal(loadQueueState().guilds['persist-teardown'].currentSong.title, 'interrupted');
+  // ...and a later write does not overwrite it with emptiness: there is no live queue for this
+  // guild any more, and "no queue" is not the same fact as "a queue with nothing in it"
+  flushQueueState();
+  assert.equal(loadQueueState().guilds['persist-teardown'].currentSong.title, 'interrupted');
+  forgetQueueState();
 });
