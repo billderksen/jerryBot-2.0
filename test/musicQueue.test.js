@@ -22,6 +22,8 @@ import {
   formatDownloadTiming,
   formatTransition,
   DOWNLOAD_TIMEOUT_MS,
+  getQueue,
+  safeTimer,
 } from '../src/utils/musicQueue.js';
 
 // A voice connection is, as far as this module's lifecycle code is concerned, an EventEmitter
@@ -1628,4 +1630,112 @@ test('AutoPaused: the reconnect closes the gap exactly once, resume() included',
   assert.equal(queue.pausedAt, null, 'the clock is running again');
   assert.ok(Math.abs(queue.totalPausedMs - 3_000) < 100, `credited ${queue.totalPausedMs}ms, once`);
   assert.ok(Math.abs(queue.getPlaybackElapsedMs() - 7_000) < 100, 'and the position is what was heard');
+});
+
+// --- one queue per guild ------------------------------------------------------
+
+test('createQueue: a second creation for the same guild hands back the live queue', () => {
+  // A duplicate instance is not cosmetic: the loser keeps its voice connection, downloads
+  // through the same single-slot gate and broadcasts over the winner, and nothing in the map
+  // can reach it again - so no /stop or /skip ever stops it.
+  const guildId = 'one-instance-per-guild';
+  const first = createQueue(guildId);
+  first.songs = [aSong('already queued')];
+
+  const second = createQueue(guildId);
+
+  assert.equal(second, first, 'the same instance, not a replacement');
+  assert.equal(second.songs.length, 1, 'and its queue was not wiped by the second caller');
+  first.cleanup();
+});
+
+test('createQueue: concurrent first-play callers all end up on one queue', async () => {
+  const guildId = 'one-instance-race';
+  // What the three "start playing from nothing" callers do: read, find nothing, create
+  const start = async (title) => {
+    const queue = getQueue(guildId) || createQueue(guildId);
+    await tick();
+    queue.songs.push(aSong(title));
+    return queue;
+  };
+
+  const [a, b, c] = await Promise.all([start('first'), start('second'), start('third')]);
+
+  assert.equal(a, b);
+  assert.equal(b, c);
+  assert.equal(getQueue(guildId), a, 'and it is the one the map hands out');
+  assert.equal(a.songs.length, 3, 'every caller added to the same queue');
+  a.cleanup();
+});
+
+test('createQueue: a fresh queue is created once the last one has been torn down', () => {
+  const guildId = 'one-instance-after-cleanup';
+  const first = createQueue(guildId);
+  first.cleanup();
+
+  const second = createQueue(guildId);
+  assert.notEqual(second, first, 'a torn-down queue is not handed out again');
+  second.cleanup();
+});
+
+// --- throw safety -------------------------------------------------------------
+
+test('a dashboard callback that throws does not wedge the queue mid-start', async () => {
+  // The prologue used to run outside play()'s try. A throw from it left isPlaying true and
+  // currentSong set with no resource, no ffmpeg, no download and no auto-leave timer - and
+  // nothing that would ever advance the queue again.
+  const queue = buildDownloadQueue('prologue-throws');
+  queue.downloadSongToCache = async () => '/tmp/godcord_prologue.opus';
+  queue.songs = [aSong('the one nobody hears')];
+
+  setWebUpdateCallback(() => { throw new Error('the dashboard fell over'); });
+  const logged = captureConsole();
+  let outcome;
+  try {
+    outcome = await queue.play();
+  } finally {
+    logged.restore();
+    setWebUpdateCallback(null);
+  }
+
+  // A broadcast that fails is logged and the song still plays - the dashboard is downstream
+  assert.equal(outcome.started, true, 'the song still started');
+  assert.equal(queue.played.length, 1);
+  assert.ok(logged.find(/Broadcasting state to the dashboard failed/), logged.dump());
+});
+
+test('a start that throws before it claims a generation still cleans up and advances', async () => {
+  const queue = buildDownloadQueue('prologue-fatal');
+  queue.songs = [aSong('doomed'), aSong('next up')];
+  // The first statement of the prologue, so this throws before the generation this start
+  // belongs to has been claimed - the case where reading the generation would answer "the song
+  // changed" and skip the cleanup
+  queue.clearAutoLeaveTimer = () => { throw new Error('ENOSPC: no space left on device'); };
+
+  const logged = captureConsole();
+  let outcome;
+  try {
+    outcome = await queue.play();
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(outcome.started, false);
+  assert.equal(outcome.reason, 'failed', 'not mistaken for "the song changed", which would skip the cleanup');
+  assert.equal(queue.isPlaying, false, 'the queue does not claim to be playing');
+  assert.equal(queue.currentSong, null);
+  assert.equal(queue.playNextCalls, 1, 'and it moved on instead of stopping dead');
+});
+
+test('a timer body that throws is logged, not left to end the process', () => {
+  // index.js's uncaughtException handler calls process.exit(1), so an unguarded throw from a
+  // timer is the bot dying mid-song rather than a warning in the log
+  const logged = captureConsole();
+  try {
+    // The wrapper every timer in this module is built with
+    safeTimer('a test timer', () => { throw new Error('disk full'); })();
+  } finally {
+    logged.restore();
+  }
+  assert.ok(logged.find(/a test timer failed: disk full/), logged.dump());
 });

@@ -6077,10 +6077,19 @@
       }
     }
 
+    // History rows that already have a replay in flight. Every other add-to-queue call site in
+    // this file disables its button before the fetch; these rows are divs with an onclick, so
+    // the same guard lives here instead. Two ways to submit twice, both reachable: a fast
+    // double-tap, and clicking the replay icon at all — its onclick fires and then bubbles to
+    // the row's own onclick, so one click was always two POSTs to /api/queue/add.
+    const replaysInFlight = new Set();
+
     async function replaySong(index) {
       const song = state.recentlyPlayed[index];
       if (!song) return;
-      
+      if (replaysInFlight.has(index)) return;
+      replaysInFlight.add(index);
+
       try {
         const response = await fetch('/api/queue/add', {
           method: 'POST',
@@ -6104,6 +6113,8 @@
       } catch (error) {
         console.error('Error replaying song:', error);
         showToast(error.message || 'Failed to add song', 'error');
+      } finally {
+        replaysInFlight.delete(index);
       }
     }
 

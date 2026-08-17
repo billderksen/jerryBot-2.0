@@ -1734,21 +1734,33 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard', ws = nul
       cancelSleepTimer();
       logWebAction(username, 'sleep-cancel');
     } else if (command.startsWith('mixer-bass:')) {
+      // Every numeric mixer value is guarded the way handleMusicCommand guards volume/seek/
+      // reorder: clampMixerFilters() rounds and clamps, and Math.max/min/round all propagate
+      // NaN, so a malformed frame (an empty or non-numeric suffix) used to write NaN into the
+      // guild's saved filters and hand ffmpeg a broken filter string for every listener.
       const value = parseFloat(command.split(':')[1]);
-      applyMixerFilters({ bass: value });
-      logWebAction(username, 'mixer-bass', `${value}dB`);
+      if (Number.isFinite(value)) {
+        applyMixerFilters({ bass: value });
+        logWebAction(username, 'mixer-bass', `${value}dB`);
+      }
     } else if (command.startsWith('mixer-treble:')) {
       const value = parseFloat(command.split(':')[1]);
-      applyMixerFilters({ treble: value });
-      logWebAction(username, 'mixer-treble', `${value}dB`);
+      if (Number.isFinite(value)) {
+        applyMixerFilters({ treble: value });
+        logWebAction(username, 'mixer-treble', `${value}dB`);
+      }
     } else if (command.startsWith('mixer-speed:')) {
       const value = parseFloat(command.split(':')[1]);
-      applyMixerFilters({ speed: value });
-      logWebAction(username, 'mixer-speed', `${value}x`);
+      if (Number.isFinite(value)) {
+        applyMixerFilters({ speed: value });
+        logWebAction(username, 'mixer-speed', `${value}x`);
+      }
     } else if (command.startsWith('mixer-mid:')) {
       const value = parseFloat(command.split(':')[1]);
-      applyMixerFilters({ mid: value });
-      logWebAction(username, 'mixer-mid', `${value}dB`);
+      if (Number.isFinite(value)) {
+        applyMixerFilters({ mid: value });
+        logWebAction(username, 'mixer-mid', `${value}dB`);
+      }
     } else if (command.startsWith('mixer-karaoke:')) {
       const value = command.split(':')[1] === 'true';
       applyMixerFilters({ karaoke: value });
@@ -1759,12 +1771,16 @@ function handleWebCommand(command, guildId, username = 'Web Dashboard', ws = nul
       logWebAction(username, 'mixer-8d', value ? 'on' : 'off');
     } else if (command.startsWith('mixer-8drate:')) {
       const value = parseFloat(command.split(':')[1]);
-      applyMixerFilters({ eightDRate: value });
-      logWebAction(username, 'mixer-8drate', `${value}Hz`);
+      if (Number.isFinite(value)) {
+        applyMixerFilters({ eightDRate: value });
+        logWebAction(username, 'mixer-8drate', `${value}Hz`);
+      }
     } else if (command.startsWith('mixer-reverb:')) {
       const value = parseInt(command.split(':')[1]);
-      applyMixerFilters({ reverb: value });
-      logWebAction(username, 'mixer-reverb', `${value}%`);
+      if (Number.isFinite(value)) {
+        applyMixerFilters({ reverb: value });
+        logWebAction(username, 'mixer-reverb', `${value}%`);
+      }
     } else if (command.startsWith('mixer-compressor:')) {
       const value = command.split(':')[1] === 'true';
       applyMixerFilters({ compressor: value });

@@ -120,6 +120,35 @@ const CONNECTION_SETTLE_MS = 250;
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Wrap a timer body so a throw inside it is logged instead of ending the process.
+//
+// A throwing timer is not a logged warning here: index.js's uncaughtException handler ends in
+// process.exit(1), so it is the bot dying mid-song, pm2 restarting it, and the /tmp file for
+// that song orphaned. Every timer in this module reaches at least one thing that can throw for
+// reasons outside it - a full disk (saveJsonSync) or the web dashboard's updateState ->
+// client.send() - so none of them run bare. The recovery path was given a .catch for exactly
+// this reason; this is the same reasoning applied to the class rather than to one site.
+export function safeTimer(what, fn) {
+  return () => {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`[MusicQueue] ${what} failed:`, err?.message || err);
+    }
+  };
+}
+
+// Start async work that nothing is going to await, and make sure a failure says where it came
+// from. All of these are queue advances fired from an event or timer body: left bare, a
+// rejection reaches the process-wide handler that logs it without a clue which path it was, and
+// whatever half-mutated state it died in simply stays.
+function unattended(promise, what) {
+  if (promise && typeof promise.catch === 'function') {
+    promise.catch(err => console.error(`[MusicQueue] ${what} failed:`, err?.message || err));
+  }
+  return promise;
+}
+
 // --- Serialized, 403-tolerant media downloads --------------------------------
 //
 // YouTube answers "HTTP Error 403: Forbidden" to media fetches it sees as a burst from one
@@ -519,8 +548,15 @@ async function trackListeningTime(song, actualSecondsListened) {
 function scheduleSaveStats() {
   if (!saveStatsTimeout) {
     saveStatsTimeout = setTimeout(() => {
-      saveStats();
+      // Cleared before the write, not after: saveJsonSync throws on a full or read-only disk,
+      // and a throw that left the handle set would stop every later save from being scheduled
+      // (as well as ending the process - see safeTimer)
       saveStatsTimeout = null;
+      try {
+        saveStats();
+      } catch (err) {
+        console.error('[MusicQueue] Could not save listening stats:', err.message);
+      }
     }, 30000);
   }
 }
@@ -627,8 +663,9 @@ function setupSleepTimer() {
     const remaining = globalSettings.sleepEndTime - Date.now();
     if (remaining > 0) {
       console.log(`Restoring sleep timer with ${Math.round(remaining / 1000)}s remaining`);
-      sleepTimer = setTimeout(() => {
+      sleepTimer = setTimeout(safeTimer('the restored sleep timer', () => {
         // Stop playback when timer expires
+        sleepTimer = null;
         const firstQueue = queues.values().next().value;
         if (firstQueue) {
           firstQueue.stop();
@@ -638,7 +675,7 @@ function setupSleepTimer() {
         saveSettings();
         broadcastState();
         console.log('Sleep timer expired - playback stopped');
-      }, remaining);
+      }), remaining);
     } else {
       globalSettings.sleepEndTime = null;
       saveSettings();
@@ -647,7 +684,7 @@ function setupSleepTimer() {
 }
 
 // Call after queues Map is defined
-setTimeout(setupSleepTimer, 100);
+setTimeout(safeTimer('restoring the sleep timer', setupSleepTimer), 100);
 
 // Sleep timer control functions (called from web server)
 export function setSleepTimer(minutes) {
@@ -660,19 +697,19 @@ export function setSleepTimer(minutes) {
   globalSettings.sleepEndTime = Date.now() + (minutes * 60 * 1000);
   saveSettings();
 
-  sleepTimer = setTimeout(() => {
+  sleepTimer = setTimeout(safeTimer('the sleep timer', () => {
     // Stop playback when timer expires
+    sleepTimer = null;
     const firstQueue = queues.values().next().value;
     if (firstQueue) {
       firstQueue.stop();
       firstQueue.leave();
     }
     globalSettings.sleepEndTime = null;
-    sleepTimer = null;
     saveSettings();
     broadcastState();
     console.log('Sleep timer expired - playback stopped');
-  }, minutes * 60 * 1000);
+  }), minutes * 60 * 1000);
 
   console.log(`Sleep timer set for ${minutes} minutes`);
   broadcastState();
@@ -889,7 +926,7 @@ let positionBroadcastInterval = null;
 
 function startPositionBroadcast() {
   if (positionBroadcastInterval) return;
-  positionBroadcastInterval = setInterval(() => {
+  positionBroadcastInterval = setInterval(safeTimer('the position broadcast', () => {
     const firstQueue = queues.values().next().value;
     if (firstQueue && firstQueue.isPlaying && firstQueue.songStartTime &&
         !isPlayerPaused(firstQueue.player.state.status)) {
@@ -897,7 +934,7 @@ function startPositionBroadcast() {
     } else {
       stopPositionBroadcast();
     }
-  }, 1000);
+  }), 1000);
 }
 
 function stopPositionBroadcast() {
@@ -915,7 +952,22 @@ export function isPlayerPaused(status) {
   return status === AudioPlayerStatus.Paused || status === AudioPlayerStatus.AutoPaused;
 }
 
+// Tell the dashboard where things stand. Guarded, because everything downstream of here is
+// somebody else's code: webUpdateCallback reaches the web server's updateState() ->
+// JSON.stringify -> ws.send(), none of which this module can vouch for. An unguarded throw
+// from there has two ways to hurt, and both were live: from a timer body it ends the process
+// (index.js's uncaughtException handler exits, so the bot dies mid-song), and from play()'s
+// prologue it left the queue marked playing with no resource and no download - a state nothing
+// would ever advance again. There is no caller for which a failed broadcast is worth either.
 function broadcastState(seekPosition = null) {
+  try {
+    sendStateToDashboard(seekPosition);
+  } catch (err) {
+    console.error('[MusicQueue] Broadcasting state to the dashboard failed:', err?.message || err);
+  }
+}
+
+function sendStateToDashboard(seekPosition = null) {
   if (!webUpdateCallback) return;
 
   // Get first active queue (for now, support single guild)
@@ -1007,7 +1059,7 @@ function awaitClipEnd(player, resource) {
     const startedAt = Date.now();
     let lastProgress = -1;
     let lastProgressAt = startedAt;
-    const progressTimer = setInterval(() => {
+    const progressTimer = setInterval(safeTimer('the clip stall watchdog', () => {
       // Buffering carries no playbackDuration, and a clip stuck there is stalled too
       const state = player.state;
       const progress = state.status === AudioPlayerStatus.Idle ? -1 : (state.playbackDuration ?? -1);
@@ -1023,7 +1075,7 @@ function awaitClipEnd(player, resource) {
         console.warn(`[MusicQueue] Clip exceeded ${DUCK_MAX_MS}ms, cutting it off`);
         finish('overran');
       }
-    }, 1000);
+    }), 1000);
     if (progressTimer.unref) progressTimer.unref();
 
     player.on(AudioPlayerStatus.Idle, onIdle);
@@ -1120,7 +1172,7 @@ export class MusicQueue {
         return;
       }
       console.log('Player went idle, playing next...');
-      this.playNext();
+      unattended(this.playNext(), 'advancing the queue after the player went idle');
     });
 
     this.player.on(AudioPlayerStatus.Playing, () => {
@@ -1178,7 +1230,7 @@ export class MusicQueue {
       this.isSeeking = false;
       this.clearSeekWatchdog();
       if (this.destroying) return;
-      this.playNext();
+      unattended(this.playNext(), 'advancing the queue after a player error');
     });
   }
 
@@ -1405,7 +1457,7 @@ export class MusicQueue {
     if (this.isPlaying) {
       this.skip();
     } else {
-      this.play();
+      unattended(this.play(), 'starting the previous song');
     }
     
     return true;
@@ -1431,64 +1483,80 @@ export class MusicQueue {
       return { started: false, reason: this.isPlaying ? 'already-playing' : 'empty-queue' };
     }
 
-    // A song is starting, so the empty-queue disconnect no longer applies
-    this.clearAutoLeaveTimer();
-
-    // Clean up previous FFmpeg process and cached audio
-    if (this.currentFFmpeg) {
-      this.currentFFmpeg.kill();
-      this.currentFFmpeg = null;
-    }
-    this.cleanupCachedAudio();
-
-    this.isPlaying = true;
-    this.currentSong = this.songs.shift();
-    this.cacheGeneration++; // New song - any download still in flight is now stale
-
-    // Only add to recently played if not playing from history navigation
-    if (!this.playingFromHistory) {
-      // Reset history index when playing new songs normally
-      this.historyIndex = -1;
-      
-      // Add to global recently played (at the beginning, max 150)
-      globalRecentlyPlayed.unshift({
-        ...this.currentSong,
-        playedAt: Date.now()
-      });
-      if (globalRecentlyPlayed.length > 150) {
-        globalRecentlyPlayed.pop();
-      }
-      // Save to file for persistence
-      saveRecentlyPlayed(globalRecentlyPlayed);
-      
-      // Track song started in listening stats (play count only, time tracked when song ends)
-      trackSongStarted(this.currentSong);
-    }
-    // Clear the flag for next song
-    this.playingFromHistory = false;
-    
-    // Broadcast state immediately when song changes
-    broadcastState();
-    
-    // Log the now playing song
-    if (logNowPlayingCallback && this.currentSong) {
-      logNowPlayingCallback(this.currentSong);
-    }
-
-    // Update Discord presence with now playing
-    if (updatePresenceCallback && this.currentSong) {
-      updatePresenceCallback(this.currentSong.title);
-    }
-
-    // The generation this start belongs to. The download is a multi-second subprocess and a
-    // 403 adds ten more seconds of backoff on top, so a stop, a skip or a teardown can
-    // easily land while it runs - and whichever of those it was has already moved the queue
-    // on.
-    const gen = this.cacheGeneration;
-    const songUrl = this.currentSong.url;
-    const songTitle = this.currentSong.title;
+    // Everything from here on runs inside the try, prologue included. It used to start
+    // outside it, and four of the things it does can throw for reasons that have nothing to do
+    // with this module: saveRecentlyPlayed() (a full or read-only disk), broadcastState()
+    // (now guarded itself), and the now-playing-log and presence callbacks. A throw there left
+    // isPlaying true, currentSong set, and no resource, no ffmpeg, no download and no
+    // auto-leave timer - a state nothing would ever advance again, because the player was Idle
+    // (so no Idle transition was coming), play() early-returns on isPlaying, and armAutoLeave
+    // needs !isPlaying. The music stopped dead and only /stop could recover it, with the
+    // rejection logged and swallowed so nothing pointed at the cause. The catch below already
+    // does the right thing for all of it.
+    //
+    // `gen` stays null until the generation is claimed, so a throw before that is never
+    // mistaken for "the song changed" - which would skip the cleanup this needs.
+    let gen = null;
+    let songTitle = 'unknown';
 
     try {
+      // A song is starting, so the empty-queue disconnect no longer applies
+      this.clearAutoLeaveTimer();
+
+      // Clean up previous FFmpeg process and cached audio
+      if (this.currentFFmpeg) {
+        killChild(this.currentFFmpeg, 'previous encoder');
+        this.currentFFmpeg = null;
+      }
+      this.cleanupCachedAudio();
+
+      this.isPlaying = true;
+      this.currentSong = this.songs.shift();
+      this.cacheGeneration++; // New song - any download still in flight is now stale
+      // The generation this start belongs to. The download is a multi-second subprocess and a
+      // 403 adds ten more seconds of backoff on top, so a stop, a skip or a teardown can
+      // easily land while it runs - and whichever of those it was has already moved the queue
+      // on. Claimed here, immediately after the bump, so it can never read as stale.
+      gen = this.cacheGeneration;
+      const songUrl = this.currentSong.url;
+      songTitle = this.currentSong.title;
+
+      // Only add to recently played if not playing from history navigation
+      if (!this.playingFromHistory) {
+        // Reset history index when playing new songs normally
+        this.historyIndex = -1;
+
+        // Add to global recently played (at the beginning, max 150)
+        globalRecentlyPlayed.unshift({
+          ...this.currentSong,
+          playedAt: Date.now()
+        });
+        if (globalRecentlyPlayed.length > 150) {
+          globalRecentlyPlayed.pop();
+        }
+        // Save to file for persistence
+        saveRecentlyPlayed(globalRecentlyPlayed);
+
+        // Track song started in listening stats (play count only, time tracked when song ends)
+        trackSongStarted(this.currentSong)
+          .catch(err => console.error('[MusicQueue] Could not record the song start:', err.message));
+      }
+      // Clear the flag for next song
+      this.playingFromHistory = false;
+
+      // Broadcast state immediately when song changes
+      broadcastState();
+
+      // Log the now playing song
+      if (logNowPlayingCallback && this.currentSong) {
+        logNowPlayingCallback(this.currentSong);
+      }
+
+      // Update Discord presence with now playing
+      if (updatePresenceCallback && this.currentSong) {
+        updatePresenceCallback(this.currentSong.title);
+      }
+
       // A prefetch that finished while the last song played makes this instant, which is the
       // whole point of it. Every kind of miss - no prefetch, one for a song the queue has
       // since moved off, one that failed - falls through to the download below and behaves
@@ -1529,7 +1597,7 @@ export class MusicQueue {
       // state now, so this call touches nothing and advances nothing. Read from the
       // generation as well as the error, since cancelling kills the yt-dlp child and that
       // arrives here as an ordinary subprocess failure.
-      const movedOn = this.downloadAbortReason(gen);
+      const movedOn = gen === null ? null : this.downloadAbortReason(gen);
       if (error?.aborted || movedOn) {
         const why = error?.aborted ? error.message : movedOn;
         console.log(`[MusicQueue] Gave up starting "${songTitle}" - ${why}`);
@@ -1561,7 +1629,7 @@ export class MusicQueue {
         this.consecutiveFailures = 0;
       }
 
-      this.playNext();
+      unattended(this.playNext(), 'advancing the queue past a song that could not be played');
       return { started: false, reason: 'failed', song: failedSong, detail: reason };
     }
   }
@@ -1916,7 +1984,7 @@ export class MusicQueue {
   // (Re)start the empty-queue auto-disconnect clock.
   armAutoLeave(ms = AUTO_LEAVE_MS) {
     this.clearAutoLeaveTimer();
-    this.autoLeaveTimer = setTimeout(() => {
+    this.autoLeaveTimer = setTimeout(safeTimer('the auto-leave timer', () => {
       this.autoLeaveTimer = null;
       // A timer left over from a discarded queue must never touch the live one
       if (queues.get(this.guildId) !== this) {
@@ -1926,7 +1994,7 @@ export class MusicQueue {
       if (this.songs.length === 0 && !this.isPlaying && !globalSettings.is24_7) {
         this.leave();
       }
-    }, ms);
+    }), ms);
   }
 
   // Push the pending auto-disconnect back. The "Hey Jerry" voice assistant calls
@@ -1975,16 +2043,16 @@ export class MusicQueue {
   // seek past the end) isSeeking would stay true and swallow every later Idle event.
   armSeekWatchdog() {
     this.clearSeekWatchdog();
-    this.seekWatchdog = setTimeout(() => {
+    this.seekWatchdog = setTimeout(safeTimer('the seek watchdog', () => {
       this.seekWatchdog = null;
       if (!this.isSeeking) return;
       console.warn('[MusicQueue] Seek watchdog fired - no Playing transition, clearing seek state');
       this.isSeeking = false;
       // The Idle that ended the old stream was swallowed, so nothing else will advance the queue
       if (!this.destroying && this.player.state.status === AudioPlayerStatus.Idle) {
-        this.playNext();
+        unattended(this.playNext(), 'advancing the queue after the seek watchdog fired');
       }
-    }, SEEK_WATCHDOG_MS);
+    }), SEEK_WATCHDOG_MS);
   }
 
   clearSeekWatchdog() {
@@ -2010,7 +2078,7 @@ export class MusicQueue {
       this.skipRequested = true;
       this.cacheGeneration++; // play() drops the download when it lands
       this.abortDownload();   // ...and it lands now rather than in a minute
-      this.playNext();
+      unattended(this.playNext(), 'advancing the queue after a user action');
       return true;
     }
 
@@ -2652,7 +2720,31 @@ export function deferAutoLeave(guildId, ms) {
   return queue ? queue.deferAutoLeave(ms) : false;
 }
 
+// Get this guild's queue, creating it if there isn't one. One instance per guild, always.
+//
+// Every "start playing from nothing" caller (play.js, playlist.js, index.js's handleAddSong)
+// does the same read-then-create, and none of them can guard against another one having done it
+// first. Today they get away with it because each read and its create sit in the same
+// synchronous run - but a second instance for one guild is not a cosmetic problem: the loser is
+// orphaned while still running. It keeps its voice connection, downloads through the same
+// single-slot gate, broadcasts its own state over the winner's, and no /stop or /skip can ever
+// reach it again, since those only touch whatever is in this map. So creation hands back the
+// live queue rather than replacing it, and the hazard is structurally gone instead of
+// incidentally absent.
+//
+// A queue mid-teardown is not live: cleanup() drops its own map entry when it finishes, so the
+// only way to see one here is from inside its own teardown, and that is not an instance to
+// hand out.
 export function createQueue(guildId, guildInfo = null) {
+  const existing = queues.get(guildId);
+  if (existing && !existing.destroying) {
+    console.log(`[MusicQueue] Reusing the live queue for guild ${guildId} rather than replacing it`);
+    // A caller that has fresher guild info (an icon that changed, a name) may as well pass it on
+    if (guildInfo?.name) existing.guildName = guildInfo.name;
+    if (guildInfo?.icon) existing.guildIcon = guildInfo.icon;
+    return existing;
+  }
+
   const queue = new MusicQueue(guildId, guildInfo);
   queues.set(guildId, queue);
   return queue;
