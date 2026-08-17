@@ -1555,6 +1555,138 @@ export async function waitForReadyConnection(connection, timeoutMs = CONNECTION_
   }
 }
 
+// --- crossfade ---------------------------------------------------------------
+//
+// Two songs meeting is the one moment the player has always been honest about being a queue: the
+// last sample of one, a gap, the first sample of the next. Since both songs are local files
+// before either is played, the join can be a fade instead.
+//
+// HOW. At [duration - crossfadeSec] a single ffmpeg is spawned with two file inputs - the
+// current file from wherever the listener has got to, the next file from its start - joined by
+// acrossfade, and its output replaces the resource the player is holding. One player, one
+// stream, one contract (see the two spawn sites in the class below); the queue is not driving
+// two players and there is no mixing here that ffmpeg is not doing.
+//
+// WHEN is the whole difficulty, and the answer is the playback clock that already exists: the
+// pause-corrected elapsed (getPlaybackElapsedMs) against the song's duration, with a timer that
+// is re-armed from that same clock whenever the clock changes - a pause, a resume, a seek, a
+// filter restart. Nothing is measured from wall time, so a song that spent four minutes paused
+// still fades out at its own end.
+//
+// WHAT IT REFUSES. A crossfade is only ever an improvement on a *natural* end between two
+// different songs that are both already on disk. Everything else gets the plain transition that
+// shipped: a skip or a stop (the user ended it, and fading out something they asked to be rid of
+// is worse than cutting it), a repeat of the same song (loop mode 'song', a one-song 'queue'
+// loop, or the same URL queued twice - a song crossfading into itself is silly), a ducked
+// "Hey Jerry" clip in flight (two things fighting over the same player), a prefetch that has not
+// landed (waiting for it would be the gap again, only worse), an unknown duration, and a mixer
+// speed other than 1.0 (the fade length and the filter chain's own resampling stop agreeing).
+//
+// The plan said "loop modes bypass crossfade", for the stated reason that a song crossfading into
+// itself is silly - which it is. That reason is about the *song*, not the mode, and the two come
+// apart: this bot's live setting is loopMode 'queue', where the finished song goes to the back and
+// the next song is somebody else entirely. Refusing on the mode would have shipped a feature that
+// never once fired here. So the refusal is on the song being the same song, which is exactly the
+// silly case (and is what a one-song 'queue' loop reduces to anyway), and mode 'queue' fades
+// normally - with the handover taking on playNext's job of putting the outgoing song at the back.
+export const CROSSFADE_HANDOVER_FRACTION = 0.5;
+
+/**
+ * Wall-clock milliseconds until playback reaches `targetSec`.
+ *
+ * Pure, and the only conversion between the two units this module keeps: the playback clock
+ * counts real milliseconds of audio delivered, while positions and durations are audio seconds,
+ * which differ by the mixer's speed.
+ */
+export function msUntilPlaybackPosition(targetSec, elapsedMs = 0, speed = 1) {
+  const rate = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  const positionSec = Math.max(0, Number(elapsedMs) || 0) / 1000 * rate;
+  return Math.round((Number(targetSec) - positionSec) * 1000 / rate);
+}
+
+/**
+ * When the transition out of the song now playing should be spawned, from the clock as it
+ * stands. Pure, so the arithmetic is pinned by a test rather than by watching a song end.
+ *
+ * Called again on every pause, resume and seek: the answer is derived entirely from the
+ * pause-corrected elapsed, so re-arming is just asking again rather than adjusting anything.
+ *
+ * @param elapsedMs - the pause-corrected playback clock (MusicQueue#getPlaybackElapsedMs)
+ * @returns {{schedule: false, reason: string}|{schedule: true, delayMs: number, atSec: number}}
+ *   reason is one of 'disabled' (crossfading is off), 'speed' (the mixer is not at 1.0),
+ *   'no-duration' (nothing to count back from), 'too-short' (the song is not long enough to have
+ *   an end distinct from its start), 'past' (the moment has already gone by - a restart that
+ *   resumed inside the last few seconds, say)
+ */
+export function planCrossfade({ durationSec, crossfadeSec, elapsedMs = 0, speed = 1 } = {}) {
+  const seconds = Number(crossfadeSec);
+  if (!Number.isFinite(seconds) || seconds <= 0) return { schedule: false, reason: 'disabled' };
+  // A fade is a fixed number of seconds of audio; asetrate re-labels the sample rate underneath
+  // it, so at any other speed the fade and the song stop agreeing about how long a second is
+  if (Number(speed) !== 1) return { schedule: false, reason: 'speed' };
+
+  const duration = Number(durationSec);
+  if (!Number.isFinite(duration) || duration <= 0) return { schedule: false, reason: 'no-duration' };
+  // Twice the fade, not once: a 4-second song with a 2.5-second fade is nothing but fade, and
+  // the handover would land before the song had properly started
+  if (duration <= seconds * 2) return { schedule: false, reason: 'too-short' };
+
+  const atSec = duration - seconds;
+  const delayMs = msUntilPlaybackPosition(atSec, elapsedMs, speed);
+  if (delayMs <= 0) return { schedule: false, reason: 'past' };
+  return { schedule: true, delayMs, atSec };
+}
+
+/**
+ * Whether the transition that is about to happen may be a crossfade. Pure: the whole decision
+ * table in one place, so what does and does not earn a fade is readable without following six
+ * branches through the class.
+ *
+ * @returns {{crossfade: boolean, reason: string}} reason says which condition decided it -
+ *   'ready' when it is a crossfade, and otherwise the first thing that ruled it out
+ */
+export function decideTransition({
+  crossfadeSec = 0,
+  naturalEnd = true,
+  nextFileReady = false,
+  duckActive = false,
+  loopMode = 'off',
+  sameSong = false,
+  speed = 1,
+  durationSec = 0,
+  nextDurationSec = null,
+  hasFile = true,
+  connected = true,
+  destroying = false
+} = {}) {
+  const seconds = Number(crossfadeSec);
+  if (!Number.isFinite(seconds) || seconds <= 0) return { crossfade: false, reason: 'disabled' };
+  if (destroying) return { crossfade: false, reason: 'tearing-down' };
+  if (!connected) return { crossfade: false, reason: 'no-connection' };
+  // A skip, a stop or a jump: the user ended this song on purpose
+  if (!naturalEnd) return { crossfade: false, reason: 'not-natural-end' };
+  // A single-song repeat is always into itself, whatever is queued behind it
+  if (loopMode === 'song') return { crossfade: false, reason: 'loop' };
+  if (sameSong) return { crossfade: false, reason: 'same-song' };
+  if (duckActive) return { crossfade: false, reason: 'duck-active' };
+  if (Number(speed) !== 1) return { crossfade: false, reason: 'speed' };
+  if (!hasFile) return { crossfade: false, reason: 'no-file' };
+  // Never waited for: a prefetch that has not landed means the plain transition, which is what
+  // shipped and what the download path is built to recover from
+  if (!nextFileReady) return { crossfade: false, reason: 'prefetch-miss' };
+
+  const duration = Number(durationSec);
+  if (!Number.isFinite(duration) || duration <= 0) return { crossfade: false, reason: 'no-duration' };
+  if (duration <= seconds * 2) return { crossfade: false, reason: 'too-short' };
+  // Fading into something shorter than the fade itself would be a song that is only ever heard
+  // coming up out of another one
+  if (nextDurationSec !== null && Number(nextDurationSec) > 0 && Number(nextDurationSec) <= seconds) {
+    return { crossfade: false, reason: 'next-too-short' };
+  }
+
+  return { crossfade: true, reason: 'ready' };
+}
+
 export class MusicQueue {
   constructor(guildId, guildInfo = null) {
     this.guildId = guildId;
@@ -1599,6 +1731,11 @@ export class MusicQueue {
     this.ttsPlayer = null; // Dedicated player for ducked clips, created on first use (see duckAndPlay)
     this.duckActive = false; // True while a ducked clip is playing over the music
     this.pendingUserPause = false; // A /pause asked for during a clip, honoured when it ends
+    // The transition in flight (see the crossfade section above), or null. Its two moments - the
+    // spawn at [duration - crossfadeSec] and the handover halfway through the fade - are driven
+    // by one timer, re-armed off the playback clock so a pause moves both.
+    this.crossfade = null;
+    this.crossfadeTimer = null;
     // Note: loopMode, is24_7, and sleepEndTime are now in globalSettings for persistence
 
     // Handle player state changes - use arrow function to preserve 'this'
@@ -1640,11 +1777,20 @@ export class MusicQueue {
         this.pausedAt = null;
       }
 
+      // Audio is flowing and the clock is running, which is the only state a crossfade can be
+      // scheduled from. This is the one arm site, and it covers every way of getting here: a
+      // song starting, a resume, the restart a seek or a filter change does, and the swap the
+      // crossfade itself performs (which re-arms its own handover).
+      this.armCrossfadeTimer();
+
       broadcastState();
     });
 
     this.player.on(AudioPlayerStatus.Paused, () => {
       console.log('Player paused');
+      // The clock has stopped, so every crossfade moment moves with it. Dropped rather than
+      // adjusted: the Playing handler above works the delay out again from the clock.
+      this.clearCrossfadeTimer();
       broadcastState();
     });
 
@@ -1663,6 +1809,8 @@ export class MusicQueue {
     this.player.on(AudioPlayerStatus.AutoPaused, () => {
       console.log('Player auto-paused - no voice connection ready to receive audio');
       if (this.songStartTime && this.pausedAt === null) this.pausedAt = Date.now();
+      // Same as a user pause: no audio is being delivered, so nothing is approaching its end
+      this.clearCrossfadeTimer();
       broadcastState();
     });
 
@@ -1997,41 +2145,10 @@ export class MusicQueue {
       const songUrl = this.currentSong.url;
       songTitle = this.currentSong.title;
 
-      // Only add to recently played if not playing from history navigation
-      if (!this.playingFromHistory) {
-        // Reset history index when playing new songs normally
-        this.historyIndex = -1;
-
-        // Add to global recently played (at the beginning, max 150)
-        globalRecentlyPlayed.unshift({
-          ...this.currentSong,
-          playedAt: Date.now()
-        });
-        if (globalRecentlyPlayed.length > 150) {
-          globalRecentlyPlayed.pop();
-        }
-        // Save to file for persistence
-        saveRecentlyPlayed(globalRecentlyPlayed);
-
-        // Track song started in listening stats (play count only, time tracked when song ends)
-        trackSongStarted(this.currentSong)
-          .catch(err => console.error('[MusicQueue] Could not record the song start:', err.message));
-      }
-      // Clear the flag for next song
-      this.playingFromHistory = false;
-
-      // Broadcast state immediately when song changes
-      broadcastState();
-
-      // Log the now playing song
-      if (logNowPlayingCallback && this.currentSong) {
-        logNowPlayingCallback(this.currentSong);
-      }
-
-      // Update Discord presence with now playing
-      if (updatePresenceCallback && this.currentSong) {
-        updatePresenceCallback(this.currentSong.title);
-      }
+      // Everything that has to happen because a new song is now the current one - the history,
+      // the stats, the log, the presence, the dashboard. Shared with the crossfade handover,
+      // which is the other way a song becomes the current one.
+      this.announceSongStart();
 
       // A prefetch that finished while the last song played makes this instant, which is the
       // whole point of it. Every kind of miss - no prefetch, one for a song the queue has
@@ -2109,6 +2226,50 @@ export class MusicQueue {
 
       unattended(this.playNext(), 'advancing the queue past a song that could not be played');
       return { started: false, reason: 'failed', song: failedSong, detail: reason };
+    }
+  }
+
+  // A song has become the current one: record it, log it, and tell everyone.
+  //
+  // Called from the two places that can make that true - a start (play) and a crossfade handover
+  // - so the two cannot drift apart. `playingFromHistory` is consumed here rather than at either
+  // caller: it is the one flag that says this is a play continuing rather than beginning, and it
+  // must be cleared whichever branch it suppressed.
+  announceSongStart() {
+    // Only add to recently played if not playing from history navigation
+    if (!this.playingFromHistory) {
+      // Reset history index when playing new songs normally
+      this.historyIndex = -1;
+
+      // Add to global recently played (at the beginning, max 150)
+      globalRecentlyPlayed.unshift({
+        ...this.currentSong,
+        playedAt: Date.now()
+      });
+      if (globalRecentlyPlayed.length > 150) {
+        globalRecentlyPlayed.pop();
+      }
+      // Save to file for persistence
+      saveRecentlyPlayed(globalRecentlyPlayed);
+
+      // Track song started in listening stats (play count only, time tracked when song ends)
+      trackSongStarted(this.currentSong)
+        .catch(err => console.error('[MusicQueue] Could not record the song start:', err.message));
+    }
+    // Clear the flag for next song
+    this.playingFromHistory = false;
+
+    // Broadcast state immediately when song changes
+    broadcastState();
+
+    // Log the now playing song
+    if (logNowPlayingCallback && this.currentSong) {
+      logNowPlayingCallback(this.currentSong);
+    }
+
+    // Update Discord presence with now playing
+    if (updatePresenceCallback && this.currentSong) {
+      updatePresenceCallback(this.currentSong.title);
     }
   }
 
@@ -2487,8 +2648,12 @@ export class MusicQueue {
     // (verified: 0 bytes, exit 0) when either input is shorter than the fade, which would be a
     // silent song instead of a loud one. whole_dur pads a short input up to the fade length and
     // is a no-op on every input that is already longer, which is all of them.
+    // aformat pins what acrossfade needs to be able to assume: two inputs at the same rate and
+    // the same layout. ffmpeg would negotiate its way there by itself (verified, including a mono
+    // file into a stereo one), but only the pin makes it something this code guarantees rather
+    // than something it gets away with.
     const branch = (index, path) =>
-      `[${index}:a]${buildFilterChain(loudnessFor(path))},aresample=48000,apad=whole_dur=${d}[a${index}]`;
+      `[${index}:a]${buildFilterChain(loudnessFor(path))},aformat=sample_rates=48000:channel_layouts=stereo,apad=whole_dur=${d}[a${index}]`;
 
     const ffmpegArgs = [
       '-loglevel', '0',
@@ -2546,6 +2711,272 @@ export class MusicQueue {
 
     this.player.play(resource);
     return resource;
+  }
+
+  // --- crossfade scheduling ---------------------------------------------------
+  //
+  // See the crossfade section above the class for what this is and what it refuses. Four
+  // methods: arm/clear the one timer, spawn the transition when it fires, hand the bookkeeping
+  // over halfway through the fade, and abandon the whole thing when something else takes over.
+
+  // The fade length in effect, read through a method for the same reason currentLoopMode is: so
+  // the paths can be exercised without writing globalSettings, which is a file the live bot shares.
+  currentCrossfadeSec() {
+    return globalSettings.crossfadeSec;
+  }
+
+  // The file the next song can be faded into, or null.
+  //
+  // `ready` rather than just a path: a prefetch that is still downloading has a path from the
+  // moment it starts, and handing ffmpeg a half-written file would be a transition into noise.
+  // Nothing here waits - a prefetch that has not landed is a plain transition.
+  readyPrefetchFor(song) {
+    const entry = this.prefetch;
+    if (!song || !entry || !entry.ready || entry.url !== song.url) return null;
+    if (!entry.path || !existsSync(entry.path)) return null;
+    return entry.path;
+  }
+
+  // (Re)work out when the next crossfade moment is and set the timer for it. Called from the
+  // Playing transition, which is every point at which the playback clock starts or changes.
+  //
+  // @returns {boolean} whether a timer is now pending
+  armCrossfadeTimer() {
+    this.clearCrossfadeTimer();
+    if (this.destroying || !this.isPlaying || !this.currentSong) return false;
+    // No audio is being delivered, so nothing is getting closer to its end. The Playing
+    // transition that ends the pause arms this again.
+    if (isPlayerPaused(this.player.state.status)) return false;
+    if (!this.songStartTime) return false;
+
+    const speed = globalSettings.mixerFilters?.speed || 1.0;
+    const elapsedMs = this.getPlaybackElapsedMs();
+    const state = this.crossfade;
+
+    // The fade is already running: the only moment left is the handover at its midpoint
+    if (state) {
+      const delayMs = Math.max(0, msUntilPlaybackPosition(state.handoverAtSec, elapsedMs, speed));
+      this.crossfadeTimer = setTimeout(safeTimer('the crossfade handover', () => {
+        this.crossfadeTimer = null;
+        this.completeCrossfade(state);
+      }), delayMs);
+      if (this.crossfadeTimer.unref) this.crossfadeTimer.unref();
+      return true;
+    }
+
+    const plan = planCrossfade({
+      durationSec: this.currentSong.duration,
+      crossfadeSec: this.currentCrossfadeSec(),
+      elapsedMs,
+      speed
+    });
+    if (!plan.schedule) return false;
+
+    // The generation is the identity check: it is bumped by every song change, so a timer set
+    // for a song the queue has moved off can tell that it has
+    const gen = this.cacheGeneration;
+    this.crossfadeTimer = setTimeout(safeTimer('the crossfade trigger', () => {
+      this.crossfadeTimer = null;
+      this.triggerCrossfade(gen);
+    }), plan.delayMs);
+    // The gateway socket keeps the process alive, so this timer never needs to - and a pending
+    // one must not hold `node --test` open for the length of a song
+    if (this.crossfadeTimer.unref) this.crossfadeTimer.unref();
+    return true;
+  }
+
+  clearCrossfadeTimer() {
+    if (this.crossfadeTimer) {
+      clearTimeout(this.crossfadeTimer);
+      this.crossfadeTimer = null;
+    }
+  }
+
+  // The current song is `crossfadeSec` from its end. Decide, and if it is a yes, start the fade.
+  triggerCrossfade(gen) {
+    // A song change, a skip, a stop or a teardown between arming and firing
+    if (gen !== this.cacheGeneration || this.destroying || !this.currentSong) return false;
+    if (this.crossfade) return false;
+
+    const next = this.songs[0];
+    const nextPath = this.readyPrefetchFor(next);
+    const seconds = this.currentCrossfadeSec();
+    const decision = decideTransition({
+      crossfadeSec: seconds,
+      naturalEnd: !this.skipRequested,
+      nextFileReady: !!nextPath,
+      duckActive: this.duckActive,
+      loopMode: this.currentLoopMode(),
+      sameSong: !!next && next.url === this.currentSong.url,
+      speed: globalSettings.mixerFilters?.speed || 1.0,
+      durationSec: this.currentSong.duration,
+      nextDurationSec: next?.duration ?? null,
+      hasFile: !!this.cachedAudioPath && existsSync(this.cachedAudioPath),
+      connected: !!this.connection,
+      destroying: this.destroying
+    });
+
+    if (!decision.crossfade) {
+      // One line per song, at the moment the decision is made, so "why did that one not fade"
+      // is answerable from `pm2 logs` rather than by reasoning about the table
+      console.log(`[MusicQueue] plain transition out of "${this.currentSong.title}" - ${decision.reason}`);
+      return false;
+    }
+
+    return this.beginCrossfade(next, nextPath, seconds);
+  }
+
+  // Replace the running encoder with one that plays out the rest of this song into the start of
+  // the next. The audio is committed from here; the queue's own bookkeeping is not, and follows
+  // at the handover below.
+  beginCrossfade(next, nextPath, seconds) {
+    const speed = globalSettings.mixerFilters?.speed || 1.0;
+    const fromSec = this.getPlaybackElapsedMs() / 1000 * speed;
+    const state = {
+      next,
+      nextPath,
+      seconds,
+      gen: this.cacheGeneration,
+      fromPath: this.cachedAudioPath,
+      // Halfway through the fade, where the two songs are equally loud. Either edge would be a
+      // lie for the length of the fade - at the start the outgoing song is still the one being
+      // heard, at the end the incoming one has been playing for seconds - so the position, the
+      // now-playing log, the presence and the listening credit all change hands in the middle.
+      handoverAtSec: fromSec + seconds * CROSSFADE_HANDOVER_FRACTION,
+      startedAt: Date.now()
+    };
+
+    // The file is being played from as of now, so it is this playback's file rather than a
+    // prefetch that can still be dropped: without this, a removeFromQueue() during the fade would
+    // reach invalidatePrefetch() and unlink the file the transition encoder is reading. It also
+    // keeps the slot occupied until the handover frees it, which is the "one download in flight"
+    // rule doing its job.
+    if (this.prefetch && this.prefetch.path === nextPath) this.prefetch.consumedGen = this.cacheGeneration;
+
+    const oldFFmpeg = this.currentFFmpeg;
+    // Exactly as a seek does it: swapping the resource under a playing player can produce an
+    // Idle that is not the end of a song, and that Idle must not advance the queue. Cleared by
+    // the Playing transition the new stream causes, with the watchdog behind it in case it never
+    // comes (in which case the queue moves on rather than sitting on a dead stream).
+    this.isSeeking = true;
+    this.armSeekWatchdog();
+    this.crossfade = state;
+
+    try {
+      this.playCrossfadeTransition(state, fromSec);
+    } catch (err) {
+      // Nothing has been handed over yet and the old encoder is still running, so the song
+      // simply plays to its end and the ordinary transition follows
+      console.error(`[MusicQueue] could not start the crossfade into "${next.title}":`, err?.message || err);
+      this.crossfade = null;
+      this.isSeeking = false;
+      this.clearSeekWatchdog();
+      return false;
+    }
+
+    // After the new one is playing, as everywhere else here
+    if (oldFFmpeg) killChild(oldFFmpeg, 'encoder');
+    // Schedules the handover now that there is a fade in flight
+    this.armCrossfadeTimer();
+    console.log(`[MusicQueue] crossfading ${seconds}s out of "${this.currentSong.title}" into "${next.title}" at ${fromSec.toFixed(1)}s`);
+    return true;
+  }
+
+  // Halfway through the fade: the next song becomes the current one.
+  //
+  // Only the bookkeeping moves here - the audio has been one continuous stream since the spawn -
+  // so this is the song change, and it does what play() does minus the download: credit what was
+  // heard of the outgoing song, take the incoming one out of the queue, adopt its file, set the
+  // clock to where it actually is (half a fade in), announce it, and line up the one after it.
+  completeCrossfade(state) {
+    // A skip, a seek, a stop or a teardown got here first and owns the state now
+    if (!state || this.crossfade !== state || this.destroying) return false;
+    this.crossfade = null;
+
+    const outgoing = this.currentSong;
+    // What the room actually heard of it, credited the same way a natural end credits it
+    this.trackAndClearListening();
+
+    // This is the song change, so it owes what playNext() does for a song that ended: loop mode
+    // 'queue' puts the finished song at the back. Without it, fading under a queue loop would
+    // quietly drain the queue instead of looping it. ('song' never gets here - a repeat of the
+    // same song is not crossfaded, see decideTransition.)
+    if (outgoing && this.currentLoopMode() === 'queue') {
+      const songToLoop = { ...outgoing };
+      delete songToLoop.playedAt;
+      this.songs.push(songToLoop);
+      console.log('Loop mode (queue): Added the faded-out song to the end of the queue');
+    }
+
+    // Taken out by identity rather than position: the fade is seconds long, and a reorder, a
+    // removal or an add can land inside it. If it has been taken out of the queue already, the
+    // audio is still playing it - it is too late for the queue to have an opinion.
+    const at = this.songs.indexOf(state.next);
+    // The URL is the fallback for the one case identity cannot cover: a path that rebuilt the
+    // queue out of copies while the fade ran. Leaving it in would queue up a song the room has
+    // already heard the start of.
+    const found = at >= 0 ? at : this.songs.findIndex(song => song.url === state.next.url);
+    if (found >= 0) this.songs.splice(found, 1);
+
+    // The prefetched file is the playing file now, so the slot is free for the song after this
+    if (this.prefetch && this.prefetch.path === state.nextPath) this.prefetch = null;
+    const finishedPath = this.cachedAudioPath;
+    this.cachedAudioPath = state.nextPath;
+    this.currentSong = state.next;
+    // A new current song: any fetch still in flight for the old one is stale
+    this.cacheGeneration++;
+    if (finishedPath && finishedPath !== state.nextPath) removeCacheFile(finishedPath);
+
+    // The incoming song has been audible for half the fade already, so the clock starts there
+    // rather than at zero - the same offset machinery a seek or a resume uses
+    const speed = globalSettings.mixerFilters?.speed || 1.0;
+    this.seekOffset = state.seconds * CROSSFADE_HANDOVER_FRACTION;
+    this.songStartTime = Date.now() - (this.seekOffset / speed * 1000);
+    this.pausedAt = null;
+    this.totalPausedMs = 0;
+    // Audio has been flowing for seconds, so whatever the breaker was counting is over
+    this.consecutiveFailures = 0;
+
+    this.announceSongStart();
+    // By definition: a crossfade only happens into a file that was already on disk
+    this.prefetchHits++;
+    console.log(formatTransition(true, state.next.title, this.prefetchHits, this.prefetchMisses));
+    if (outgoing) console.log(`[MusicQueue] crossfade handover: "${outgoing.title}" -> "${state.next.title}"`);
+
+    this.maintainPrefetch();
+    scheduleQueueStateSave();
+    // ...and now this song's own end, if it earns a fade of its own
+    this.armCrossfadeTimer();
+    return true;
+  }
+
+  // Give up on the transition in flight, for a reason that is not "it finished".
+  //
+  // The audio is not touched: the transition encoder IS the current audio, and whatever is
+  // cancelling this (a skip, a seek, a stop, a teardown) replaces or stops it on its own terms.
+  // What this undoes is the pending handover - the queue must not adopt a song for a fade that
+  // is no longer what the player is doing.
+  cancelCrossfade(reason) {
+    this.clearCrossfadeTimer();
+    const state = this.crossfade;
+    if (!state) return false;
+    this.crossfade = null;
+
+    // The fade raised `isSeeking` to keep the Idle that a resource swap can produce from
+    // advancing the queue, and only the new stream's Playing transition puts it down - which is
+    // about 80ms of spawn time away. A skip inside that window would have had its Idle swallowed
+    // and then waited out the full seek watchdog: ten seconds of silence for pressing next at the
+    // wrong moment. Once the fade is abandoned there is nothing left to protect, so the flag goes
+    // with it. The two callers that re-spawn (seek, applyFilters) raise it again immediately
+    // afterwards, and a real seek can never overlap a fade - a fade is only ever armed from a
+    // Playing transition, which is the thing that clears the flag.
+    if (this.isSeeking) {
+      this.isSeeking = false;
+      this.clearSeekWatchdog();
+    }
+
+    console.log(`[MusicQueue] crossfade into "${state.next.title}" abandoned - ${reason}`);
+    return true;
   }
 
   // Clean up cached audio file
@@ -2690,6 +3121,10 @@ export class MusicQueue {
   // re-queue the song. The flag has to be set before stop(), which can emit Idle - and only
   // when a song is actually ending, or it would leak onto the next song's natural end.
   stopForUserAction() {
+    // Whatever the user asked for, they did not ask for the fade this queue was halfway through
+    // arranging. The audio is dealt with below (or by the play() that follows); this only makes
+    // sure the queue does not go on to adopt the song it was fading into.
+    this.cancelCrossfade('the song was ended on purpose');
     const status = this.player.state.status;
     if (status === AudioPlayerStatus.Idle) {
       // An Idle player used to mean there was nothing to stop. Now a song can be seconds
@@ -2763,6 +3198,12 @@ export class MusicQueue {
 
   async playNext() {
     console.log('playNext called, songs in queue:', this.songs.length);
+
+    // A crossfade that reached its handover cleared itself long before this. One that is still
+    // here ended early - its encoder died, or the seek watchdog gave up on a stream that never
+    // started - and the ordinary path below is exactly the recovery: the song it was fading into
+    // is still at the head of the queue, its file is still prefetched, and it starts properly.
+    this.cancelCrossfade('the transition ended before its handover');
 
     // Capture the song that just ended before it's cleared below - the radio auto-fill
     // seeds its lookup from it once we know the queue is actually empty
@@ -3129,6 +3570,11 @@ export class MusicQueue {
 
     console.log(`Seeking to ${target} seconds in ${this.currentSong.title}`);
 
+    // A seek is an explicit statement about where in THIS song to be, so a fade out of it is off:
+    // the restart below plays the current song alone from `target`, and the song that was being
+    // faded in goes back to being the next song in the queue, prefetch and all.
+    this.cancelCrossfade('the listener seeked inside the song');
+
     // Set seeking flag to prevent playNext from being triggered
     this.isSeeking = true;
     this.armSeekWatchdog();
@@ -3181,6 +3627,9 @@ export class MusicQueue {
     }
 
     console.log(`[Mixer] Applying filters at position ${currentPosition.toFixed(1)}s:`, globalSettings.mixerFilters);
+
+    // The restart below re-spawns from the current song's file alone, so a fade in flight is over
+    this.cancelCrossfade('the mixer filters changed');
 
     this.isSeeking = true;
     this.armSeekWatchdog();
@@ -3353,6 +3802,7 @@ export class MusicQueue {
     // After player.stop(), since the Idle -> playNext() above may have armed a fresh one
     this.clearAutoLeaveTimer();
     this.clearSeekWatchdog();
+    this.cancelCrossfade('the queue is being torn down');
 
     this.isPlaying = false;
     this.isSeeking = false;

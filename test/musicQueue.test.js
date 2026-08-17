@@ -58,6 +58,9 @@ import {
   getMusicSettings,
   DEFAULT_CROSSFADE_SEC,
   MAX_CROSSFADE_SEC,
+  planCrossfade,
+  decideTransition,
+  msUntilPlaybackPosition,
 } from '../src/utils/musicQueue.js';
 import {
   setQueueStatePath,
@@ -3108,4 +3111,501 @@ test('the settings home: normalization and crossfade default on, nonsense reads 
   const settings = getMusicSettings();
   assert.equal(typeof settings.normalizeAudio, 'boolean');
   assert.equal(typeof settings.crossfadeSec, 'number');
+});
+
+// --- crossfade: the scheduling arithmetic ------------------------------------
+
+test('planCrossfade: the trigger is one fade before the end, from the pause-corrected clock', () => {
+  // A 180s song, 2.5s fade, 60s of audio heard so far: the transition starts at 177.5s, which
+  // is 117.5s away
+  assert.deepEqual(
+    planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 60_000 }),
+    { schedule: true, delayMs: 117_500, atSec: 177.5 }
+  );
+  // At the start of the song it is the whole way out
+  assert.deepEqual(
+    planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 0 }),
+    { schedule: true, delayMs: 177_500, atSec: 177.5 }
+  );
+});
+
+test('planCrossfade: re-arming after a pause asks the same question of a clock that stopped', () => {
+  // The whole re-arm mechanism: elapsedMs is pause-corrected, so a song that has been paused
+  // for an hour is still 117.5s from its fade. Nothing is adjusted - it is the same call.
+  const beforePause = planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 60_000 });
+  const afterAnHourPaused = planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 60_000 });
+  assert.deepEqual(afterAnHourPaused, beforePause);
+
+  // And a seek backwards pushes it out again rather than leaving a timer set for the old position
+  const afterSeekBack = planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 10_000 });
+  assert.equal(afterSeekBack.delayMs, 167_500);
+  assert.ok(afterSeekBack.delayMs > beforePause.delayMs, 'seeking back means waiting longer');
+});
+
+test('planCrossfade: a seek past the trigger point does not schedule anything', () => {
+  // The moment has gone: a restart that resumed inside the last two seconds, or a seek to the
+  // very end. Nothing to fade out of - the plain transition follows.
+  assert.deepEqual(
+    planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 178_000 }),
+    { schedule: false, reason: 'past' }
+  );
+  // Exactly on the trigger counts as gone by: a 0ms timer would fire after the audio anyway
+  assert.equal(planCrossfade({ durationSec: 180, crossfadeSec: 2.5, elapsedMs: 177_500 }).reason, 'past');
+});
+
+test('planCrossfade: crossfading off, and songs with nothing to fade', () => {
+  assert.deepEqual(planCrossfade({ durationSec: 180, crossfadeSec: 0 }), { schedule: false, reason: 'disabled' });
+  assert.equal(planCrossfade({ durationSec: 180, crossfadeSec: -1 }).reason, 'disabled');
+  assert.equal(planCrossfade({ durationSec: 180, crossfadeSec: 'x' }).reason, 'disabled');
+  // A live stream, or metadata that never came back with a length
+  assert.equal(planCrossfade({ durationSec: 0, crossfadeSec: 2.5 }).reason, 'no-duration');
+  assert.equal(planCrossfade({ durationSec: undefined, crossfadeSec: 2.5 }).reason, 'no-duration');
+  // A song shorter than two fades is all fade
+  assert.equal(planCrossfade({ durationSec: 4, crossfadeSec: 2.5 }).reason, 'too-short');
+  assert.equal(planCrossfade({ durationSec: 5, crossfadeSec: 2.5 }).reason, 'too-short');
+  assert.equal(planCrossfade({ durationSec: 6, crossfadeSec: 2.5 }).schedule, true);
+});
+
+test('planCrossfade: the mixer at any speed but 1.0 rules it out', () => {
+  // asetrate re-labels the sample rate under the fade, so the two stop agreeing about seconds
+  assert.equal(planCrossfade({ durationSec: 180, crossfadeSec: 2.5, speed: 1.25 }).reason, 'speed');
+  assert.equal(planCrossfade({ durationSec: 180, crossfadeSec: 2.5, speed: 0.8 }).reason, 'speed');
+  assert.equal(planCrossfade({ durationSec: 180, crossfadeSec: 2.5, speed: 1 }).schedule, true);
+});
+
+test('msUntilPlaybackPosition: audio seconds and clock milliseconds, converted once', () => {
+  assert.equal(msUntilPlaybackPosition(100, 40_000, 1), 60_000);
+  assert.equal(msUntilPlaybackPosition(100, 0, 1), 100_000);
+  assert.equal(msUntilPlaybackPosition(10, 20_000, 1), -10_000, 'already past reads negative');
+  // At double speed, 40s of clock is 80s of audio and a second of audio costs half a second
+  assert.equal(msUntilPlaybackPosition(100, 40_000, 2), 10_000);
+  assert.equal(msUntilPlaybackPosition(100, 0, 0), 100_000, 'a nonsense speed reads as 1.0');
+});
+
+// --- crossfade: the eligibility decision table -------------------------------
+
+// Everything true: a natural end, both files on disk, crossfading on, no clip talking over the
+// music, no loop. Each test below negates exactly one of them.
+const eligible = {
+  crossfadeSec: 2.5,
+  naturalEnd: true,
+  nextFileReady: true,
+  duckActive: false,
+  loopMode: 'off',
+  sameSong: false,
+  speed: 1,
+  durationSec: 180,
+  nextDurationSec: 200,
+  hasFile: true,
+  connected: true,
+  destroying: false
+};
+
+test('decideTransition: natural end, prefetch hit, enabled, no duck, no loop -> crossfade', () => {
+  assert.deepEqual(decideTransition(eligible), { crossfade: true, reason: 'ready' });
+});
+
+test('decideTransition: each negation is a plain transition, and says which one it was', () => {
+  const plain = (overrides, reason) => {
+    const decision = decideTransition({ ...eligible, ...overrides });
+    assert.deepEqual(decision, { crossfade: false, reason }, `${reason}: ${JSON.stringify(overrides)}`);
+  };
+
+  plain({ crossfadeSec: 0 }, 'disabled');
+  // A skip, a stop or a jump: fading out something the user asked to be rid of is worse than cutting it
+  plain({ naturalEnd: false }, 'not-natural-end');
+  // Never waited for - waiting would be the gap this whole design exists to remove
+  plain({ nextFileReady: false }, 'prefetch-miss');
+  // Two things fighting over one player
+  plain({ duckActive: true }, 'duck-active');
+  // A single-song repeat is always into itself
+  plain({ loopMode: 'song' }, 'loop');
+  // ...and so is the same URL twice in a row, whatever the loop mode says
+  plain({ sameSong: true }, 'same-song');
+  plain({ speed: 1.5 }, 'speed');
+  plain({ durationSec: 0 }, 'no-duration');
+  plain({ durationSec: 4 }, 'too-short');
+  plain({ nextDurationSec: 2 }, 'next-too-short');
+  plain({ hasFile: false }, 'no-file');
+  plain({ connected: false }, 'no-connection');
+  plain({ destroying: true }, 'tearing-down');
+});
+
+test('decideTransition: a queue loop into a different song still fades', () => {
+  // The plan said loop modes bypass crossfading, for the reason that a song crossfading into
+  // itself is silly. Under loopMode 'queue' - which is what this bot actually runs - the finished
+  // song goes to the back and the next one is somebody else, so there is nothing silly about it.
+  // Refusing on the mode would have shipped a feature that never fired here.
+  assert.deepEqual(decideTransition({ ...eligible, loopMode: 'queue' }), { crossfade: true, reason: 'ready' });
+  // The one-song case reduces to the silly one, and is refused on the song rather than the mode
+  assert.equal(decideTransition({ ...eligible, loopMode: 'queue', sameSong: true }).reason, 'same-song');
+});
+
+test('decideTransition: an unknown next-song duration is not a reason to refuse', () => {
+  // Plenty of songs arrive with no duration in their metadata; only a known, absurdly short one
+  // rules the fade out
+  assert.equal(decideTransition({ ...eligible, nextDurationSec: null }).crossfade, true);
+  assert.equal(decideTransition({ ...eligible, nextDurationSec: 0 }).crossfade, true);
+});
+
+// --- crossfade: the transition, end to end -----------------------------------
+
+// A queue that is playing, with the next song downloaded, and one moment away from its fade.
+// The transition encoder is recorded rather than spawned (the real one is verified against real
+// ffmpeg in the scratch verification); everything else - the timer, the decision, the handover,
+// the files - is the real code.
+async function buildCrossfadeQueue(guildId, { crossfadeSec = 2.5, duration = 180 } = {}) {
+  const queue = buildTransitionQueue(guildId);
+  const calls = stubFetches(queue);
+  queue.currentCrossfadeSec = () => crossfadeSec;
+  // Pinned rather than inherited: globalSettings comes from the live bot's playerSettings.json,
+  // and a test must not read differently depending on what the owner last clicked
+  queue.currentLoopMode = () => 'off';
+  queue.connection = new FakeConnection();
+  queue.transitions = [];
+  queue.playCrossfadeTransition = function (state, fromSec) {
+    this.transitions.push({ state, fromSec });
+    // What the real one leaves behind: an encoder parked for the cancellations to find
+    this.currentFFmpeg = { kill: () => {} };
+  };
+
+  queue.songs = [
+    { ...aSong('now playing', URL_A), duration },
+    { ...aSong('up next', URL_B), duration }
+  ];
+  await startFirstSong(queue, calls);
+  calls[1].finish();
+  await tick();
+
+  // Put the clock exactly on the trigger, the way the timer firing would find it
+  queue.songStartTime = Date.now() - (duration - crossfadeSec) * 1000;
+  queue.totalPausedMs = 0;
+  queue.pausedAt = null;
+  return { queue, calls };
+}
+
+test('crossfade: the transition plays the end of one file into the start of the next', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-happy');
+  const fileForA = queue.cachedAudioPath;
+  const fileForB = queue.prefetch.path;
+
+  const logged = captureConsole();
+  try {
+    assert.equal(queue.triggerCrossfade(queue.cacheGeneration), true);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.transitions.length, 1, 'one encoder, two files');
+  const { state, fromSec } = queue.transitions[0];
+  assert.equal(state.fromPath, fileForA);
+  assert.equal(state.nextPath, fileForB);
+  assert.equal(state.seconds, 2.5);
+  assert.ok(Math.abs(fromSec - 177.5) < 0.5, `picked up where the listener was, not at a guess (${fromSec})`);
+  assert.ok(Math.abs(state.handoverAtSec - 178.75) < 0.5, `hands over halfway through the fade (${state.handoverAtSec})`);
+
+  // The song does not change hands yet: it is still the one being heard
+  assert.equal(queue.currentSong.title, 'now playing');
+  assert.equal(queue.songs.length, 1, 'the next song is still queued until the handover');
+  assert.ok(logged.find(/crossfading 2\.5s out of "now playing" into "up next"/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: at the handover the next song becomes the current one, half a fade in', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-handover');
+  const fileForA = queue.cachedAudioPath;
+  const fileForB = queue.prefetch.path;
+  queue.credited = 0;
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    assert.equal(queue.completeCrossfade(queue.crossfade), true);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.currentSong.title, 'up next');
+  assert.equal(queue.songs.length, 0, 'and it is out of the queue exactly once');
+  assert.equal(queue.credited, 1, 'the outgoing song was credited what the room heard of it');
+  assert.equal(queue.cachedAudioPath, fileForB, 'the prefetched file is the playing file now');
+  assert.equal(queue.prefetch, null, 'and the prefetch slot is free for the song after it');
+  assert.equal(existsSync(fileForA), false, 'the finished song took its file with it');
+  assert.ok(existsSync(fileForB), 'and the playing one keeps its own');
+
+  // The clock says half a fade, because that is how much of it has been audible
+  assert.equal(queue.seekOffset, 1.25);
+  const position = queue.getPlaybackElapsedMs() / 1000;
+  assert.ok(Math.abs(position - 1.25) < 0.2, `position was ${position}`);
+  assert.equal(queue.prefetchHits >= 1, true, 'counted as the hit it was');
+  assert.equal(queue.crossfade, null);
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('xfade-handover'), [], 'nothing left in /tmp');
+});
+
+test('crossfade: a skip inside the fade abandons it, and the next song starts properly', async () => {
+  // The static trace worth pinning: the user hears a second of the fade, presses skip, and gets
+  // the incoming song from its beginning rather than half-faded - with its file still on disk,
+  // so it costs nothing.
+  const { queue, calls } = await buildCrossfadeQueue('xfade-skip');
+  const fileForB = queue.prefetch.path;
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    assert.ok(queue.crossfade, 'a fade is in flight');
+
+    queue.skip();
+    await queue.advancing;
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.crossfade, null, 'the pending handover is gone');
+  assert.equal(queue.currentSong.title, 'up next', 'the next song is playing');
+  assert.equal(queue.played.at(-1).path, fileForB, 'from the file that was already downloaded');
+  assert.equal(queue.played.at(-1).seconds, 0, 'from its beginning, not from half a fade in');
+  assert.equal(calls.length, 2, 'and nothing was downloaded again');
+  assert.ok(logged.find(/crossfade into "up next" abandoned - the song was ended on purpose/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a seek inside the fade goes back to the song that was playing', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-seek');
+  const fileForA = queue.cachedAudioPath;
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    await queue.seek(30);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.crossfade, null, 'the fade is off');
+  assert.equal(queue.currentSong.title, 'now playing', 'and the song being seeked in is still current');
+  assert.equal(queue.played.at(-1).path, fileForA, 'playing from its own file again');
+  assert.equal(queue.played.at(-1).seconds, 30);
+  assert.equal(queue.songs.length, 1, 'the next song went back to being the next song');
+  assert.ok(queue.prefetch, 'with its download still in hand, so nothing is fetched twice');
+  assert.ok(logged.find(/crossfade into "up next" abandoned - the listener seeked inside the song/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a ducked "Hey Jerry" clip in flight means a plain transition', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-duck');
+  queue.duckActive = true;
+
+  const logged = captureConsole();
+  try {
+    assert.equal(queue.triggerCrossfade(queue.cacheGeneration), false);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.transitions.length, 0, 'nothing was spawned');
+  assert.equal(queue.crossfade, null);
+  assert.ok(logged.find(/plain transition out of "now playing" - duck-active/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a prefetch that has not landed is never waited for', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-miss');
+  // A prefetch that exists but is still downloading - the file may be half-written
+  queue.prefetch.ready = false;
+
+  const logged = captureConsole();
+  try {
+    assert.equal(queue.triggerCrossfade(queue.cacheGeneration), false);
+  } finally {
+    logged.restore();
+  }
+  assert.ok(logged.find(/plain transition out of "now playing" - prefetch-miss/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: loop mode keeps the plain transition it always had', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-loop');
+  queue.currentLoopMode = () => 'song';
+
+  const logged = captureConsole();
+  try {
+    assert.equal(queue.triggerCrossfade(queue.cacheGeneration), false);
+  } finally {
+    logged.restore();
+  }
+  assert.ok(logged.find(/plain transition out of "now playing" - loop/), logged.dump());
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a trigger for a song the queue has moved off does nothing', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-stale');
+  const staleGen = queue.cacheGeneration - 1;
+
+  assert.equal(queue.triggerCrossfade(staleGen), false);
+  assert.equal(queue.transitions.length, 0);
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a handover for a fade something else took over does nothing', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-stale-handover');
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    const state = queue.crossfade;
+    queue.cancelCrossfade('a test took it over');
+    assert.equal(queue.completeCrossfade(state), false, 'the handover it was cancelled out of');
+    assert.equal(queue.currentSong.title, 'now playing', 'so the song did not change hands');
+  } finally {
+    logged.restore();
+  }
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: the timer follows the clock through a pause and a resume', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-pause', { duration: 300 });
+  // Somewhere in the middle of the song, so there is a real timer pending
+  queue.songStartTime = Date.now() - 60_000;
+
+  queue.player.emit(AudioPlayerStatus.Playing);
+  assert.ok(queue.crossfadeTimer, 'playing: a trigger is pending');
+
+  queue.player.emit(AudioPlayerStatus.Paused);
+  assert.equal(queue.crossfadeTimer, null, 'paused: nothing is approaching its end');
+
+  queue.player.emit(AudioPlayerStatus.Playing);
+  assert.ok(queue.crossfadeTimer, 'resumed: worked out again from the pause-corrected clock');
+
+  // ...and the connection going away is the same thing as a pause, as far as audio is concerned
+  queue.player.emit(AudioPlayerStatus.AutoPaused);
+  assert.equal(queue.crossfadeTimer, null);
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: nothing is armed with crossfading turned off, or for a song with no duration', async () => {
+  const { queue } = await buildCrossfadeQueue('xfade-off', { crossfadeSec: 0 });
+  queue.songStartTime = Date.now() - 60_000;
+  queue.player.emit(AudioPlayerStatus.Playing);
+  assert.equal(queue.crossfadeTimer, null);
+
+  queue.currentCrossfadeSec = () => 2.5;
+  queue.currentSong.duration = 0;
+  queue.player.emit(AudioPlayerStatus.Playing);
+  assert.equal(queue.crossfadeTimer, null);
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: under a queue loop the faded-out song still goes to the back', async () => {
+  // The handover is the song change, so it owes what playNext() owes: without this the queue
+  // would quietly drain instead of looping.
+  const { queue } = await buildCrossfadeQueue('xfade-loop-queue');
+  queue.currentLoopMode = () => 'queue';
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    queue.completeCrossfade(queue.crossfade);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.currentSong.title, 'up next');
+  assert.deepEqual(queue.songs.map(s => s.title), ['now playing'], 'the faded-out song is at the back');
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a removal during the fade cannot delete the file being played from', async () => {
+  // maintainPrefetch drops a prefetch that is no longer next, file and all - and during a fade
+  // that file is open in the transition encoder. The play path has taken it over by then.
+  const { queue } = await buildCrossfadeQueue('xfade-removal');
+  const fileForB = queue.prefetch.path;
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    // A third song arrives, which is what makes the queue reconsider what is next
+    queue.addSong({ ...aSong('a late arrival', URL_C), duration: 200 });
+    queue.maintainPrefetch();
+  } finally {
+    logged.restore();
+  }
+
+  assert.ok(existsSync(fileForB), 'the file the fade is playing from is still there');
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a skip in the 80ms before the swap is playing does not wait out the watchdog', async () => {
+  // The static trace that found a real hole. beginCrossfade raises isSeeking so the Idle a
+  // resource swap can produce does not advance the queue; only the new stream's Playing
+  // transition lowers it, and that is a spawn away. A skip inside that window used to have its
+  // Idle swallowed and then sat out the full ten-second seek watchdog.
+  const { queue } = await buildCrossfadeQueue('xfade-skip-window');
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    assert.equal(queue.isSeeking, true, 'the swap is protected while it starts');
+    assert.ok(queue.seekWatchdog, 'with the watchdog behind it');
+
+    // No Playing transition yet - the encoder has not produced a byte
+    queue.skip();
+    await queue.advancing;
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.isSeeking, false, 'the abandoned fade took the flag with it');
+  assert.equal(queue.seekWatchdog, null, 'and the watchdog it was holding');
+  assert.equal(queue.playNextCalls, 1, 'so the queue advanced at once rather than in ten seconds');
+
+  queue.cleanup();
+  await tick();
+});
+
+test('crossfade: a seek during the fade still gets its own seek protection', async () => {
+  // cancelCrossfade lowers the flag, so the two callers that re-spawn have to raise it again -
+  // and do, in that order
+  const { queue } = await buildCrossfadeQueue('xfade-seek-protect');
+
+  const logged = captureConsole();
+  try {
+    queue.triggerCrossfade(queue.cacheGeneration);
+    await queue.seek(45);
+  } finally {
+    logged.restore();
+  }
+
+  assert.equal(queue.isSeeking, true, 'the seek is protected in its own right');
+  assert.ok(queue.seekWatchdog, 'with a fresh watchdog');
+  assert.equal(queue.crossfade, null);
+
+  queue.cleanup();
+  await tick();
 });

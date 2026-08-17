@@ -66,7 +66,7 @@ Web Dashboard → Express API → Command Handler → Utils → WebSocket broadc
 JSON files in `data/` directory:
 - `recentlyPlayed.json` - Song history (7-day window)
 - `listeningStats.json` - Play counts per song
-- `playerSettings.json` - User preferences (volume, loop mode)
+- `playerSettings.json` - Shared player settings (loop mode, 24/7, radio, sleep timer, mixer filters, `normalizeAudio`, `crossfadeSec`)
 - `queueState.json` - The live music queue, so a restart can put it back (see [Queue Persistence](#queue-persistence-surviving-a-restart))
 - `*Leaderboard.json` - Game scores
 - `levels.json` - User XP, levels, and role rewards
@@ -148,6 +148,49 @@ With 24/7 mode **on**, an unrecoverable voice connection error still tears down 
 Attempts abort instantly if: someone starts music in that guild (`createQueue` cancels the pending rejoin), 24/7 is toggled off (`toggle24_7`), or the bot shuts down (`flushQueueState`). Every attempt re-checks all of it, and again after the join lands — a join can take 15s, plenty of time for a `/play` to claim the queue. A failed attempt leaves no queue holding a dead connection.
 
 Pure helpers, all tested: `planRejoinDelay(attempt, elapsedMs)`, `rejoinAbortReason({...})`. `isRejoinPending(guildId)` says whether an effort is in flight.
+
+## Audio: Loudness Normalization and Crossfade
+
+Both live in `src/utils/musicQueue.js` and are configured by editing `data/playerSettings.json`
+(no UI yet). Both default ON; a missing or malformed value reads as the default, and only an
+explicit `0` / `false` turns one off.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `normalizeAudio` | `true` | EBU R128 loudness normalization to I=-16 LUFS, TP=-1.5, LRA=11 |
+| `crossfadeSec` | `2.5` | Fade length between songs, in seconds. `0` = off, max 12 |
+
+### Loudness normalization
+Two-pass loudnorm without re-encoding anything. The **prefetch** download decodes the finished
+file once with `loudnorm=...:print_format=json` and the measured values are kept, keyed by the
+/tmp path they describe; at playback they are handed to `loudnorm` in the ffmpeg that already
+runs, which makes its single pass equivalent to a real second pass.
+
+The analysis pass costs ~8.6s of CPU per 4-minute track, so it runs **only on the background
+prefetch**, never on the play-path download (that would be seconds of silence with somebody
+waiting). A song the queue had to fetch on the spot - the first song of a session, or a rapid
+skip - plays unnormalized. Any measurement failure logs and plays unnormalized; nothing here can
+keep a song from starting. Playback itself costs ~3.6% of one core.
+
+### Crossfade
+At `[duration - crossfadeSec]` a single ffmpeg is spawned with two file inputs joined by
+`acrossfade`, and its output replaces the resource the player holds. Scheduling is derived from
+the pause-corrected playback clock (`getPlaybackElapsedMs`) and re-armed on every pause, resume,
+seek and filter change. Position/log/presence/listening-credit change hands at the fade's
+**midpoint**.
+
+Refused (plain transition instead), see `decideTransition()`: a skip/stop/jump, a repeat of the
+same song (`loopMode: 'song'`, a one-song queue loop, or the same URL twice), a ducked "Hey Jerry"
+clip in flight, a prefetch that has not landed (never waited for), an unknown or too-short
+duration, and any mixer speed other than 1.0. Note `loopMode: 'queue'` **does** crossfade, and
+the handover re-queues the outgoing song at the back the way `playNext()` would.
+
+Each filter branch ends in `apad=whole_dur`, because `acrossfade` emits **zero bytes** when either
+input is shorter than the fade - a silent song rather than a rough transition.
+
+There are exactly **two ffmpeg spawn sites** (`playFromCache` and `playCrossfadeTransition`),
+kept adjacent in the class; both go through `spawnEncoder()`/`startResource()` so the s16le
+48kHz stereo contract handed to the player is identical.
 
 ## Level/XP System
 
