@@ -12,8 +12,8 @@ const __dirname = dirname(__filename);
 import { readdirSync, appendFileSync } from 'fs';
 import { loadJsonSync, saveJsonSync } from './utils/jsonStore.js';
 import { chatWithAI, getChatConfig } from './utils/openrouter.js';
-import { startWebServer, updateState, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, setMemberFetcher, setDiscordClient as setWebDiscordClient, broadcastListeners } from './web/server.js';
-import { getQueue, createQueue, setWebUpdateCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast, flushStats } from './utils/musicQueue.js';
+import { startWebServer, updateState, updatePosition, getWebClientCount, setCommandHandler, setAddSongHandler, setBotInfo, setActivityLogger, setMemberFetcher, setDiscordClient as setWebDiscordClient, broadcastListeners } from './web/server.js';
+import { getQueue, createQueue, setWebUpdateCallback, setWebPositionCallback, setWebClientCountCallback, setActivityLoggerCallback, setDiscordClient as setMusicQueueClient, is24_7Enabled, setPresenceCallback, triggerStateBroadcast, flushStats } from './utils/musicQueue.js';
 import { setDiscordClient as setActivityLoggerClient, logCommandAction, logWebAction, logNowPlaying, resetLastLoggedSong } from './utils/activityLogger.js';
 import { initTracker } from './utils/osrsTracker.js';
 import { initTwitchTracker } from './utils/twitchTracker.js';
@@ -67,8 +67,11 @@ for (const file of commandFiles) {
   }
 }
 
-// Setup web dashboard callbacks
+// Setup web dashboard callbacks. The full state on every real change, the bare position on the
+// once-a-second tick, and a way to ask whether anybody is connected at all before doing either.
 setWebUpdateCallback(updateState);
+setWebPositionCallback(updatePosition);
+setWebClientCountCallback(getWebClientCount);
 
 // Setup activity logger callbacks
 setActivityLoggerCallback(logNowPlaying, resetLastLoggedSong);

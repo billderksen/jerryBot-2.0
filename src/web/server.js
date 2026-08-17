@@ -1645,8 +1645,17 @@ export async function broadcastListeners() {
   broadcast('listeners', { webViewers, voiceListeners });
 }
 
+// How many dashboards are actually connected. The music engine asks before it does per-second
+// work: with nobody watching there is nothing for a position tick to reach.
+export function getWebClientCount() {
+  return clients.size;
+}
+
 // Broadcast to all connected clients
 export function broadcast(type, data) {
+  // Serializing a 25KB state object for nobody is the one piece of guaranteed, continuous,
+  // pointless work in the player - and it ran every second of every song
+  if (clients.size === 0) return;
   const message = JSON.stringify({ type, data });
   clients.forEach(client => {
     if (client.readyState === 1) { // WebSocket.OPEN
@@ -1655,11 +1664,28 @@ export function broadcast(type, data) {
   });
 }
 
-// Update state and broadcast
+// Update state and broadcast.
+//
+// The merge always happens, even with nobody connected: currentState is what the *next* client
+// to connect is sent, so letting it go stale would mean a dashboard opening onto the song that
+// was playing an hour ago.
 export function updateState(newState) {
   currentState = { ...currentState, ...newState };
+  if (clients.size === 0) return;
   console.log('Broadcasting state - isPlaying:', currentState.isPlaying, 'isPaused:', currentState.isPaused, 'currentSong:', currentState.currentSong?.title);
   broadcast('state', currentState);
+}
+
+// The once-a-second playback position, on its own.
+//
+// This used to be a full state broadcast: 25KB per second per connected tab, of which the
+// 150-entry recentlyPlayed list was the bulk - a list that changes once a song, not once a
+// second. And the clients Set is the whole site's, not the player's, so a tab open on /stats or
+// /f1 was paying for it too. Everything that really changes still sends the full state; this
+// carries the three fields a progress bar needs.
+export function updatePosition({ position, isPaused, songStartTime }) {
+  currentState = { ...currentState, position, isPaused, songStartTime };
+  broadcast('position', { position, isPaused, songStartTime });
 }
 
 // Command handler (will be connected to music queue)

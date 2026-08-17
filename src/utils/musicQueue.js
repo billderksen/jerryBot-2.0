@@ -61,7 +61,7 @@ export const ytCookieOpts = process.env.YOUTUBE_COOKIES_BROWSER
 import ffmpegStatic from 'ffmpeg-static';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
-import { unlinkSync, existsSync } from 'fs';
+import { unlinkSync, existsSync, readdirSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 import { isAllowedMediaUrl } from './urlValidation.js';
@@ -91,9 +91,6 @@ if (!ffmpegPath || process.platform === 'linux') {
     console.log('Using ffmpeg-static:', ffmpegPath);
   }
 }
-
-// Set FFmpeg path
-process.env.FFMPEG_PATH = ffmpegPath;
 
 // Recently played persistence
 const RECENTLY_PLAYED_FILE = join(__dirname, '..', '..', 'data', 'recentlyPlayed.json');
@@ -246,7 +243,7 @@ export class DownloadGate {
   }
 }
 
-export const downloadGate = new DownloadGate(1);
+const downloadGate = new DownloadGate(1);
 
 // yt-dlp reports the rate-limit as an HTTP 403 on the video data, e.g.
 // "ERROR: unable to download video data: HTTP Error 403: Forbidden". Matched on the
@@ -319,6 +316,48 @@ function cacheFilePath(prefix, guildId) {
   cacheFileSeq += 1;
   return join(tmpdir(), `${prefix}${guildId}_${Date.now()}_${cacheFileSeq}.opus`);
 }
+
+// Cache files left behind by a process that did not get to clean up after itself.
+//
+// The in-process lifecycle is airtight - one file per playing song, deleted on every skip, stop
+// and teardown - but a SIGKILL, a pm2 restart or a crash takes the unlink with it, and nothing
+// ever collected the remains. There were 18MB of them in /tmp when this was written, days old.
+//
+// The age cut-off is what keeps this from deleting a *live* file: another instance of this bot
+// (or this one, restarted seconds ago) can be playing from a godcord_ file right now, and an
+// hour is far longer than any single download-and-play takes.
+const TMP_SWEEP_MIN_AGE_MS = 60 * 60 * 1000;
+
+function sweepStaleCacheFiles(minAgeMs = TMP_SWEEP_MIN_AGE_MS) {
+  const cutoff = Date.now() - minAgeMs;
+  let removed = 0;
+  let bytes = 0;
+  try {
+    // Every name this module produces starts with the prefix, including the .part, .ytdl and
+    // postprocessor siblings, so one prefix test covers the lot
+    for (const name of readdirSync(tmpdir())) {
+      if (!name.startsWith('godcord_')) continue;
+      const path = join(tmpdir(), name);
+      try {
+        const stats = statSync(path);
+        if (!stats.isFile() || stats.mtimeMs > cutoff) continue;
+        unlinkSync(path);
+        removed++;
+        bytes += stats.size;
+      } catch {
+        // Gone already, or somebody else's to delete - either way, not ours to worry about
+      }
+    }
+  } catch (err) {
+    console.error('[MusicQueue] Could not sweep stale cache files:', err.message);
+  }
+  if (removed > 0) {
+    console.log(`[MusicQueue] Swept ${removed} stale cache file(s) from ${tmpdir()} (${Math.round(bytes / 1024 / 1024)}MB)`);
+  }
+  return removed;
+}
+
+sweepStaleCacheFiles();
 
 // Delete a cache file and the part-file yt-dlp may have left beside it. Quiet about a file
 // that is not there: for a download that was killed before it wrote anything, that is the
@@ -585,11 +624,6 @@ export function is24_7Enabled() {
   return globalSettings.is24_7;
 }
 
-// Export getter for radio mode status
-export function isRadioEnabled() {
-  return globalSettings.radioEnabled;
-}
-
 // Export getter for music settings
 export function getMusicSettings() {
   return {
@@ -839,6 +873,32 @@ export function setWebUpdateCallback(callback) {
   webUpdateCallback = callback;
 }
 
+// The small once-a-second position message, and the count of dashboards there are to send it
+// to. Both wired the same way as webUpdateCallback, and both optional: with neither set this
+// module behaves exactly as it did when every tick was a full state broadcast.
+let webPositionCallback = null;
+let webClientCountCallback = null;
+
+export function setWebPositionCallback(callback) {
+  webPositionCallback = callback;
+}
+
+export function setWebClientCountCallback(callback) {
+  webClientCountCallback = callback;
+}
+
+// Nothing wired up counts as "somebody might be listening", so tests and any other consumer
+// keep the old behaviour rather than silently losing their updates.
+function hasWebClients() {
+  if (!webClientCountCallback) return true;
+  try {
+    return webClientCountCallback() > 0;
+  } catch (err) {
+    console.error('[MusicQueue] Could not count dashboard clients:', err.message);
+    return true;
+  }
+}
+
 export function setDiscordClient(client) {
   discordClient = client;
 }
@@ -926,15 +986,44 @@ let positionBroadcastInterval = null;
 
 function startPositionBroadcast() {
   if (positionBroadcastInterval) return;
-  positionBroadcastInterval = setInterval(safeTimer('the position broadcast', () => {
-    const firstQueue = queues.values().next().value;
-    if (firstQueue && firstQueue.isPlaying && firstQueue.songStartTime &&
-        !isPlayerPaused(firstQueue.player.state.status)) {
-      broadcastState();
-    } else {
-      stopPositionBroadcast();
-    }
-  }), 1000);
+  positionBroadcastInterval = setInterval(
+    safeTimer('the position broadcast', () => positionTick(queues.values().next().value)),
+    1000
+  );
+}
+
+// One tick of the position broadcast. A named function rather than an inline body so it can be
+// driven directly, without sitting out a second of real time.
+export function positionTick(queue) {
+  if (queue && queue.isPlaying && queue.songStartTime && !isPlayerPaused(queue.player.state.status)) {
+    // The interval keeps ticking with nobody connected - it is one branch a second, and it
+    // means a dashboard that opens mid-song starts getting positions immediately - but nothing
+    // is sent, and nothing is built to send
+    if (hasWebClients()) broadcastPosition(queue);
+  } else {
+    stopPositionBroadcast();
+  }
+}
+
+// The position, and the two fields a client needs to read it - not the whole state. Falls back
+// to the full broadcast when nothing has claimed the position channel, so an unwired consumer
+// still gets its per-second update.
+function broadcastPosition(queue) {
+  if (!webPositionCallback) {
+    broadcastState();
+    return;
+  }
+  try {
+    const speed = globalSettings.mixerFilters?.speed || 1.0;
+    webPositionCallback({
+      position: queue.getPlaybackElapsedMs() / 1000 * speed,
+      isPaused: isPlayerPaused(queue.player.state.status),
+      // Pause-corrected, since the client computes its own progress as (now - songStartTime)
+      songStartTime: queue.getEffectiveSongStartTime()
+    });
+  } catch (err) {
+    console.error('[MusicQueue] Broadcasting the playback position failed:', err?.message || err);
+  }
 }
 
 function stopPositionBroadcast() {
@@ -991,7 +1080,6 @@ function sendStateToDashboard(seekPosition = null) {
       voiceChannelName: firstQueue.voiceChannelName,
       seekPosition: seekPosition,
       position: position,
-      isCached: !!(firstQueue.cachedAudioPath && existsSync(firstQueue.cachedAudioPath)),
       // Pause-corrected, since the client computes its own progress as (now - songStartTime)
       songStartTime: firstQueue.getEffectiveSongStartTime(),
       loopMode: globalSettings.loopMode,
@@ -1131,7 +1219,6 @@ export class MusicQueue {
     this.currentResource = null;
     this.currentFFmpeg = null;
     this.cachedAudioPath = null; // Path to the downloaded audio file being played
-    this.isCaching = false; // Whether a download is in flight
     this.songStartTime = null; // Timestamp when current song started playing
     this.pausedAt = null; // Timestamp of the pause currently in effect (null = not paused)
     this.totalPausedMs = 0; // Paused milliseconds already accumulated for this song
@@ -1566,7 +1653,7 @@ export class MusicQueue {
       // Download first, then play the file. The audio is fetched exactly once, by the one
       // component that can retry a 403 - ffmpeg is never pointed at a googlevideo URL,
       // where a 403 arrives as an instantly-silent song and an unexplained skip.
-      const cachePath = prefetched ? prefetched.path : await this.downloadSongToCache(songUrl, songTitle, gen);
+      const cachePath = prefetched || await this.downloadSongToCache(songUrl, songTitle, gen);
 
       // The queue can have moved on while yt-dlp ran; playing this now would hijack
       // whatever song took its place
@@ -1654,7 +1741,21 @@ export class MusicQueue {
     let attempts = 0;
 
     try {
-      // Highest quality opus (quality 0 = best, ~256kbps VBR)
+      // Whatever container `bestaudio` yields is kept as-is: no post-processor, no re-encode.
+      //
+      // The selector already prefers native opus, and for those yt-dlp's audio extraction only
+      // ever stream-copied - so `audioQuality: 0` (yt-dlp has no quality args for libopus) and
+      // `-b:a 256k` (meaningless on a copy) did nothing at all, for the price of one extra
+      // ffmpeg pass per song. For the AAC and other fallbacks it did the opposite of nothing: a
+      // full opus re-encode at a bitrate the source never had. Measured on a real 4:05 AAC
+      // track: 3.98s of CPU to turn a 3.96MB/128kbps file into a 7.50MB/245kbps one, generation
+      // loss included, landing squarely in the gap between songs. ffmpeg opens and seeks in
+      // webm and m4a alike (both verified against this module's exact playback arguments,
+      // including a mid-file seek), and dropping the post-processor also retires the
+      // `.temp.opus`/`.orig.opus` siblings it left behind whenever a kill landed mid-process.
+      //
+      // The file keeps its `.opus` name whatever is inside it: the name is a handle for this
+      // module, and ffmpeg reads containers, not extensions.
       await runGatedDownload((attempt) => {
         attempts = attempt;
         // .exec() hands back the child process rather than its parsed output, so a
@@ -1663,14 +1764,10 @@ export class MusicQueue {
         const child = ytDlpExec.exec(songUrl, {
           ...ytCookieOpts,
           output: cachePath,
-          extractAudio: true,
-          audioFormat: 'opus',
-          audioQuality: 0, // Best quality (VBR ~256kbps for opus)
           noCheckCertificates: true,
           noWarnings: true,
           ffmpegLocation: ffmpegPath,
-          format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best',
-          postprocessorArgs: 'ffmpeg:-b:a 256k' // Ensure high bitrate on transcode
+          format: 'bestaudio[acodec=opus]/bestaudio[acodec=aac]/bestaudio[abr>=160]/bestaudio/best'
         }, { timeout: DOWNLOAD_TIMEOUT_MS });
         this[childSlot] = child;
         return child.finally(() => {
@@ -1707,20 +1804,15 @@ export class MusicQueue {
   async downloadSongToCache(songUrl, songTitle, gen) {
     const cachePath = cacheFilePath('godcord_', this.guildId);
     console.log(`Downloading audio to: ${cachePath}`);
-    this.isCaching = true;
 
-    try {
-      const cost = await this.fetchAudioTo(cachePath, songUrl, songTitle, {
-        priority: DOWNLOAD_PRIORITY.PLAY,
-        label: `download of "${songTitle}"`,
-        abortReason: () => this.downloadAbortReason(gen),
-        childSlot: 'downloadProcess'
-      });
-      console.log(formatDownloadTiming(songTitle, cost.ms, cost.attempts));
-      return cachePath;
-    } finally {
-      this.isCaching = false;
-    }
+    const cost = await this.fetchAudioTo(cachePath, songUrl, songTitle, {
+      priority: DOWNLOAD_PRIORITY.PLAY,
+      label: `download of "${songTitle}"`,
+      abortReason: () => this.downloadAbortReason(gen),
+      childSlot: 'downloadProcess'
+    });
+    console.log(formatDownloadTiming(songTitle, cost.ms, cost.attempts));
+    return cachePath;
   }
 
   // --- next-song prefetch ----------------------------------------------------
@@ -1845,7 +1937,7 @@ export class MusicQueue {
   // that is the rapid-skip case, where throwing away a download that is seconds from done to
   // start the identical one again would be slower than having no prefetch at all.
   //
-  // @returns {Promise<{path, ms, attempts}|null>} null on any kind of miss
+  // @returns {Promise<string|null>} the file to play, or null on any kind of miss
   async takePrefetched(songUrl, gen) {
     const entry = this.prefetch;
     if (!entry || entry.url !== songUrl) {
@@ -1859,13 +1951,46 @@ export class MusicQueue {
     const path = await entry.promise;
     if (this.prefetch === entry) this.prefetch = null;
 
-    if (path && existsSync(path)) {
-      return { path, ms: entry.ms ?? Date.now() - entry.startedAt, attempts: entry.attempts || 1 };
-    }
+    if (path && existsSync(path)) return path;
     // It failed, or its file went while we waited. Either way nothing usable came of it and
     // it must not be left behind as an orphan.
     removeCacheFile(entry.path);
     return null;
+  }
+
+  // Hand the file the song that just ended was played from to the prefetch slot, so the copy
+  // loop mode just re-queued replays it instead of fetching the same audio all over again.
+  //
+  // Only ever the *same* song: identity is the URL, as everywhere else here. A loop-queue with
+  // other songs behind it puts its copy at the back, so `nextSong` is somebody else and this
+  // does nothing - and the ordinary prefetch, which is already lined up on that somebody else,
+  // is left alone.
+  //
+  // @returns {boolean} whether the file was adopted (and so must not be unlinked)
+  adoptEndedFileForNextPlay(nextSong) {
+    if (!nextSong || !this.currentSong || nextSong.url !== this.currentSong.url) return false;
+    if (!this.cachedAudioPath || !existsSync(this.cachedAudioPath)) return false;
+    // One download in flight is the whole rule; a prefetch that exists is for another song
+    if (this.prefetch) return false;
+
+    const path = this.cachedAudioPath;
+    this.prefetch = {
+      url: nextSong.url,
+      title: nextSong.title,
+      path,
+      token: this.prefetchToken,
+      consumedGen: null, // set to the play generation that takes this file over
+      startedAt: Date.now(),
+      attempts: 0,
+      ms: 0,
+      // Already on disk, so there is nothing to wait for. takePrefetched() awaits this, checks
+      // the file is still there, and plays it.
+      promise: Promise.resolve(path)
+    };
+    // Given up before the cleanup runs, or it would unlink the file it just handed over
+    this.cachedAudioPath = null;
+    console.log(`[MusicQueue] loop: reusing the file already on disk for "${nextSong.title}"`);
+    return true;
   }
 
   // Play from the downloaded audio file at a specific position
@@ -1937,7 +2062,6 @@ export class MusicQueue {
       }
     }
     this.cachedAudioPath = null;
-    this.isCaching = false;
     this.resetPlaybackClock();
     this.cacheGeneration++; // Invalidate any download still in flight
     // ...and stop it for real. Its file is discarded from here on either way, and with the
@@ -2143,24 +2267,34 @@ export class MusicQueue {
     this.trackAndClearListening();
 
     // Handle loop modes before cleanup
-    if (this.currentSong && !wasSkipped && globalSettings.loopMode !== 'off') {
+    const loopMode = this.currentLoopMode();
+    if (this.currentSong && !wasSkipped && loopMode !== 'off') {
       const songToLoop = { ...this.currentSong };
       delete songToLoop.playedAt; // Remove playedAt if present
 
-      if (globalSettings.loopMode === 'song') {
+      if (loopMode === 'song') {
         // Loop single: add to front of queue
         this.songs.unshift(songToLoop);
         console.log('Loop mode (song): Re-queued current song');
-      } else if (globalSettings.loopMode === 'queue') {
+      } else if (loopMode === 'queue') {
         // Loop queue: add to end of queue
         this.songs.push(songToLoop);
         console.log('Loop mode (queue): Added current song to end of queue');
       }
+
+      // The audio for that song is on disk right now, and the cleanup below is about to delete
+      // it - so the repeat used to pay a full play-priority download: several seconds of
+      // silence between repeats plus one more media fetch at YouTube, every time round, on the
+      // loop most likely to be left running for an hour. The prefetch can never cover it
+      // (songs[0] is empty while the song plays, and the re-queued copy only appears here), so
+      // the file is handed to the prefetch slot instead of being thrown away. takePrefetched()
+      // does the rest, existsSync guard included, and the transition logs as a HIT.
+      this.adoptEndedFileForNextPlay(this.songs[0]);
     }
 
     // Clean up previous FFmpeg process and cached audio
     if (this.currentFFmpeg) {
-      this.currentFFmpeg.kill();
+      killChild(this.currentFFmpeg, 'encoder');
       this.currentFFmpeg = null;
     }
     this.cleanupCachedAudio();
@@ -2172,8 +2306,11 @@ export class MusicQueue {
 
     if (this.songs.length > 0) {
       console.log('Playing next song...');
-      // Small delay to ensure cleanup before playing next
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // No settle delay before the next song: the cleanup this used to wait for has been
+      // synchronous since the streaming era ended (kill() + unlinkSync), and @discordjs/voice's
+      // state setter destroys the previous resource's stream itself. On a prefetch hit that
+      // half second was the entire remaining gap between songs, which is the one thing the
+      // prefetch exists to remove.
       await this.play();
     } else {
       // Server-side radio auto-fill: the existing radio flow only runs client-side
@@ -2423,6 +2560,12 @@ export class MusicQueue {
     saveSettings();
     console.log('Loop mode changed to:', globalSettings.loopMode);
     broadcastState();
+    return globalSettings.loopMode;
+  }
+
+  // The loop mode in effect. Read through a method so the loop paths can be exercised without
+  // writing globalSettings, which is a file the live bot shares.
+  currentLoopMode() {
     return globalSettings.loopMode;
   }
 
@@ -2823,11 +2966,4 @@ export async function duckAndPlay(guildId, resourceFactory) {
     return queue.duckAndPlay(resourceFactory);
   }
   return duckAndPlayOnConnection(guildId, resourceFactory);
-}
-
-export function deleteQueue(guildId) {
-  const queue = queues.get(guildId);
-  if (queue) {
-    queue.cleanup();
-  }
 }

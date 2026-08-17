@@ -985,27 +985,6 @@
       text-decoration: underline;
     }
 
-    .cached-badge-container {
-      display: inline;
-    }
-
-    .cached-badge {
-      color: var(--accent);
-      font-size: 20px;
-      margin-left: 8px;
-      display: inline-block;
-    }
-
-    .cached-badge.animate {
-      animation: cachePopIn 0.3s ease-out;
-    }
-
-    @keyframes cachePopIn {
-      0% { transform: scale(0); opacity: 0; }
-      50% { transform: scale(1.3); }
-      100% { transform: scale(1); opacity: 1; }
-    }
-
     .track-requested {
       font-size: 14px;
       color: var(--text-muted);
@@ -3339,9 +3318,6 @@
     let playbackStartTime = null;
     let pausedAt = 0;
     let currentElapsed = 0;
-    
-    // Track if cache badge animation has been shown for current song
-    let cachedAnimationShown = false;
 
     function startProgressTracking() {
       stopProgressTracking();
@@ -3393,7 +3369,6 @@
       pausedAt = 0;
       currentElapsed = 0;
       playbackStartTime = null;
-      cachedAnimationShown = false;
     }
 
     // Search functionality
@@ -4256,6 +4231,20 @@
           if (window.WatchTogether) {
             WatchTogether.syncState(state.position || currentElapsed || 0, state.isPlaying, state.isPaused);
           }
+        } else if (message.type === 'position') {
+          // The once-a-second playback position, without the 25KB of state around it. The
+          // server sends the full state on everything that actually changes (song, queue,
+          // pause/resume, volume, filters), so a tick only has to keep these three fields
+          // fresh - the progress bar itself runs off the client's own interval.
+          state.position = message.data.position;
+          state.isPaused = message.data.isPaused;
+          state.songStartTime = message.data.songStartTime;
+
+          // Watch Together syncs to the server's position, which is what it used the
+          // per-second full state for
+          if (window.WatchTogether) {
+            WatchTogether.syncState(state.position || currentElapsed || 0, state.isPlaying, state.isPaused);
+          }
         } else if (message.type === 'listeners') {
           // Update listeners list
           updateListenersList(message.data);
@@ -4429,15 +4418,6 @@
       // Update volume icon to match current volume
       updateVolumeIcon(state.volume * 100);
 
-      // Update cached badge
-      const cachedBadgeContainer = document.querySelector('.cached-badge-container');
-      if (cachedBadgeContainer) {
-        if (state.isCached && !cachedBadgeContainer.querySelector('.cached-badge')) {
-          cachedBadgeContainer.innerHTML = `<span class="cached-badge animate" title="Cached - Instant seeking enabled">✓</span>`;
-        } else if (!state.isCached) {
-          cachedBadgeContainer.innerHTML = '';
-        }
-      }
     }
 
     // Helper function for play/pause toggle
@@ -4980,6 +4960,11 @@
         if (data.tracks && data.tracks.length > 0 && state.radioEnabled) {
           radioSongs = data.tracks;
           console.log('Fetched', radioSongs.length, 'radio songs');
+          // The state handler queues one as soon as the queue runs dry, but it only sees real
+          // state changes now - it used to be re-run by the per-second broadcast. If the queue
+          // was already empty while this fetch was in flight, nothing else would ask again
+          // until the next song change. (addRadioSong has its own in-flight guard.)
+          if (state.isPlaying && state.queue && state.queue.length === 0) addRadioSong();
         }
       } catch (error) {
         // Don't log abort errors - they're expected when radio is disabled
@@ -5505,7 +5490,6 @@
         console.log('Creating player structure');
         playerStructureCreated = true;
         lastRenderedSongUrl = currentSongUrl;
-        cachedAnimationShown = false;
         playerContent.classList.add('song-transition');
         
         // Create the static player structure with current song data
@@ -5541,7 +5525,7 @@
           </div>
 
           <div class="track-info">
-            <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a><span class="cached-badge-container" id="cachedBadgeContainer">${state.isCached ? '<span class="cached-badge animate" title="Cached - Instant seeking enabled">✓</span>' : ''}</span></div>
+            <div class="track-title"><a href="${escapeHtml(song.url)}" target="_blank" rel="noopener noreferrer" class="track-title-link" id="trackTitleLink" data-base-url="${escapeHtml(song.url)}" title="Open on YouTube at current time">${escapeHtml(song.title)}</a></div>
             <div class="track-requested" id="trackRequested">Requested by ${escapeHtml(song.requestedBy || 'Unknown')}</div>
           </div>
 
@@ -5719,7 +5703,6 @@
           </div>
         `;
 
-        if (state.isCached) cachedAnimationShown = true;
         
         // Setup progress bar drag events after creating structure
         setTimeout(setupProgressBarEvents, 0);
@@ -5732,7 +5715,6 @@
         const song = state.currentSong;
         console.log('Song changed, updating dynamic content only');
         lastRenderedSongUrl = currentSongUrl;
-        cachedAnimationShown = false;
 
         // Trigger song transition animation
         playerContent.classList.remove('song-transition');
@@ -5799,18 +5781,6 @@
 
       // Update elements that need updating regardless of song change
       if (playerStructureCreated) {
-        // Update cached badge
-        const cachedBadgeContainer = document.getElementById('cachedBadgeContainer');
-        if (cachedBadgeContainer) {
-          const shouldAnimateBadge = state.isCached && !cachedAnimationShown;
-          if (state.isCached) {
-            cachedAnimationShown = true;
-            cachedBadgeContainer.innerHTML = `<span class="cached-badge${shouldAnimateBadge ? ' animate' : ''}" title="Cached - Instant seeking enabled">✓</span>`;
-          } else {
-            cachedBadgeContainer.innerHTML = '';
-          }
-        }
-
         // Update album art playing animation
         const albumArt = playerContent.querySelector('.album-art');
         if (albumArt) {

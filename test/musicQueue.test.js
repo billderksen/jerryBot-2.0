@@ -24,6 +24,9 @@ import {
   DOWNLOAD_TIMEOUT_MS,
   getQueue,
   safeTimer,
+  positionTick,
+  setWebPositionCallback,
+  setWebClientCountCallback,
 } from '../src/utils/musicQueue.js';
 
 // A voice connection is, as far as this module's lifecycle code is concerned, an EventEmitter
@@ -1738,4 +1741,153 @@ test('a timer body that throws is logged, not left to end the process', () => {
     logged.restore();
   }
   assert.ok(logged.find(/a test timer failed: disk full/), logged.dump());
+});
+
+// --- loop mode replays the file it already has --------------------------------
+
+// buildTransitionQueue() replaces playNext() wholesale, which is exactly the method under test
+// here - so the real one is put back. Everything it reaches that would leave the process is
+// still stubbed: the download, the ffmpeg spawn, the listening-stat write, and the radio's live
+// yt-dlp lookup on an empty queue.
+function buildLoopQueue(guildId) {
+  const queue = buildTransitionQueue(guildId);
+  delete queue.playNext;
+  queue.tryRadioFill = async () => false;
+  return queue;
+}
+
+test('loop song: the repeat plays the file already on disk, downloading nothing', async () => {
+  // playNext() re-queued the finished song and then, three lines later, deleted the very file
+  // that song had just been played from - so every repeat paid a full play-priority download:
+  // seconds of silence between repeats plus one more media fetch at YouTube, on the loop most
+  // likely to be left running for an hour.
+  const queue = buildLoopQueue('loop-reuse');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('on repeat', URL_A)];
+
+  await startFirstSong(queue, calls);
+  assert.equal(calls.length, 1);
+  const filePath = queue.cachedAudioPath;
+  assert.ok(existsSync(filePath));
+
+  queue.currentLoopMode = () => 'song';
+  await queue.playNext();
+
+  assert.equal(calls.length, 1, 'the repeat downloaded nothing at all');
+  assert.equal(queue.played.length, 2, 'and it did start playing again');
+  assert.equal(queue.played[1].path, filePath, 'from the same file');
+  assert.equal(queue.cachedAudioPath, filePath, 'which is still the seek cache');
+  assert.ok(existsSync(filePath), 'the file was handed over, not deleted');
+  assert.equal(queue.prefetchHits, 1, 'and it counts as a hit, so the log tells the truth');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('loop-reuse'), [], 'and the last repeat took its file with it');
+});
+
+test('loop song: a skip is not a repeat, so the file goes as it always did', async () => {
+  const queue = buildLoopQueue('loop-skip');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('on repeat', URL_A)];
+
+  await startFirstSong(queue, calls);
+  const filePath = queue.cachedAudioPath;
+
+  queue.currentLoopMode = () => 'song';
+  queue.skipRequested = true; // what stopForUserAction sets
+  await queue.playNext();
+
+  assert.equal(existsSync(filePath), false, 'the skipped song\'s file was cleaned up');
+  assert.equal(queue.prefetch, null, 'and nothing was adopted for a repeat that is not happening');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('loop-skip'), []);
+});
+
+test('loop queue: a queue with another song next keeps its own prefetch', async () => {
+  const queue = buildLoopQueue('loop-queue-untouched');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('first', URL_A), aSong('second', URL_B)];
+
+  await startFirstSong(queue, calls);
+  calls[1].finish();
+  await tick();
+  const prefetchedForB = calls[1].cachePath;
+  const fileForA = queue.cachedAudioPath;
+
+  queue.currentLoopMode = () => 'queue';
+  await queue.playNext();
+
+  // The finished song went to the back, so the next song is still B and its prefetch stands
+  assert.equal(queue.played[1].path, prefetchedForB, 'B played from its own prefetch');
+  assert.equal(existsSync(fileForA), false, "A's file was cleaned up as usual");
+  assert.deepEqual(queue.songs.map(s => s.url), [URL_A], 'and A is queued behind it, to be fetched then');
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('loop-queue-untouched'), []);
+});
+
+// --- the broadcast diet -------------------------------------------------------
+
+test('broadcast gating: with nobody watching, no per-second update is built or sent', async () => {
+  const queue = buildTransitionQueue('broadcast-gated');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('playing to an empty room', URL_A)];
+
+  const positions = [];
+  const states = [];
+  setWebUpdateCallback(state => states.push(state));
+  setWebPositionCallback(tick => positions.push(tick));
+  setWebClientCountCallback(() => 0);
+  try {
+    await startFirstSong(queue, calls);
+    const statesAfterStart = states.length;
+    assert.ok(statesAfterStart > 0, 'a song starting is a real change, so it still broadcasts');
+
+    // Drive the position tick the way the interval does
+    queue.player = { state: { status: AudioPlayerStatus.Playing }, stop: () => {} };
+    queue.songStartTime = Date.now() - 1000;
+    positionTick(queue);
+
+    assert.deepEqual(positions, [], 'nothing was sent to nobody');
+    assert.equal(states.length, statesAfterStart, 'and no full state either');
+  } finally {
+    setWebUpdateCallback(null);
+    setWebPositionCallback(null);
+    setWebClientCountCallback(null);
+    queue.cleanup();
+  }
+});
+
+test('broadcast gating: with a dashboard open, the tick is the position, not the whole state', async () => {
+  const queue = buildTransitionQueue('broadcast-position');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('watched', URL_A)];
+
+  const positions = [];
+  const states = [];
+  setWebUpdateCallback(state => states.push(state));
+  setWebPositionCallback(t => positions.push(t));
+  setWebClientCountCallback(() => 2);
+  try {
+    await startFirstSong(queue, calls);
+    const statesAfterStart = states.length;
+
+    queue.player = { state: { status: AudioPlayerStatus.Playing }, stop: () => {} };
+    queue.songStartTime = Date.now() - 2000;
+    positionTick(queue);
+
+    assert.equal(positions.length, 1, 'one small message per tick');
+    assert.equal(states.length, statesAfterStart, 'and no 25KB state object with it');
+    assert.deepEqual(Object.keys(positions[0]).sort(), ['isPaused', 'position', 'songStartTime']);
+    assert.ok(Math.abs(positions[0].position - 2) < 0.3, `position was ${positions[0].position}s`);
+    assert.equal(positions[0].isPaused, false);
+  } finally {
+    setWebUpdateCallback(null);
+    setWebPositionCallback(null);
+    setWebClientCountCallback(null);
+    queue.cleanup();
+  }
 });
