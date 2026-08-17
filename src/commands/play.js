@@ -43,13 +43,20 @@ async function searchYouTube(query) {
 // resolved" is not "it is playing" - an age-gated, region-locked or rate-limited song used to
 // be announced as now playing and then never make a sound.
 function describeStart(outcome, song) {
-  const tag = song.source === 'spotify' ? ' 🎧' : '';
-  if (outcome?.started) return `🎵 Now playing: **${song.title}**${tag}`;
+  // Name the song play() actually acted on rather than the one this command asked for. They are
+  // the same whenever this path is reached today - it only runs on an idle queue - but naming
+  // the requested song for an outcome that belonged to another one is the same class of lie as
+  // the rest of it, and cheaper to retire than to keep reasoning about.
+  const acted = (outcome?.started || outcome?.reason === 'failed') ? (outcome.song ?? song) : song;
+  const tag = acted.source === 'spotify' ? ' 🎧' : '';
+
+  if (outcome?.started) return `🎵 Now playing: **${acted.title}**${tag}`;
   if (outcome?.reason === 'failed') {
-    return `❌ Couldn't play **${song.title}**${tag} — ${outcome.detail}. Skipped it.`;
+    return `❌ Couldn't play **${acted.title}**${tag} — ${outcome.detail}. Skipped it.`;
   }
-  // Something else took the queue over while this was starting (a skip, a stop, another song)
-  return `➕ Added to queue: **${song.title}**${tag}`;
+  // Something else took the queue over while this was starting (a skip, a stop, another song),
+  // so the song this command added is in the queue rather than playing
+  return `➕ Added to queue: **${acted.title}**${tag}`;
 }
 
 export default {

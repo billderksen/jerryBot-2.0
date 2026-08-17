@@ -61,7 +61,7 @@ export const ytCookieOpts = process.env.YOUTUBE_COOKIES_BROWSER
 import ffmpegStatic from 'ffmpeg-static';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
-import { unlinkSync, existsSync, readdirSync, statSync } from 'fs';
+import { unlinkSync, existsSync, readdirSync, statSync, utimesSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { loadJsonSync, saveJsonSync } from './jsonStore.js';
 import { isAllowedMediaUrl } from './urlValidation.js';
@@ -1974,6 +1974,16 @@ export class MusicQueue {
     if (this.prefetch) return false;
 
     const path = this.cachedAudioPath;
+    // A file the loop keeps replaying is never rewritten, so its mtime stays at the download -
+    // and after an hour of repeats it looks exactly like a crash orphan to the startup sweep
+    // (which any second instance of this module, `npm test` included, runs). Touching it on
+    // every adoption keeps the age the sweep reads honest: this file is still in use.
+    try {
+      const now = new Date();
+      utimesSync(path, now, now);
+    } catch (err) {
+      console.error('[MusicQueue] Could not touch the reused cache file:', err.message);
+    }
     this.prefetch = {
       url: nextSong.url,
       title: nextSong.title,

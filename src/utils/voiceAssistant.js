@@ -1324,6 +1324,15 @@ async function dispatch(state, { userId, displayName, intent, spokenReplies }) {
       if (result && result.success === false) {
         return { reply: 'Sorry, dat lukte niet', summary: `play "${song.title}" — ${result.error}`, failed: true };
       }
+      // Asking for a song while one is playing queues it - the handler says which of the two
+      // happened, and saying "ik speel X" for a song sitting behind three others is the same
+      // lie as announcing a song that never started, just spoken out loud
+      if (result?.message !== 'Now playing') {
+        return {
+          reply: `Oké, ${song.title} staat in de wachtrij`,
+          summary: `wachtrij: **${song.title}**`,
+        };
+      }
       return { reply: `Oké, ik speel ${song.title}`, summary: `speelt **${song.title}**` };
     }
 

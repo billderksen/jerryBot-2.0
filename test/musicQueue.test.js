@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'events';
-import { existsSync, readdirSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, writeFileSync, statSync, utimesSync } from 'fs';
 import { tmpdir } from 'os';
 import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice';
 import {
@@ -1890,4 +1890,29 @@ test('broadcast gating: with a dashboard open, the tick is the position, not the
     setWebClientCountCallback(null);
     queue.cleanup();
   }
+});
+
+test('loop song: the reused file is touched, so the /tmp sweep reads it as in use', async () => {
+  // Nothing rewrites a file the loop keeps replaying, so its mtime stays at the download - and
+  // after an hour of repeats it is indistinguishable from a crash orphan to the startup sweep,
+  // which any second instance of this module runs (npm test included).
+  const queue = buildLoopQueue('loop-touch');
+  const calls = stubFetches(queue);
+  queue.songs = [aSong('on repeat', URL_A)];
+
+  await startFirstSong(queue, calls);
+  const filePath = queue.cachedAudioPath;
+  const longAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  utimesSync(filePath, longAgo, longAgo);
+
+  queue.currentLoopMode = () => 'song';
+  await queue.playNext();
+
+  assert.equal(queue.cachedAudioPath, filePath, 'the same file is playing again');
+  const age = Date.now() - statSync(filePath).mtimeMs;
+  assert.ok(age < 60_000, `mtime is ${Math.round(age / 1000)}s old, so the sweep would take it`);
+
+  queue.cleanup();
+  await tick();
+  assert.deepEqual(cacheFilesFor('loop-touch'), []);
 });
