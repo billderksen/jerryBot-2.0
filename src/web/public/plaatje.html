@@ -532,9 +532,13 @@
       const winnaar = room.players.find((p) => p.id === room.winnerId);
       const bestaande = document.querySelector('.win-overlay');
       if (bestaande || !winnaar) return;
+      const reveal = room.lastReveal;
+      const laatstePlaat = reveal
+        ? `<div class="hit-uitleg">Laatste plaat: <b>${reveal.year}</b> — ${escapeHtml(reveal.title)} · ${escapeHtml(reveal.artist)}</div>` : '';
       const el = document.createElement('div');
       el.className = 'win-overlay';
       el.innerHTML = `<div class="wordmark">${escapeHtml(winnaar.displayName)} WINT! 🏆</div>
+        ${laatstePlaat}
         <div class="hit-uitleg">${room.players.map((p) => `${escapeHtml(p.displayName)}: ${p.timeline.length} kaarten`).join(' · ')}</div>
         <button class="knop gok-btn" id="btnTerug">Terug naar de lobby</button>`;
       document.body.appendChild(el);
@@ -542,9 +546,14 @@
     }
 
     // ── audio ──────────────────────────────────────────────────────────────────
-    function startRoundAudio(nonce) {
+    // audioFallbackNonce: als Jerry niet in VC kon spelen, stuurt de server een
+    // fallback-broadcast voor dat rondenonce zodat de browser alsnog afspeelt —
+    // zonder dat elk publiek round ook een browser-<audio>-poging triggert.
+    let audioFallbackNonce = null;
+    function startRoundAudio(nonce, fallback) {
       window._hitsterArmed = null;
-      if (!currentRoom || currentRoom.settings.audioMode === 'vc') return;
+      if (fallback) audioFallbackNonce = nonce;
+      if (!currentRoom || (currentRoom.settings.audioMode === 'vc' && audioFallbackNonce !== nonce)) return;
       const audio = $('roundAudio');
       audio.src = `/api/plaatje/audio/${encodeURIComponent(currentRoom.roomId)}?n=${nonce}`;
       audio.play().catch(() => {
@@ -670,9 +679,17 @@
 
       // replay-knop overleeft een re-render die #spotStatus herschrijft (bv. HITSTER-arm)
       const audio = $('roundAudio');
-      if (audio.getAttribute('src') && ['listening', 'challenge'].includes(room.phase) && currentRoom?.settings.audioMode !== 'vc') {
+      if (audio.getAttribute('src') && ['listening', 'challenge'].includes(room.phase)
+        && (currentRoom?.settings.audioMode !== 'vc' || audioFallbackNonce === currentRoom?.round?.nonce)) {
         voegReplayToe();
       }
+    }
+
+    async function laadPools() {
+      const pools = await fetch('/api/plaatje/pools').then((r) => r.json());
+      $('poolChecks').innerHTML = pools.pools.map((p) => `
+        <label><input type="checkbox" value="${escapeHtml(p.id)}" ${p.id === 'base' ? 'checked' : ''}>
+          ${escapeHtml(p.name)} (${p.count})</label>`).join('');
     }
 
     async function init() {
@@ -684,10 +701,7 @@
         $('userAvatar').textContent = (me.displayName || me.username || '?').charAt(0).toUpperCase();
       }
       JB.initNav('plaatje');
-      const pools = await fetch('/api/plaatje/pools').then((r) => r.json());
-      $('poolChecks').innerHTML = pools.pools.map((p) => `
-        <label><input type="checkbox" value="${escapeHtml(p.id)}" ${p.id === 'base' ? 'checked' : ''}>
-          ${escapeHtml(p.name)} (${p.count})</label>`).join('');
+      await laadPools();
 
       ws = JB.connectSocket({
         onOpen() {
@@ -704,7 +718,7 @@
               renderState(data.room);
               break;
             case 'plaatje:state': renderState(data.room); break;
-            case 'plaatje:round:audio': startRoundAudio(data.nonce); break;
+            case 'plaatje:round:audio': startRoundAudio(data.nonce, data.fallback); break;
             case 'plaatje:turn:hover': toonHover(data.slot); break;
             case 'plaatje:reveal': stopRoundAudio(); break; // state volgt apart
             case 'plaatje:game:over': renderState(data.room); break;
@@ -748,7 +762,7 @@
         const data = await res.json();
         if (!res.ok) return JB.toast(data.error, 'error');
         JB.toast(`Pool opgeslagen (${data.count} songs)`, 'success');
-        init(); // pools herladen
+        laadPools(); // pools herladen — geen nieuwe init() (die opent een tweede WebSocket)
       };
     }
     init();

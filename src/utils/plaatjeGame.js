@@ -164,6 +164,7 @@ export class PlaatjeRoom {
 
   paySwap(userId) {
     if (this.phase !== 'listening' || userId !== this.activeUserId) return { ok: false };
+    if (this.round?.challenges.length) return { ok: false, reason: 'Er is al HITSTER geroepen — wisselen kan niet meer' };
     const p = this.players.get(userId);
     if (p.tokens < 1) return { ok: false, reason: 'Geen fiches meer' };
     p.tokens -= 1;

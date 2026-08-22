@@ -4,7 +4,7 @@
 import { spawn, execSync } from 'child_process';
 import { existsSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { tmpdir } from 'os';
-import { join, dirname, basename } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import ffmpegStatic from 'ffmpeg-static';
 import {
@@ -141,9 +141,9 @@ export function removeClip(mp3Path) {
 // bezit: muziek (queue.connection) en /record gaan altijd voor. Een verbinding
 // die wij zelf openden, ruimen wij ook zelf op — een bestaande (assistent-)
 // verbinding hergebruiken we alleen om op af te spelen.
-const vcSessions = new Map(); // guildId -> { player, createdConnection: boolean }
+const vcSessions = new Map(); // guildId -> { player, createdConnection: boolean, roomId: string }
 
-export async function startVcClip({ client, guildId, userId, mp3Path }) {
+export async function startVcClip({ client, guildId, userId, mp3Path, roomId }) {
   if (getQueue(guildId)?.connection) return { ok: false, reason: 'De muziekspeler gebruikt het voicekanaal' };
   if (isRecording(guildId)) return { ok: false, reason: 'Er loopt een opname' };
   const guild = await client.guilds.fetch(guildId);
@@ -183,19 +183,24 @@ export async function startVcClip({ client, guildId, userId, mp3Path }) {
     session.createdConnection = true;
   }
 
+  session.roomId = roomId;
+
   // Always subscribe (idempotent)
   connection.subscribe(session.player);
   session.player.play(createAudioResource(mp3Path));
   return { ok: true };
 }
 
-export function stopVcClip(guildId) {
-  vcSessions.get(guildId)?.player.stop(true);
+export function stopVcClip(guildId, roomId) {
+  const session = vcSessions.get(guildId);
+  if (session && roomId !== undefined && session.roomId !== roomId) return;
+  session?.player.stop(true);
 }
 
-export function teardownVc(guildId) {
+export function teardownVc(guildId, roomId) {
   const session = vcSessions.get(guildId);
   if (!session) return;
+  if (roomId !== undefined && session.roomId !== roomId) return;
   session.player.stop(true);
   if (session.createdConnection && !getQueue(guildId)?.connection && !isRecording(guildId)) {
     getVoiceConnection(guildId)?.destroy();

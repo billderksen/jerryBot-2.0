@@ -161,6 +161,17 @@ test('room: swap kost 1 fiche en kan alleen met saldo', () => {
   deletePlaatjeRoom('r1');
 });
 
+test('room: swap kan niet meer nadat HITSTER is geroepen', () => {
+  const room = maakKamer();
+  room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'eeeeeeeeeee' }, 0);
+  room.challenge('u2', 0, 1000);
+  const tokensVoor = room.players.get('u1').tokens;
+  const r = room.paySwap('u1');
+  assert.equal(r.ok, false);
+  assert.equal(room.players.get('u1').tokens, tokensVoor);
+  deletePlaatjeRoom('r1');
+});
+
 test('guard: resolveReveal() before beginRound returns null, no throw', () => {
   const room = createPlaatjeRoom('r3', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 10 });
   room.addPlayer({ id: 'u2', displayName: 'Koen', avatar: null });

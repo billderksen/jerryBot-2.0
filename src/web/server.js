@@ -203,7 +203,6 @@ const clients = new Set();
 // Store pictionary room clients (roomId -> Set of ws)
 const pictionaryClients = new Map();
 
-
 // Store pesten room clients (roomId -> Set of ws)
 const pestenClients = new Map();
 
@@ -515,7 +514,6 @@ app.get('/api/pictionary/leaderboard', (req, res) => {
 app.get('/api/pictionary/rooms', (req, res) => {
   res.json(getRoomList());
 });
-
 
 // Serve Pesten game page
 app.get('/pesten', requireAuth, (req, res) => {
@@ -2739,9 +2737,22 @@ function destroyPlaatjeRoom(roomId) {
   removeClip(plaatjeRoundFiles.get(roomId));
   plaatjeRoundFiles.delete(roomId);
   const room = getPlaatjeRoom(roomId);
-  if (room?.settings.audioMode === 'vc') teardownVc(process.env.GUILD_ID);
+  if (room?.settings.audioMode === 'vc') teardownVc(process.env.GUILD_ID, roomId);
   deletePlaatjeRoom(roomId);
   broadcastPlaatjeRoomList();
+}
+
+// Zet de 5-min opruimtimer voor een kamer die net leeg is geraakt (emptySince gezet).
+// Gedeeld door de socket-close pad (cleanupPlaatjeClient) en het expliciete
+// plaatje:room:leave pad, zodat een kamer die via de leave-knop leegloopt net zo goed
+// wordt opgeruimd als een kamer die dichtklapt door een verbroken verbinding.
+function armPlaatjeEmptyTimer(roomId) {
+  const room = getPlaatjeRoom(roomId);
+  if (!room || room.emptySince == null) return;
+  setTimeout(() => {
+    const r = getPlaatjeRoom(roomId);
+    if (r && shouldDeleteRoom({ emptySinceMs: r.emptySince, nowMs: Date.now() })) destroyPlaatjeRoom(roomId);
+  }, 5 * 60_000 + 1_000);
 }
 
 // Verlaat de kamer die ws momenteel vastheeft (indien aanwezig). Gedeeld door
@@ -2755,7 +2766,11 @@ function leavePlaatjeRoom(ws) {
   removePlaatjeClientFromRoom(ws, roomId);
   room.removePlayer(ws.user.id);
   if (room.phase === 'lobby' && !room.players.size) destroyPlaatjeRoom(roomId);
-  else { broadcastPlaatjeState(roomId); broadcastPlaatjeRoomList(); }
+  else {
+    broadcastPlaatjeState(roomId);
+    broadcastPlaatjeRoomList();
+    armPlaatjeEmptyTimer(roomId);
+  }
 }
 
 // De rondemotor: fase loading → (download) → listening → [place] → challenge(7s)
@@ -2792,15 +2807,27 @@ async function runPlaatjeRoundLoad(roomId) {
       plaatjeRoundFiles.set(roomId, mp3Path);
       room.loadFailStreak = 0;
       room.beginRound(song, offsetSec);
+      const roundNonce = room.round.nonce;
       broadcastPlaatjeState(roomId);
-      broadcastToPlaatjeRoom(roomId, 'plaatje:round:audio', { nonce: room.round.nonce });
+      broadcastToPlaatjeRoom(roomId, 'plaatje:round:audio', { nonce: roundNonce });
       if (room.settings.audioMode === 'vc') {
-        const r = await startVcClip({
-          client: discordClientRef, guildId: process.env.GUILD_ID,
-          userId: room.hostId, mp3Path,
-        });
-        if (!r.ok) {
-          broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: `Jerry kan niet in VC spelen (${r.reason}) — luister via de browser.` });
+        // Eigen try/catch: een exception hier (i.p.v. { ok: false }) mag de song niet
+        // verbranden en niet de downloadretry hierboven triggeren — het is geen downloadfout.
+        // roundNonce is vóór de await vastgelegd, zodat een ronde die intussen door een
+        // andere actie (bv. host-skip) is opgeruimd geen tweede crash geeft op room.round.
+        try {
+          const r = await startVcClip({
+            client: discordClientRef, guildId: process.env.GUILD_ID,
+            userId: room.hostId, mp3Path, roomId,
+          });
+          if (!r.ok) {
+            broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: `Jerry kan niet in VC spelen (${r.reason}) — luister via de browser.` });
+            broadcastToPlaatjeRoom(roomId, 'plaatje:round:audio', { nonce: roundNonce, fallback: true });
+          }
+        } catch (vcErr) {
+          console.error(`[Plaatje] VC-afspelen mislukt (${roomId}):`, vcErr.message);
+          broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: 'Jerry kan niet in VC spelen — luister via de browser.' });
+          broadcastToPlaatjeRoom(roomId, 'plaatje:round:audio', { nonce: roundNonce, fallback: true });
         }
       }
       return;
@@ -2836,7 +2863,7 @@ function schedulePlaatjeReveal(roomId) {
 function doPlaatjeReveal(roomId) {
   const room = getPlaatjeRoom(roomId);
   if (!room) return;
-  stopVcClip(process.env.GUILD_ID);
+  stopVcClip(process.env.GUILD_ID, roomId);
   removeClip(plaatjeRoundFiles.get(roomId));
   plaatjeRoundFiles.delete(roomId);
   const reveal = room.resolveReveal();
@@ -2965,7 +2992,7 @@ function handlePlaatjeMessage(ws, data) {
       if (!room) break;
       const r = room.paySwap(user.id);
       if (!r.ok) return fail(r.reason ?? 'Wisselen kan nu niet');
-      stopVcClip(process.env.GUILD_ID);
+      stopVcClip(process.env.GUILD_ID, room.roomId);
       room.phase = 'loading';
       broadcastPlaatjeState(room.roomId);
       startPlaatjeRound(room.roomId);
@@ -2990,7 +3017,7 @@ function handlePlaatjeMessage(ws, data) {
         return fail('De actieve speler is (nog) niet 60s weg');
       }
       clearPlaatjeTimer(room.roomId);
-      stopVcClip(process.env.GUILD_ID);
+      stopVcClip(process.env.GUILD_ID, room.roomId);
       removeClip(plaatjeRoundFiles.get(room.roomId));
       plaatjeRoundFiles.delete(room.roomId);
       room.round = null;
@@ -3018,12 +3045,7 @@ function cleanupPlaatjeClient(ws) {
   if (stillThere) return;
   room.markDisconnected(ws.user?.id, Date.now());
   broadcastPlaatjeState(roomId);
-  if (room.emptySince != null) {
-    setTimeout(() => {
-      const r = getPlaatjeRoom(roomId);
-      if (r && shouldDeleteRoom({ emptySinceMs: r.emptySince, nowMs: Date.now() })) destroyPlaatjeRoom(roomId);
-    }, 5 * 60_000 + 1_000);
-  }
+  armPlaatjeEmptyTimer(roomId);
 }
 
 // Start server
