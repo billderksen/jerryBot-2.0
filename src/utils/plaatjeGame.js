@@ -135,6 +135,7 @@ export class PlaatjeRoom {
   }
 
   beginRound(song, offsetSec) {
+    if (this.phase !== 'loading') return { ok: false };
     this.usedSongIds.add(song.youtubeId);
     this.round = {
       song, offsetSec, nonce: (this.round?.nonce ?? 0) + 1,
@@ -142,6 +143,7 @@ export class PlaatjeRoom {
     };
     this.lastReveal = null;
     this.phase = 'listening';
+    return { ok: true };
   }
 
   place(userId, slot) {
@@ -183,6 +185,7 @@ export class PlaatjeRoom {
   }
 
   resolveReveal() {
+    if (!this.round || !['listening', 'challenge'].includes(this.phase)) return null;
     const active = this.players.get(this.activeUserId);
     const { song } = this.round;
     const timelineYears = active.timeline.map((c) => c.year);
@@ -212,7 +215,7 @@ export class PlaatjeRoom {
   }
 
   nextTurn() {
-    if (this.phase === 'finished') return;
+    if (this.phase === 'finished' || this.round != null) return;
     this.activeIdx = (this.activeIdx + 1) % this.players.size;
     this.phase = 'loading';
   }

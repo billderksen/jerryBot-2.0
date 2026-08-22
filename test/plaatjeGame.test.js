@@ -160,3 +160,48 @@ test('room: swap kost 1 fiche en kan alleen met saldo', () => {
   assert.equal(room.paySwap('u1').ok, false); // saldo 0
   deletePlaatjeRoom('r1');
 });
+
+test('guard: resolveReveal() before beginRound returns null, no throw', () => {
+  const room = createPlaatjeRoom('r3', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 10 });
+  room.addPlayer({ id: 'u2', displayName: 'Koen', avatar: null });
+  room.start(() => ({ title: 't', artist: 'x', year: 1900, youtubeId: '00000000000' }));
+  const result = room.resolveReveal();
+  assert.equal(result, null); // graceful null, no throw
+  deletePlaatjeRoom('r3');
+});
+
+test('guard: resolveReveal() twice — second returns null, state unchanged', () => {
+  const room = maakKamer();
+  room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'eeeeeeeeeee' }, 0);
+  room.place('u1', 1);
+  const reveal1 = room.resolveReveal();
+  assert.ok(reveal1); // first succeeds
+  const reveal2 = room.resolveReveal();
+  assert.equal(reveal2, null); // second is null
+  assert.equal(room.lastReveal, reveal1); // state unchanged
+  deletePlaatjeRoom('r1');
+});
+
+test('guard: nextTurn() during active round does NOT rotate', () => {
+  const room = maakKamer();
+  const before = room.publicState().activeUserId;
+  room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'eeeeeeeeeee' }, 0);
+  room.nextTurn(); // attempt mid-listening
+  assert.equal(room.publicState().activeUserId, before); // unchanged
+  room.place('u1', 1);
+  room.nextTurn(); // attempt mid-challenge
+  assert.equal(room.publicState().activeUserId, before); // still unchanged
+  deletePlaatjeRoom('r1');
+});
+
+test('guard: beginRound() on finished room returns { ok: false }, state intact', () => {
+  const room = maakKamer();
+  room.winnerId = 'u1'; // manually set (simulating end condition)
+  room.phase = 'finished';
+  const result = room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'eeeeeeeeeee' }, 0);
+  assert.equal(result.ok, false); // guard rejects
+  assert.equal(room.phase, 'finished'); // unchanged
+  assert.equal(room.winnerId, 'u1'); // unchanged
+  assert.equal(room.round, null); // no round created
+  deletePlaatjeRoom('r1');
+});
