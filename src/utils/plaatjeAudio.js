@@ -2,13 +2,13 @@
 // De clip is de enige audio die de server ooit uitserveert: begrensd (75s),
 // zonder metadata, onder een anonieme URL — de geheimhoudings-invariant hangt hierop.
 import { spawn, execSync } from 'child_process';
-import { existsSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { tmpdir } from 'os';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import ffmpegStatic from 'ffmpeg-static';
 import {
-  joinVoiceChannel, getVoiceConnection, createAudioPlayer, createAudioResource,
+  joinVoiceChannel, getVoiceConnection, createAudioPlayer, createAudioResource, VoiceConnectionStatus,
 } from '@discordjs/voice';
 import { ytDlpExec, ytCookieOpts, runGatedDownload, DOWNLOAD_PRIORITY, getQueue } from './musicQueue.js';
 import { isRecording } from './voiceRecorder.js';
@@ -27,6 +27,27 @@ if (!ffmpegPath || process.platform === 'linux') {
     if (systemFfmpeg) ffmpegPath = systemFfmpeg;
   } catch { /* ffmpeg-static blijft de fallback */ }
 }
+
+// Cleanup für stale plaatje_* files in /tmp
+export function isStalePlaatjeFile(name, mtimeMs, nowMs) {
+  return name.startsWith('plaatje_') && nowMs - mtimeMs > 60 * 60_000;
+}
+
+export function sweepStalePlaatjeFiles() {
+  try {
+    const tmpDir = tmpdir();
+    const now = Date.now();
+    for (const name of readdirSync(tmpDir)) {
+      try {
+        if (isStalePlaatjeFile(name, statSync(join(tmpDir, name)).mtimeMs, now)) {
+          unlinkSync(join(tmpDir, name));
+        }
+      } catch { /* file already gone or permission issue */ }
+    }
+  } catch { /* tmpdir doesn't exist or permission issue */ }
+}
+
+sweepStalePlaatjeFiles();
 
 export function listPools() {
   const base = loadJsonSync(SONGS_FILE, { songs: [] }).songs;
@@ -65,7 +86,7 @@ export function pickSong(poolIds, usedIds) {
 
 export function buildClipArgs(inputPath, outputPath, offsetSec) {
   return ['-y', '-ss', String(offsetSec), '-t', '75', '-i', inputPath,
-    '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', outputPath];
+    '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-map_metadata', '-1', '-f', 'mp3', outputPath];
 }
 
 function runFfmpeg(args) {
@@ -98,10 +119,16 @@ export async function prepareRoundClip(song, roomId) {
       }, { timeout: 60_000 });
       if (!existsSync(rawPath)) throw new Error('download produced no file');
     }, { priority: DOWNLOAD_PRIORITY.CACHE, label: `plaatje:${roomId}` });
-    await runFfmpeg(buildClipArgs(rawPath, mp3Path, offsetSec));
+    try {
+      await runFfmpeg(buildClipArgs(rawPath, mp3Path, offsetSec));
+    } catch (err) {
+      try { unlinkSync(mp3Path); } catch { /* partial file already gone */ }
+      throw err;
+    }
     return { mp3Path, offsetSec };
   } finally {
     try { unlinkSync(rawPath); } catch { /* al weg */ }
+    try { unlinkSync(rawPath + '.part'); } catch { /* al weg */ }
   }
 }
 
@@ -124,22 +151,40 @@ export async function startVcClip({ client, guildId, userId, mp3Path }) {
   const channel = member?.voice?.channel;
   if (!channel) return { ok: false, reason: 'De host zit niet in een voicekanaal' };
 
+  // Re-check ownership after awaited fetches
+  if (getQueue(guildId)?.connection) return { ok: false, reason: 'De muziekspeler gebruikt het voicekanaal' };
+  if (isRecording(guildId)) return { ok: false, reason: 'Er loopt een opname' };
+
   let session = vcSessions.get(guildId);
+  let connection = getVoiceConnection(guildId);
+
+  // Always validate connection — reuse existing only if alive
+  if (connection && connection.state.status === VoiceConnectionStatus.Destroyed) {
+    connection = null;
+  }
+
   if (!session) {
-    let connection = getVoiceConnection(guildId);
-    let createdConnection = false;
     if (!connection) {
       connection = joinVoiceChannel({
         channelId: channel.id, guildId, adapterCreator: guild.voiceAdapterCreator,
         selfDeaf: true, selfMute: false,
       });
-      createdConnection = true;
+      session = { player: createAudioPlayer(), createdConnection: true };
+    } else {
+      session = { player: createAudioPlayer(), createdConnection: false };
     }
-    const player = createAudioPlayer();
-    connection.subscribe(player);
-    session = { player, createdConnection };
     vcSessions.set(guildId, session);
+  } else if (!connection) {
+    // Session exists but connection died; rejoin
+    connection = joinVoiceChannel({
+      channelId: channel.id, guildId, adapterCreator: guild.voiceAdapterCreator,
+      selfDeaf: true, selfMute: false,
+    });
+    session.createdConnection = true;
   }
+
+  // Always subscribe (idempotent)
+  connection.subscribe(session.player);
   session.player.play(createAudioResource(mp3Path));
   return { ok: true };
 }
