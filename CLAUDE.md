@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JerryBot 2.0 is a Discord bot with web dashboard featuring music playback, multiplayer games (Pesten, Hitster, Pictionary), and AI chat integration. Built with Discord.js v14, Express.js, and WebSocket for real-time updates.
+JerryBot 2.0 is a Discord bot with web dashboard featuring music playback, multiplayer games (Pesten, Plaatje, Pictionary), and AI chat integration. Built with Discord.js v14, Express.js, and WebSocket for real-time updates.
 
 ## Commands
 
@@ -39,7 +39,9 @@ setAddSongHandler(fn)           // Web dashboard adds songs to queue
 - `src/utils/voiceRecorder.js` - Streams a target user's voice channel audio to disk (`.wav`), 30-minute hard cap
 - `src/utils/pictionaryGame.js` - Drawing game with room management
 - `src/utils/pestenGame.js` - Dutch card game with bot AI players
-- `src/utils/hitsterGame.js` - Music timeline guessing game
+- `src/utils/plaatjeGame.js` - PLAATJE room state machine, round rules, and leaderboard persistence (see [Plaatje](#plaatje-music-timeline-game))
+- `src/utils/plaatjeAudio.js` - PLAATJE song pool, gated clip download, and Jerry-in-VC playback
+- `src/utils/plaatjeText.js` - PLAATJE fuzzy guess matching and playlist-import title parsing (pure, no IO)
 - `src/utils/activityLogger.js` - Logs user actions to Discord channel
 - `src/utils/openrouter.js` - AI API wrapper for OpenRouter; model/prompt/token settings persisted in `data/aiSettings.json`, editable via the admin panel
 - `src/utils/levelSystem.js` - XP/level system rewarding message and voice activity
@@ -112,7 +114,7 @@ Piper TTS deliberately has **no** env overrides: `scripts/setup-voice.sh` instal
 
 - `/` - Music player with queue and controls
 - `/stats` - Listening statistics
-- `/pesten`, `/hitster`, `/pictionary` - Multiplayer games
+- `/pesten`, `/plaatje`, `/pictionary` - Multiplayer games
 - `/trivia` - Trivia leaderboard
 - `/f1` - F1 Predictions fantasy league (race calendar, predictions, leaderboard)
 - `/birthdays` - Birthday calendar (month grid view of all registered birthdays)
@@ -233,6 +235,20 @@ Commands:
 Reminders persist across restarts via `data/reminders.json`. Each reminder gets a unique ID and its own `setTimeout`. If the time has already passed today (and no date was specified), it schedules for tomorrow. If a specific date in the past is given, it rolls to next year. Delays beyond Node's ~24.8-day `setTimeout` limit (2^31-1 ms) are chained rather than overflowing, so reminders far in the future fire correctly. Failed deliveries are retried.
 
 Implementation: `src/utils/reminderTracker.js` (core + scheduling), `src/commands/reminder.js`
+
+## Plaatje (muziek-tijdlijnspel)
+
+Web-based multiplayer music-timeline game at `/plaatje`, following the rules of the official Hitster party game: a mystery song plays, the active player places it on their personal timeline by release year, then everyone else may spend a token to challenge ("HITSTER!") with their own guess at the correct slot before the reveal — a correct challenge steals the card.
+
+**Secrecy invariant**: the server never reveals a mystery song's identity before the reveal. The round clip is served from `GET /api/plaatje/audio/:roomId` as a bare, 75s-capped mp3 stream with no title/artist in the URL, headers, or body — access is gated to that room's players/spectators via the session, and the endpoint 404s outside the `listening`/`challenge` phases.
+
+**Hybrid audio**: each room picks `audioMode` at creation — `browser` streams the clip to every client's own `<audio>` element (default), or `vc` has Jerry join the game's voice channel and play the clip there so nobody needs headphones open in a tab; `plaatjeAudio.js` owns both paths and refuses `vc` if the connection is held by music or a recording.
+
+**Playlist import**: `POST /api/plaatje/import/fetch` pulls a YouTube playlist via `yt-dlp` (flat, no download) and parses each title into artist/title/year with `plaatjeText.js`; `POST /api/plaatje/import/save` persists the reviewed rows (1-500 songs) as a named pool in `data/plaatjeImports.json`. The built-in song pool lives in `data/hitsterSongs.json` (name predates the PLAATJE rename, kept as-is).
+
+Leaderboard persists in `data/plaatjeLeaderboard.json` as `{ players: { id: { displayName, gamesPlayed, gamesWon, cardsWon, tokensEarned } } }`, written by `recordGameResult()` when a room finishes.
+
+Implementation: `src/utils/plaatjeGame.js` (room state machine, round rules, leaderboard), `src/utils/plaatjeAudio.js` (song pool, gated clip download, VC playback), `src/utils/plaatjeText.js` (fuzzy guess matching, import title parsing), `src/web/public/plaatje.html` (lobby + game UI), Plaatje routes/WS handlers in `src/web/server.js`. Full design spec and per-task implementation notes: `.superpowers/sdd/2026-08-22-plaatje-game/`.
 
 ## Trivia Game
 

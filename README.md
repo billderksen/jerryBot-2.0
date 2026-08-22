@@ -18,7 +18,7 @@ A feature-rich Discord bot with a web dashboard, music player, multiplayer games
 
 ### Multiplayer Games
 - **Pesten** - Dutch card game with turn timers, animations, and bot players
-- **Hitster** - Music guessing game where you build a timeline of songs by release year
+- **Plaatje** - Music guessing game where you build a timeline of songs by release year
 - **Pictionary** - Drawing and guessing game with multiple brush tools and colors
 
 ### Other Features
@@ -129,14 +129,14 @@ jerryBot 2.0/
 │   │   ├── musicQueue.js   # Music queue management
 │   │   ├── activityLogger.js
 │   │   ├── pestenGame.js   # Pesten card game logic
-│   │   ├── hitsterGame.js  # Hitster game logic
+│   │   ├── plaatjeGame.js  # Plaatje game logic
 │   │   └── pictionaryGame.js
 │   ├── web/
 │   │   ├── server.js       # Express + WebSocket server
 │   │   └── public/         # Web dashboard files
 │   │       ├── index.html  # Music player dashboard
 │   │       ├── pesten.html # Pesten game
-│   │       ├── hitster.html
+│   │       ├── plaatje.html
 │   │       ├── pictionary.html
 │   │       └── stats.html  # Listening statistics
 │   ├── index.js            # Main bot entry point
@@ -159,7 +159,7 @@ Access the web dashboard at `http://localhost:3001` (or your configured domain).
 - `/` - Music player with queue, controls, and recently played
 - `/stats` - Listening statistics and play counts
 - `/pesten` - Pesten card game
-- `/hitster` - Hitster music game
+- `/plaatje` - Plaatje music game
 - `/pictionary` - Pictionary drawing game
 
 ## Discord Commands
