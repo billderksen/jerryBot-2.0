@@ -208,8 +208,7 @@
   .vak.hot .plus { border-color:var(--stagelight); color:var(--stagelight);
     background:rgba(255,157,60,.15); transform:scale(1.3); }
   .countdown { height:5px; border-radius:3px; background:rgba(255,255,255,.15); overflow:hidden; margin-top:10px; }
-  .countdown i { display:block; height:100%; background:linear-gradient(90deg,var(--hotpink),var(--stagelight));
-    transition:width 7s linear; }
+  .countdown i { display:block; height:100%; background:linear-gradient(90deg,var(--hotpink),var(--stagelight)); }
   .win-overlay { position:fixed; inset:0; background:rgba(23,9,28,.9); z-index:80;
     display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; }
   .win-overlay .wordmark { font-size:3rem; }
@@ -553,10 +552,26 @@
     }
 
     // ── interactie per render ──────────────────────────────────────────────────
+    let challengeAnim = { nonce: null, startedAt: 0 };
+    let skipTimerKey = null;
     function bindInteractie(room, isMijnBeurt, ik) {
-      // challenge-countdown
+      // challenge-countdown — anchor to when THIS client first saw the challenge
+      // phase for the current round nonce, so a mid-window state broadcast (a
+      // guess, a second challenger) doesn't reset the bar to full while the
+      // server's reveal timer keeps running on its original schedule.
       if (room.phase === 'challenge') {
-        requestAnimationFrame(() => { const bar = $('challengeBar'); if (bar) bar.style.width = '0%'; });
+        const nonce = room.round?.nonce;
+        if (challengeAnim.nonce !== nonce) challengeAnim = { nonce, startedAt: Date.now() };
+        const remaining = Math.max(0, 7000 - (Date.now() - challengeAnim.startedAt));
+        const startPct = (remaining / 7000) * 100;
+        const bar = $('challengeBar');
+        if (bar) {
+          bar.style.transition = 'none';
+          bar.style.width = startPct + '%';
+          void bar.offsetWidth;
+          bar.style.transition = 'width ' + remaining + 'ms linear';
+          bar.style.width = '0%';
+        }
       }
 
       // gok + swap (alleen actieve speler; elementen bestaan alleen dan)
@@ -599,16 +614,33 @@
         }
       }
 
-      // host: beurt overslaan bij een verdwenen actieve speler
+      // host: beurt overslaan bij een verdwenen actieve speler — mirrort de
+      // 60s server-gate (canHostSkipTurn), zodat de knop niet eerder verschijnt
+      // dan de server het verzoek accepteert
       const actief = room.players.find((p) => p.id === room.activeUserId);
       if (me.id === room.hostId && actief && !actief.connected) {
-        if (!document.getElementById('btnSkipTurn')) {
-          const knop = document.createElement('button');
-          knop.id = 'btnSkipTurn'; knop.className = 'knop'; knop.style.background = '#a3122c'; knop.style.color = '#fff';
-          knop.textContent = `Beurt van ${actief.displayName} overslaan`;
-          knop.onclick = () => ws.send({ type: 'plaatje:host:skipTurn' });
-          $('spotFoot').appendChild(knop);
+        const remaining = 60_000 - (Date.now() - actief.disconnectedAt);
+        if (remaining <= 0) {
+          if (!document.getElementById('btnSkipTurn')) {
+            const knop = document.createElement('button');
+            knop.id = 'btnSkipTurn'; knop.className = 'knop'; knop.style.background = '#a3122c'; knop.style.color = '#fff';
+            knop.textContent = `Beurt van ${actief.displayName} overslaan`;
+            knop.onclick = () => ws.send({ type: 'plaatje:host:skipTurn' });
+            $('spotFoot').appendChild(knop);
+          }
+        } else {
+          const key = actief.id + ':' + actief.disconnectedAt;
+          if (skipTimerKey !== key) {
+            skipTimerKey = key;
+            setTimeout(() => { skipTimerKey = null; if (currentRoom) renderState(currentRoom); }, remaining + 500);
+          }
         }
+      }
+
+      // replay-knop overleeft een re-render die #spotStatus herschrijft (bv. HITSTER-arm)
+      const audio = $('roundAudio');
+      if (audio.getAttribute('src') && ['listening', 'challenge'].includes(room.phase) && currentRoom?.settings.audioMode !== 'vc') {
+        voegReplayToe();
       }
     }
 
