@@ -14,6 +14,16 @@ import { fetch } from 'undici';
 import { getRecentlyPlayed, getListeningStats, getVoiceChannelMembers, getMemberDisplayName, setSleepTimer, cancelSleepTimer, applyMixerFilters, getMusicSettings, pickRadioTrack, getQueue, RADIO_MEMORY_SIZE } from '../utils/musicQueue.js';
 import { createRoom, getRoom, deleteRoom, getRoomList, getLeaderboard, Player, setActivityLogger as setPictionaryActivityLogger } from '../utils/pictionaryGame.js';
 import { createRoom as createPestenRoom, getRoom as getPestenRoom, deleteRoom as deletePestenRoom, getRoomList as getPestenRoomList, getLeaderboard as getPestenLeaderboard } from '../utils/pestenGame.js';
+import {
+  createPlaatjeRoom, getPlaatjeRoom, deletePlaatjeRoom, getPlaatjeRoomList,
+  recordGameResult, getPlaatjeLeaderboard, canHostSkipTurn, shouldDeleteRoom,
+} from '../utils/plaatjeGame.js';
+import {
+  listPools, pickSong, prepareRoundClip, removeClip,
+  startVcClip, stopVcClip, teardownVc,
+} from '../utils/plaatjeAudio.js';
+import { parseVideoTitle } from '../utils/plaatjeText.js';
+import { loadJsonSync as loadPlaatjeJson, saveJsonSync as savePlaatjeJson } from '../utils/jsonStore.js';
 import { getTrackerData, getPlayerInactivity, addPlayerByUsername, removePlayerByUsername } from '../utils/osrsTracker.js';
 import { createPlaylist, deletePlaylist, renamePlaylist, addSong, removeSong, reorderSong, reorderPlaylist, getPlaylists, getPlaylist } from '../utils/playlists.js';
 import { getTrackerData as getTwitchTrackerData, addStreamer as addTwitchStreamer, removeStreamer as removeTwitchStreamer, subscribeUser as twitchSubscribeUser, unsubscribeUser as twitchUnsubscribeUser, setNotificationChannel as setTwitchNotificationChannel } from '../utils/twitchTracker.js';
@@ -27,7 +37,7 @@ import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cookie from 'cookie';
 import { platform } from 'os';
-import { existsSync } from 'fs';
+import { existsSync, createReadStream } from 'fs';
 import { execSync } from 'child_process';
 import { randomBytes } from 'node:crypto';
 import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
@@ -196,6 +206,11 @@ const pictionaryClients = new Map();
 
 // Store pesten room clients (roomId -> Set of ws)
 const pestenClients = new Map();
+
+// Plaatje: kamer-clients + ronde-audio (roomId -> mp3-pad) + fase-timers
+const plaatjeClients = new Map();
+const plaatjeRoundFiles = new Map();
+const plaatjeTimers = new Map(); // roomId -> Timeout
 
 // Store current state
 let currentState = {
@@ -513,6 +528,86 @@ app.get('/api/pesten/leaderboard', (req, res) => {
 
 app.get('/api/pesten/rooms', (req, res) => {
   res.json(getPestenRoomList());
+});
+
+// Serve Plaatje game page
+app.get('/plaatje', requireAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'plaatje.html'));
+});
+
+// Plaatje API endpoints
+
+// Ronde-audio: kale mp3, alleen voor kamerleden, alleen tijdens een ronde.
+// Geen song-identiteit in URL, headers of body — de geheimhoudings-invariant.
+app.get('/api/plaatje/audio/:roomId', (req, res) => {
+  const room = getPlaatjeRoom(req.params.roomId);
+  const uid = req.session.user.id;
+  if (!room || (!room.players.has(uid) && !room.spectators.has(uid))) {
+    return res.status(403).json({ error: 'Geen toegang tot deze kamer' });
+  }
+  const file = plaatjeRoundFiles.get(room.roomId);
+  if (!file || !['listening', 'challenge'].includes(room.phase)) {
+    return res.status(404).json({ error: 'Geen ronde-audio' });
+  }
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Accept-Ranges', 'none');
+  const stream = createReadStream(file);
+  stream.on('error', () => { if (!res.headersSent) res.status(404).end(); else res.end(); });
+  stream.pipe(res);
+});
+
+app.get('/api/plaatje/pools', (req, res) => res.json({ pools: listPools() }));
+
+app.get('/api/plaatje/leaderboard', (req, res) => res.json(getPlaatjeLeaderboard()));
+
+app.post('/api/plaatje/import/fetch', rateLimit('plaatjeimport', 3, 60_000), async (req, res) => {
+  const url = String(req.body?.url ?? '');
+  if (!/^https:\/\/(www\.|music\.)?youtube\.com\/(playlist\?|watch\?)/.test(url)) {
+    return res.status(400).json({ error: 'Geen geldige YouTube-playlist-URL' });
+  }
+  try {
+    const results = await ytDlpExec(url, {
+      ...ytCookieOpts, dumpSingleJson: true, noCheckCertificates: true,
+      noWarnings: true, flatPlaylist: true, skipDownload: true,
+    });
+    const entries = (results.entries ?? []).filter((v) => v?.id && v.title
+      && !/\[(deleted|private) video\]/i.test(v.title));
+    const rows = entries.map((v) => ({
+      youtubeId: v.id,
+      ...parseVideoTitle(v.title),
+      year: Number.isInteger(v.release_year) ? v.release_year : null,
+    }));
+    res.json({ name: results.title ?? 'Import', rows });
+  } catch (err) {
+    console.error('[Plaatje] Import fetch failed:', err.message);
+    res.status(502).json({ error: 'Playlist ophalen mislukt' });
+  }
+});
+
+app.post('/api/plaatje/import/save', (req, res) => {
+  const name = String(req.body?.name ?? '').trim().slice(0, 60);
+  const songs = Array.isArray(req.body?.songs) ? req.body.songs : [];
+  if (!name || !songs.length || songs.length > 500) {
+    return res.status(400).json({ error: 'Naam en 1-500 songs vereist' });
+  }
+  const clean = [];
+  for (const s of songs) {
+    const year = Number(s?.year);
+    if (typeof s?.title !== 'string' || !s.title.trim()
+      || typeof s?.artist !== 'string' || !s.artist.trim()
+      || !/^[\w-]{11}$/.test(String(s?.youtubeId))
+      || !Number.isInteger(year) || year < 1900 || year > 2030) {
+      return res.status(400).json({ error: 'Elke song heeft titel, artiest, youtubeId en jaar (1900-2030) nodig' });
+    }
+    clean.push({ title: s.title.trim().slice(0, 200), artist: s.artist.trim().slice(0, 200), year, youtubeId: s.youtubeId });
+  }
+  const file = join(__dirname, '../../data/plaatjeImports.json');
+  const data = loadPlaatjeJson(file, { pools: {} });
+  const id = `imp_${Date.now()}`;
+  data.pools[id] = { name, createdBy: req.session.user.id, songs: clean };
+  savePlaatjeJson(file, data);
+  res.json({ ok: true, id, count: clean.length });
 });
 
 // Serve OSRS Tracker page
@@ -1554,6 +1649,8 @@ wss.on('connection', (ws, req) => {
       cleanupPictionaryClient(ws);
       // Clean up pesten room membership
       cleanupPestenClient(ws);
+      // Clean up plaatje room membership
+      cleanupPlaatjeClient(ws);
       // Broadcast updated listeners list after disconnect
       broadcastListeners();
     });
@@ -1598,6 +1695,12 @@ wss.on('connection', (ws, req) => {
         // Handle Pesten messages
         if (data.type && data.type.startsWith('pesten:')) {
           handlePestenMessage(ws, data);
+        }
+
+        // Handle Plaatje messages
+        if (data.type && data.type.startsWith('plaatje:')) {
+          handlePlaatjeMessage(ws, data);
+          return;
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -2586,6 +2689,305 @@ function cleanupPestenClient(ws) {
     }
     removePestenClientFromRoom(ws, roomId);
     broadcastPestenRoomList();
+  }
+}
+
+// ── PLAATJE ────────────────────────────────────────────────────────────────
+
+function addPlaatjeClientToRoom(ws, roomId) {
+  if (!plaatjeClients.has(roomId)) plaatjeClients.set(roomId, new Set());
+  plaatjeClients.get(roomId).add(ws);
+}
+
+function removePlaatjeClientFromRoom(ws, roomId) {
+  const set = plaatjeClients.get(roomId);
+  if (!set) return;
+  set.delete(ws);
+  if (!set.size) plaatjeClients.delete(roomId);
+}
+
+function broadcastToPlaatjeRoom(roomId, type, data = {}) {
+  const set = plaatjeClients.get(roomId);
+  if (!set) return;
+  const msg = JSON.stringify({ type, ...data });
+  for (const client of set) if (client.readyState === 1) client.send(msg);
+}
+
+function broadcastPlaatjeState(roomId) {
+  const room = getPlaatjeRoom(roomId);
+  if (room) broadcastToPlaatjeRoom(roomId, 'plaatje:state', { room: room.publicState() });
+}
+
+function broadcastPlaatjeRoomList() {
+  const msg = JSON.stringify({ type: 'plaatje:room:list', rooms: getPlaatjeRoomList() });
+  for (const client of clients) if (client.readyState === 1) client.send(msg);
+}
+
+function clearPlaatjeTimer(roomId) {
+  const t = plaatjeTimers.get(roomId);
+  if (t) { clearTimeout(t); plaatjeTimers.delete(roomId); }
+}
+
+function setPlaatjeTimer(roomId, ms, fn) {
+  clearPlaatjeTimer(roomId);
+  plaatjeTimers.set(roomId, setTimeout(() => { plaatjeTimers.delete(roomId); fn(); }, ms));
+}
+
+function destroyPlaatjeRoom(roomId) {
+  clearPlaatjeTimer(roomId);
+  removeClip(plaatjeRoundFiles.get(roomId));
+  plaatjeRoundFiles.delete(roomId);
+  const room = getPlaatjeRoom(roomId);
+  if (room?.settings.audioMode === 'vc') teardownVc(process.env.GUILD_ID);
+  deletePlaatjeRoom(roomId);
+  broadcastPlaatjeRoomList();
+}
+
+// De rondemotor: fase loading → (download) → listening → [place] → challenge(7s)
+// → reveal(6s) → volgende beurt. Elke timer hercheckt kamer en fase.
+async function startPlaatjeRound(roomId) {
+  const room = getPlaatjeRoom(roomId);
+  if (!room || room.phase !== 'loading') return;
+  broadcastPlaatjeState(roomId);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const song = pickSong(room.settings.poolIds, room.usedSongIds);
+    if (!song) {
+      broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: 'De songpool is leeg — spel voorbij.' });
+      room.phase = 'finished';
+      recordGameResult(room);
+      broadcastPlaatjeState(roomId);
+      return;
+    }
+    try {
+      const { mp3Path, offsetSec } = await prepareRoundClip(song, roomId);
+      if (getPlaatjeRoom(roomId) !== room || room.phase !== 'loading') { removeClip(mp3Path); return; }
+      removeClip(plaatjeRoundFiles.get(roomId));
+      plaatjeRoundFiles.set(roomId, mp3Path);
+      room.loadFailStreak = 0;
+      room.beginRound(song, offsetSec);
+      broadcastPlaatjeState(roomId);
+      broadcastToPlaatjeRoom(roomId, 'plaatje:round:audio', { nonce: room.round.nonce });
+      if (room.settings.audioMode === 'vc') {
+        const r = await startVcClip({
+          client: discordClientRef, guildId: process.env.GUILD_ID,
+          userId: room.hostId, mp3Path,
+        });
+        if (!r.ok) {
+          broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: `Jerry kan niet in VC spelen (${r.reason}) — luister via de browser.` });
+        }
+      }
+      return;
+    } catch (err) {
+      console.error(`[Plaatje] Song laden mislukt (${song.youtubeId}):`, err.message);
+      room.usedSongIds.add(song.youtubeId);
+    }
+  }
+  room.loadFailStreak += 1;
+  if (room.loadFailStreak >= 2) {
+    broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: 'Songs laden blijft mislukken — spel gestopt.' });
+    room.phase = 'finished';
+    recordGameResult(room);
+    broadcastPlaatjeState(roomId);
+    return;
+  }
+  broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: 'Song laden mislukt — volgende speler.' });
+  room.nextTurn();
+  startPlaatjeRound(roomId);
+}
+
+function schedulePlaatjeReveal(roomId) {
+  const room = getPlaatjeRoom(roomId);
+  if (!room || room.phase !== 'challenge') return;
+  const nonce = room.round?.nonce;
+  setPlaatjeTimer(roomId, 7_000, () => {
+    const r = getPlaatjeRoom(roomId);
+    if (!r || r.phase !== 'challenge' || r.round?.nonce !== nonce) return;
+    doPlaatjeReveal(roomId);
+  });
+}
+
+function doPlaatjeReveal(roomId) {
+  const room = getPlaatjeRoom(roomId);
+  if (!room) return;
+  stopVcClip(process.env.GUILD_ID);
+  removeClip(plaatjeRoundFiles.get(roomId));
+  plaatjeRoundFiles.delete(roomId);
+  const reveal = room.resolveReveal();
+  if (!reveal) return; // geen actieve ronde (dubbele timer/retry) — stil no-open
+  broadcastToPlaatjeRoom(roomId, 'plaatje:reveal', reveal);
+  broadcastPlaatjeState(roomId);
+  if (room.phase === 'finished') {
+    recordGameResult(room);
+    broadcastToPlaatjeRoom(roomId, 'plaatje:game:over', { winnerId: room.winnerId, room: room.publicState() });
+    broadcastPlaatjeRoomList();
+    return;
+  }
+  setPlaatjeTimer(roomId, 6_000, () => {
+    const r = getPlaatjeRoom(roomId);
+    if (!r || r.phase !== 'reveal') return;
+    r.nextTurn();
+    startPlaatjeRound(roomId);
+  });
+}
+
+function handlePlaatjeMessage(ws, data) {
+  const user = ws.user;
+  const { type } = data;
+  const fail = (message) => ws.send(JSON.stringify({ type: 'plaatje:error', message }));
+
+  switch (type) {
+    case 'plaatje:room:list': {
+      ws.send(JSON.stringify({ type: 'plaatje:room:list', rooms: getPlaatjeRoomList() }));
+      break;
+    }
+
+    case 'plaatje:room:create': {
+      if (ws.plaatjeRoomId) return fail('Je zit al in een kamer');
+      const roomId = `plaatje_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const room = createPlaatjeRoom(roomId, {
+        id: user.id, displayName: user.displayName || user.username,
+        avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
+      }, {
+        cardsToWin: data.cardsToWin, poolIds: data.poolIds, audioMode: data.audioMode,
+      });
+      ws.plaatjeRoomId = roomId;
+      addPlaatjeClientToRoom(ws, roomId);
+      ws.send(JSON.stringify({ type: 'plaatje:room:joined', room: room.publicState(), you: { id: user.id, isSpectator: false } }));
+      broadcastPlaatjeRoomList();
+      break;
+    }
+
+    case 'plaatje:room:join':
+    case 'plaatje:room:rejoin': {
+      const room = getPlaatjeRoom(data.roomId);
+      if (!room) {
+        if (type === 'plaatje:room:rejoin') return ws.send(JSON.stringify({ type: 'plaatje:room:rejoinFailed' }));
+        return fail('Kamer bestaat niet meer');
+      }
+      const { isSpectator } = room.addPlayer({
+        id: user.id, displayName: user.displayName || user.username,
+        avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
+      });
+      ws.plaatjeRoomId = room.roomId;
+      addPlaatjeClientToRoom(ws, room.roomId);
+      ws.send(JSON.stringify({ type: 'plaatje:room:joined', room: room.publicState(), you: { id: user.id, isSpectator } }));
+      broadcastPlaatjeState(room.roomId);
+      broadcastPlaatjeRoomList();
+      break;
+    }
+
+    case 'plaatje:room:leave': {
+      const roomId = ws.plaatjeRoomId;
+      const room = getPlaatjeRoom(roomId);
+      ws.plaatjeRoomId = null;
+      if (!room) break;
+      removePlaatjeClientFromRoom(ws, roomId);
+      room.removePlayer(user.id);
+      if (room.phase === 'lobby' && !room.players.size) destroyPlaatjeRoom(roomId);
+      else { broadcastPlaatjeState(roomId); broadcastPlaatjeRoomList(); }
+      break;
+    }
+
+    case 'plaatje:game:start': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room || user.id !== room.hostId) return fail('Alleen de host kan starten');
+      const started = room.start(() => {
+        const song = pickSong(room.settings.poolIds, room.usedSongIds);
+        if (!song) throw new Error('pool leeg');
+        return song;
+      });
+      if (!started.ok) return fail('Minimaal 2 spelers nodig');
+      broadcastPlaatjeRoomList();
+      startPlaatjeRound(room.roomId);
+      break;
+    }
+
+    case 'plaatje:turn:hover': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room || user.id !== room.activeUserId) break;
+      const set = plaatjeClients.get(room.roomId) ?? new Set();
+      const msg = JSON.stringify({ type: 'plaatje:turn:hover', slot: data.slot });
+      for (const client of set) if (client !== ws && client.readyState === 1) client.send(msg);
+      break;
+    }
+
+    case 'plaatje:turn:place': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room) break;
+      const r = room.place(user.id, data.slot);
+      if (!r.ok) return fail('Kaart leggen kan nu niet');
+      broadcastPlaatjeState(room.roomId);
+      schedulePlaatjeReveal(room.roomId);
+      break;
+    }
+
+    case 'plaatje:turn:guess': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room) break;
+      const r = room.recordGuess(user.id, data.artist, data.title);
+      if (!r.ok) return fail('Gokken kan nu niet');
+      broadcastPlaatjeState(room.roomId);
+      break;
+    }
+
+    case 'plaatje:turn:swap': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room) break;
+      const r = room.paySwap(user.id);
+      if (!r.ok) return fail(r.reason ?? 'Wisselen kan nu niet');
+      stopVcClip(process.env.GUILD_ID);
+      room.phase = 'loading';
+      broadcastPlaatjeState(room.roomId);
+      startPlaatjeRound(room.roomId);
+      break;
+    }
+
+    case 'plaatje:challenge': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room) break;
+      const r = room.challenge(user.id, data.slot, Date.now());
+      if (!r.ok) return fail(r.reason ?? 'Uitdagen kan nu niet');
+      broadcastPlaatjeState(room.roomId);
+      break;
+    }
+
+    case 'plaatje:host:skipTurn': {
+      const room = getPlaatjeRoom(ws.plaatjeRoomId);
+      if (!room || user.id !== room.hostId) return fail('Alleen de host kan een beurt overslaan');
+      const active = room.players.get(room.activeUserId);
+      if (!active || active.connected
+        || !canHostSkipTurn({ disconnectedAtMs: active.disconnectedAt, nowMs: Date.now() })) {
+        return fail('De actieve speler is (nog) niet 60s weg');
+      }
+      clearPlaatjeTimer(room.roomId);
+      stopVcClip(process.env.GUILD_ID);
+      removeClip(plaatjeRoundFiles.get(room.roomId));
+      plaatjeRoundFiles.delete(room.roomId);
+      room.round = null;
+      room.nextTurn();
+      broadcastPlaatjeState(room.roomId);
+      startPlaatjeRound(room.roomId);
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+function cleanupPlaatjeClient(ws) {
+  const roomId = ws.plaatjeRoomId;
+  if (!roomId) return;
+  removePlaatjeClientFromRoom(ws, roomId);
+  const room = getPlaatjeRoom(roomId);
+  if (!room) return;
+  room.markDisconnected(ws.user?.id, Date.now());
+  broadcastPlaatjeState(roomId);
+  if (room.emptySince != null) {
+    setTimeout(() => {
+      const r = getPlaatjeRoom(roomId);
+      if (r && shouldDeleteRoom({ emptySinceMs: r.emptySince, nowMs: Date.now() })) destroyPlaatjeRoom(roomId);
+    }, 5 * 60_000 + 1_000);
   }
 }
 
