@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   placementIsCorrect, insertIndexForYear, resolveRound,
-  startOffsetSeconds, clampCardsToWin, canHostSkipTurn, shouldDeleteRoom
+  startOffsetSeconds, clampCardsToWin, canHostSkipTurn, shouldDeleteRoom,
+  createPlaatjeRoom, getPlaatjeRoom, deletePlaatjeRoom
 } from '../src/utils/plaatjeGame.js';
 
 test('placementIsCorrect: randen, midden, gelijke jaartallen', () => {
@@ -60,4 +61,102 @@ test('canHostSkipTurn en shouldDeleteRoom: drempels', () => {
   assert.equal(canHostSkipTurn({ disconnectedAtMs: null, nowMs: 1e12 }), false);
   assert.equal(shouldDeleteRoom({ emptySinceMs: 0, nowMs: 5 * 60_000 }), true);
   assert.equal(shouldDeleteRoom({ emptySinceMs: null, nowMs: 1e12 }), false);
+});
+
+function maakKamer() {
+  const room = createPlaatjeRoom('r1', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 10 });
+  room.addPlayer({ id: 'u2', displayName: 'Koen', avatar: null });
+  const startSongs = [
+    { title: 'September', artist: 'Earth, Wind & Fire', year: 1978, youtubeId: 'aaaaaaaaaaa' },
+    { title: 'Zombie', artist: 'The Cranberries', year: 1994, youtubeId: 'bbbbbbbbbbb' },
+  ];
+  let i = 0;
+  room.start(() => startSongs[i++]);
+  return room;
+}
+
+test('room: start deelt 1 kaart en 2 fiches uit, host is eerste actieve speler', () => {
+  const room = maakKamer();
+  assert.equal(room.phase, 'loading');
+  for (const p of room.players.values()) {
+    assert.equal(p.timeline.length, 1);
+    assert.equal(p.tokens, 2);
+  }
+  assert.equal(room.publicState().activeUserId, 'u1');
+  deletePlaatjeRoom('r1');
+});
+
+test('room: publicState lekt de mysterieplaat nooit vóór de reveal', () => {
+  const room = maakKamer();
+  room.beginRound({ title: 'GeheimNummer', artist: 'GeheimArtiest', year: 1997, youtubeId: 'ccccccccccc' }, 30);
+  const json = JSON.stringify(room.publicState());
+  assert.ok(!json.includes('GeheimNummer'));
+  assert.ok(!json.includes('GeheimArtiest'));
+  assert.ok(!json.includes('1997'));
+  assert.ok(!json.includes('ccccccccccc'));
+  deletePlaatjeRoom('r1');
+});
+
+test('room: goed leggen → kaart erbij; gok bij reveal beoordeeld; fiche voor goede gok', () => {
+  const room = maakKamer();
+  const mystery = { title: 'Bitter Sweet Symphony', artist: 'The Verve', year: 1997, youtubeId: 'ccccccccccc' };
+  room.beginRound(mystery, 30);
+  const active = room.players.get('u1');
+  const jaar = active.timeline[0].year;
+  const slot = mystery.year >= jaar ? 1 : 0;
+  room.recordGuess('u1', 'the verve', 'bittersweet symphony');
+  room.place('u1', slot);
+  assert.equal(room.phase, 'challenge');
+  const reveal = room.resolveReveal();
+  assert.equal(reveal.activeCorrect, true);
+  assert.equal(reveal.guessCorrect, true);
+  assert.equal(active.timeline.length, 2);
+  assert.equal(active.tokens, 3); // 2 + 1 gok-fiche
+  deletePlaatjeRoom('r1');
+});
+
+test('room: HITSTER — uitdager betaalt altijd, steelt bij fout van actief', () => {
+  const room = maakKamer();
+  const u1jaar = room.players.get('u1').timeline[0].year;
+  // kies een mysteriejaar dat gegarandeerd NIET vóór u1's kaart hoort als hij op slot 0 legt
+  const mystery = { title: 'X', artist: 'Y', year: u1jaar + 1, youtubeId: 'ddddddddddd' };
+  room.beginRound(mystery, 30);
+  room.challenge('u2', 1, 1000);          // juiste plek (na de kaart)
+  assert.equal(room.players.get('u2').tokens, 1); // betaald bij de druk
+  room.place('u1', 0);                    // actief legt fout (vóór de kaart)
+  const reveal = room.resolveReveal();
+  assert.equal(reveal.activeCorrect, false);
+  assert.equal(reveal.stolenBy, 'u2');
+  assert.equal(room.players.get('u2').timeline.length, 2);
+  assert.equal(room.players.get('u1').timeline.length, 1);
+  deletePlaatjeRoom('r1');
+});
+
+test('room: winnen bij cardsToWin en beurtrotatie', () => {
+  const room = createPlaatjeRoom('r2', { id: 'a', displayName: 'A', avatar: null }, { cardsToWin: 5 });
+  room.addPlayer({ id: 'b', displayName: 'B', avatar: null });
+  let n = 1900;
+  room.start(() => ({ title: 't', artist: 'x', year: n += 2, youtubeId: String(n).padStart(11, '0') }));
+  // A wint door 4 rondes goed te leggen (1 startkaart + 4 = 5)
+  for (let ronde = 0; ronde < 7 && room.phase !== 'finished'; ronde++) {
+    const activeId = room.publicState().activeUserId;
+    room.beginRound({ title: 't', artist: 'x', year: n += 2, youtubeId: String(n).padStart(11, '0') }, 0);
+    const speler = room.players.get(activeId);
+    room.place(activeId, speler.timeline.length); // achteraan = altijd goed (jaren stijgen)
+    room.resolveReveal();
+    if (room.phase !== 'finished') room.nextTurn();
+  }
+  assert.equal(room.phase, 'finished');
+  assert.ok(room.winnerId === 'a' || room.winnerId === 'b');
+  deletePlaatjeRoom('r2');
+});
+
+test('room: swap kost 1 fiche en kan alleen met saldo', () => {
+  const room = maakKamer();
+  room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'eeeeeeeeeee' }, 0);
+  assert.equal(room.paySwap('u1').ok, true);
+  assert.equal(room.players.get('u1').tokens, 1);
+  assert.equal(room.paySwap('u1').ok, true);
+  assert.equal(room.paySwap('u1').ok, false); // saldo 0
+  deletePlaatjeRoom('r1');
 });
