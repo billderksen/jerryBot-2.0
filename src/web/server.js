@@ -19,7 +19,7 @@ import {
   recordGameResult, getPlaatjeLeaderboard, canHostSkipTurn, shouldDeleteRoom,
 } from '../utils/plaatjeGame.js';
 import {
-  listPools, pickSong, prepareRoundClip, removeClip,
+  listPools, getPoolSongs, pickSong, prepareRoundClip, removeClip,
   startVcClip, stopVcClip, teardownVc,
 } from '../utils/plaatjeAudio.js';
 import { parseVideoTitle } from '../utils/plaatjeText.js';
@@ -211,6 +211,7 @@ const pestenClients = new Map();
 const plaatjeClients = new Map();
 const plaatjeRoundFiles = new Map();
 const plaatjeTimers = new Map(); // roomId -> Timeout
+const plaatjeLoadInFlight = new Set(); // roomId's met een lopende downloadcyclus
 
 // Store current state
 let currentState = {
@@ -2743,9 +2744,35 @@ function destroyPlaatjeRoom(roomId) {
   broadcastPlaatjeRoomList();
 }
 
+// Verlaat de kamer die ws momenteel vastheeft (indien aanwezig). Gedeeld door
+// plaatje:room:leave en de cross-room guard in plaatje:room:join/rejoin, zodat
+// het overstappen naar een andere kamer geen speler in de oude kamer achterlaat.
+function leavePlaatjeRoom(ws) {
+  const roomId = ws.plaatjeRoomId;
+  const room = getPlaatjeRoom(roomId);
+  ws.plaatjeRoomId = null;
+  if (!room) return;
+  removePlaatjeClientFromRoom(ws, roomId);
+  room.removePlayer(ws.user.id);
+  if (room.phase === 'lobby' && !room.players.size) destroyPlaatjeRoom(roomId);
+  else { broadcastPlaatjeState(roomId); broadcastPlaatjeRoomList(); }
+}
+
 // De rondemotor: fase loading → (download) → listening → [place] → challenge(7s)
 // → reveal(6s) → volgende beurt. Elke timer hercheckt kamer en fase.
+// Per-room in-flight latch: voorkomt twee gelijktijdige downloadcycli wanneer
+// startPlaatjeRound dubbel afgevuurd wordt (bv. host-skip twee keer snel achter elkaar).
 async function startPlaatjeRound(roomId) {
+  if (plaatjeLoadInFlight.has(roomId)) return;
+  plaatjeLoadInFlight.add(roomId);
+  try {
+    await runPlaatjeRoundLoad(roomId);
+  } finally {
+    plaatjeLoadInFlight.delete(roomId);
+  }
+}
+
+async function runPlaatjeRoundLoad(roomId) {
   const room = getPlaatjeRoom(roomId);
   if (!room || room.phase !== 'loading') return;
   broadcastPlaatjeState(roomId);
@@ -2792,7 +2819,7 @@ async function startPlaatjeRound(roomId) {
   }
   broadcastToPlaatjeRoom(roomId, 'plaatje:error', { message: 'Song laden mislukt — volgende speler.' });
   room.nextTurn();
-  startPlaatjeRound(roomId);
+  return runPlaatjeRoundLoad(roomId);
 }
 
 function schedulePlaatjeReveal(roomId) {
@@ -2859,6 +2886,7 @@ function handlePlaatjeMessage(ws, data) {
 
     case 'plaatje:room:join':
     case 'plaatje:room:rejoin': {
+      if (ws.plaatjeRoomId && ws.plaatjeRoomId !== data.roomId) leavePlaatjeRoom(ws);
       const room = getPlaatjeRoom(data.roomId);
       if (!room) {
         if (type === 'plaatje:room:rejoin') return ws.send(JSON.stringify({ type: 'plaatje:room:rejoinFailed' }));
@@ -2877,25 +2905,27 @@ function handlePlaatjeMessage(ws, data) {
     }
 
     case 'plaatje:room:leave': {
-      const roomId = ws.plaatjeRoomId;
-      const room = getPlaatjeRoom(roomId);
-      ws.plaatjeRoomId = null;
-      if (!room) break;
-      removePlaatjeClientFromRoom(ws, roomId);
-      room.removePlayer(user.id);
-      if (room.phase === 'lobby' && !room.players.size) destroyPlaatjeRoom(roomId);
-      else { broadcastPlaatjeState(roomId); broadcastPlaatjeRoomList(); }
+      leavePlaatjeRoom(ws);
       break;
     }
 
     case 'plaatje:game:start': {
       const room = getPlaatjeRoom(ws.plaatjeRoomId);
       if (!room || user.id !== room.hostId) return fail('Alleen de host kan starten');
-      const started = room.start(() => {
-        const song = pickSong(room.settings.poolIds, room.usedSongIds);
-        if (!song) throw new Error('pool leeg');
-        return song;
-      });
+      const eligible = getPoolSongs(room.settings.poolIds).filter((s) => !room.usedSongIds.has(s.youtubeId)).length;
+      if (eligible < room.players.size + 1) {
+        return fail('Songpool te klein: minstens ' + (room.players.size + 1) + ' songs nodig voor dit aantal spelers');
+      }
+      let started;
+      try {
+        started = room.start(() => {
+          const song = pickSong(room.settings.poolIds, room.usedSongIds);
+          if (!song) throw new Error('pool leeg');
+          return song;
+        });
+      } catch {
+        return fail('Starten mislukt — songpool te klein');
+      }
       if (!started.ok) return fail('Minimaal 2 spelers nodig');
       broadcastPlaatjeRoomList();
       startPlaatjeRound(room.roomId);
@@ -2981,6 +3011,11 @@ function cleanupPlaatjeClient(ws) {
   removePlaatjeClientFromRoom(ws, roomId);
   const room = getPlaatjeRoom(roomId);
   if (!room) return;
+  // Multi-tab: dezelfde speler kan nog een andere socket in deze kamer hebben.
+  // Alleen als geen enkele socket meer van hem is, telt dit als een disconnect.
+  const set = plaatjeClients.get(roomId);
+  const stillThere = set && [...set].some((c) => c.user?.id === ws.user?.id && c.readyState === 1);
+  if (stillThere) return;
   room.markDisconnected(ws.user?.id, Date.now());
   broadcastPlaatjeState(roomId);
   if (room.emptySince != null) {
