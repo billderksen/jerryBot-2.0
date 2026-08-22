@@ -901,8 +901,8 @@
       }
 
       // Games
-      const gameNames = ['pesten', 'hitster', 'pictionary'];
-      const gameIcons = { pesten: '\uD83C\uDCCF', hitster: '\uD83C\uDFB5', pictionary: '\uD83C\uDFA8' };
+      const gameNames = ['pesten', 'pictionary'];
+      const gameIcons = { pesten: '\uD83C\uDCCF', pictionary: '\uD83C\uDFA8' };
       const activeGames = gameNames.filter(n => g[n] && g[n].players.length > 0);
       if (activeGames.length > 0) {
         const sec = createEl('div', { class: 'section' });

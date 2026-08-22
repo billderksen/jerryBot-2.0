@@ -12,7 +12,6 @@ const RECAPS_FILE = join(DATA_DIR, 'weeklyRecaps.json');
 const SNAPSHOTS_FILE = join(DATA_DIR, 'weeklyRecapSnapshots.json');
 const RECENTLY_PLAYED_FILE = join(DATA_DIR, 'recentlyPlayed.json');
 const PESTEN_LEADERBOARD = join(DATA_DIR, 'pestenLeaderboard.json');
-const HITSTER_LEADERBOARD = join(DATA_DIR, 'hitsterLeaderboard.json');
 const PICTIONARY_LEADERBOARD = join(DATA_DIR, 'pictionaryLeaderboard.json');
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -124,7 +123,6 @@ function collectGameStats() {
 
   const leaderboards = [
     { name: 'pesten', file: PESTEN_LEADERBOARD },
-    { name: 'hitster', file: HITSTER_LEADERBOARD },
     { name: 'pictionary', file: PICTIONARY_LEADERBOARD }
   ];
 
@@ -284,7 +282,6 @@ function buildRecap(startMs, endMs) {
 function snapshotLeaderboards() {
   const leaderboards = [
     { name: 'pesten', file: PESTEN_LEADERBOARD },
-    { name: 'hitster', file: HITSTER_LEADERBOARD },
     { name: 'pictionary', file: PICTIONARY_LEADERBOARD }
   ];
 
@@ -369,7 +366,7 @@ export function buildDiscordEmbed(recap) {
 
   // Games
   const gameLines = [];
-  for (const game of ['pesten', 'hitster', 'pictionary']) {
+  for (const game of ['pesten', 'pictionary']) {
     const g = recap.games[game];
     if (g && g.players.length > 0) {
       const top = g.players[0];

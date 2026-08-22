@@ -6,7 +6,6 @@
   var ICON_MUSIC = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
   var ICON_STATS = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
   var ICON_PESTEN = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/></svg>';
-  var ICON_HITSTER = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
   var ICON_PICTIONARY = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>';
   var ICON_TRIVIA = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
   var ICON_F1 = '<svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
@@ -22,7 +21,6 @@
     { page: 'home', href: '/', label: 'Music Player', icon: ICON_MUSIC },
     { page: 'stats', href: '/stats', label: 'Listening Stats', icon: ICON_STATS },
     { page: 'pesten', href: '/pesten', label: 'Pesten Card Game', icon: ICON_PESTEN },
-    { page: 'hitster', href: '/hitster', label: 'Hitster Music Game', icon: ICON_HITSTER },
     { page: 'pictionary', href: '/pictionary', label: 'Pictionary Game', icon: ICON_PICTIONARY },
     { page: 'trivia', href: '/trivia', label: 'Trivia', icon: ICON_TRIVIA },
     { page: 'f1', href: '/f1', label: 'F1 Predictions', icon: ICON_F1 },
