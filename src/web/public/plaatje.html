@@ -209,7 +209,7 @@
     background:rgba(255,157,60,.15); transform:scale(1.3); }
   .countdown { height:5px; border-radius:3px; background:rgba(255,255,255,.15); overflow:hidden; margin-top:10px; }
   .countdown i { display:block; height:100%; background:linear-gradient(90deg,var(--hotpink),var(--stagelight));
-    transition:width 1s linear; }
+    transition:width 7s linear; }
   .win-overlay { position:fixed; inset:0; background:rgba(23,9,28,.9); z-index:80;
     display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; }
   .win-overlay .wordmark { font-size:3rem; }
@@ -317,7 +317,7 @@
     }
 
     function avaHtml(p, size) {
-      const stijl = p.avatar ? `background-image:url(${p.avatar});background-size:cover` : 'background:linear-gradient(135deg,#6a5acd,#48b1f3)';
+      const stijl = p.avatar ? `background-image:url(${escapeHtml(p.avatar)});background-size:cover` : 'background:linear-gradient(135deg,#6a5acd,#48b1f3)';
       return `<span class="ava" style="${stijl};${size ? `width:${size}px;height:${size}px` : ''}">${p.avatar ? '' : escapeHtml((p.displayName || '?')[0].toUpperCase())}</span>`;
     }
 
@@ -511,11 +511,106 @@
       $('btnTerug').onclick = () => { el.remove(); ws.send({ type: 'plaatje:room:leave' }); showLobby(); };
     }
 
-    // ── Taak 8 vult deze interactielaag in (drag & drop, HITSTER-flow, audio) ──
-    function startRoundAudio(nonce) {}
-    function stopRoundAudio() {}
-    function toonHover(slot) {}
-    function bindInteractie(room, isMijnBeurt, ik) {}
+    // ── audio ──────────────────────────────────────────────────────────────────
+    function startRoundAudio(nonce) {
+      window._hitsterArmed = null;
+      if (!currentRoom || currentRoom.settings.audioMode === 'vc') return;
+      const audio = $('roundAudio');
+      audio.src = `/api/plaatje/audio/${encodeURIComponent(currentRoom.roomId)}?n=${nonce}`;
+      audio.play().catch(() => {
+        JB.toast('Klik ▶ om de plaat te starten (browser blokkeerde autoplay)', 'info');
+        voegReplayToe();
+      });
+      voegReplayToe();
+    }
+
+    function voegReplayToe() {
+      if (document.getElementById('btnReplay')) return;
+      const knop = document.createElement('button');
+      knop.id = 'btnReplay'; knop.className = 'skip'; knop.textContent = '▶ opnieuw afspelen';
+      knop.onclick = () => { const a = $('roundAudio'); a.currentTime = 0; a.play().catch(() => {}); };
+      $('spotStatus').appendChild(knop);
+    }
+
+    function stopRoundAudio() {
+      const audio = $('roundAudio');
+      audio.pause(); audio.removeAttribute('src');
+    }
+
+    // ── hover-doorgifte (actieve speler → rest) ────────────────────────────────
+    let hoverThrottle = 0;
+    function stuurHover(slot) {
+      const nu = Date.now();
+      if (nu - hoverThrottle < 200) return;
+      hoverThrottle = nu;
+      ws.send({ type: 'plaatje:turn:hover', slot });
+    }
+
+    function toonHover(slot) {
+      for (const vak of document.querySelectorAll('[data-podium-slot]')) {
+        vak.classList.toggle('hot', Number(vak.dataset.podiumSlot) === slot);
+      }
+    }
+
+    // ── interactie per render ──────────────────────────────────────────────────
+    function bindInteractie(room, isMijnBeurt, ik) {
+      // challenge-countdown
+      if (room.phase === 'challenge') {
+        requestAnimationFrame(() => { const bar = $('challengeBar'); if (bar) bar.style.width = '0%'; });
+      }
+
+      // gok + swap (alleen actieve speler; elementen bestaan alleen dan)
+      $('btnGok')?.addEventListener('click', () => {
+        ws.send({ type: 'plaatje:turn:guess', artist: $('gokArtiest').value, title: $('gokTitel').value });
+      });
+      $('btnSwap')?.addEventListener('click', () => ws.send({ type: 'plaatje:turn:swap' }));
+
+      // HITSTER-arm
+      $('btnHitster')?.addEventListener('click', () => {
+        window._hitsterArmed = room.round?.nonce;
+        renderState(currentRoom); // hertekent podiumvakken als kiesbaar
+      });
+
+      // podiumvakken: uitdager kiest een plek (na arm)
+      for (const vak of document.querySelectorAll('[data-podium-slot]')) {
+        vak.addEventListener('click', () => {
+          if (window._hitsterArmed !== room.round?.nonce) return;
+          window._hitsterArmed = null;
+          ws.send({ type: 'plaatje:challenge', slot: Number(vak.dataset.podiumSlot) });
+        });
+      }
+
+      // mysteriekaart: slepen (desktop) en tikken (touch) naar een dock-vak
+      const kaart = $('mysteryKaart');
+      if (kaart && isMijnBeurt) {
+        kaart.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', 'mystery'));
+        let tikGekozen = false;
+        kaart.addEventListener('click', () => {
+          tikGekozen = !tikGekozen;
+          kaart.style.outline = tikGekozen ? '3px solid var(--teal)' : '';
+        });
+        for (const vak of document.querySelectorAll('[data-dock-slot]')) {
+          const slot = Number(vak.dataset.dockSlot);
+          vak.addEventListener('dragover', (e) => { e.preventDefault(); vak.classList.add('hot'); stuurHover(slot); });
+          vak.addEventListener('dragleave', () => vak.classList.remove('hot'));
+          vak.addEventListener('drop', (e) => { e.preventDefault(); ws.send({ type: 'plaatje:turn:place', slot }); });
+          vak.addEventListener('click', () => { if (tikGekozen) ws.send({ type: 'plaatje:turn:place', slot }); });
+          vak.addEventListener('mouseenter', () => stuurHover(slot));
+        }
+      }
+
+      // host: beurt overslaan bij een verdwenen actieve speler
+      const actief = room.players.find((p) => p.id === room.activeUserId);
+      if (me.id === room.hostId && actief && !actief.connected) {
+        if (!document.getElementById('btnSkipTurn')) {
+          const knop = document.createElement('button');
+          knop.id = 'btnSkipTurn'; knop.className = 'knop'; knop.style.background = '#a3122c'; knop.style.color = '#fff';
+          knop.textContent = `Beurt van ${actief.displayName} overslaan`;
+          knop.onclick = () => ws.send({ type: 'plaatje:host:skipTurn' });
+          $('spotFoot').appendChild(knop);
+        }
+      }
+    }
 
     async function init() {
       me = await JB.me();
