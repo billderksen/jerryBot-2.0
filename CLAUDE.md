@@ -248,7 +248,7 @@ Web-based multiplayer music-timeline game at `/plaatje`, following the rules of 
 
 Leaderboard persists in `data/plaatjeLeaderboard.json` as `{ players: { id: { displayName, gamesPlayed, gamesWon, cardsWon, tokensEarned } } }`, written by `recordGameResult()` when a room finishes.
 
-Implementation: `src/utils/plaatjeGame.js` (room state machine, round rules, leaderboard), `src/utils/plaatjeAudio.js` (song pool, gated clip download, VC playback), `src/utils/plaatjeText.js` (fuzzy guess matching, import title parsing), `src/web/public/plaatje.html` (lobby + game UI), Plaatje routes/WS handlers in `src/web/server.js`. Full design spec and per-task implementation notes: `.superpowers/sdd/2026-08-22-plaatje-game/`.
+Implementation: `src/utils/plaatjeGame.js` (room state machine, round rules, leaderboard), `src/utils/plaatjeAudio.js` (song pool, gated clip download, VC playback), `src/utils/plaatjeText.js` (fuzzy guess matching, import title parsing), `src/web/public/plaatje.html` (lobby + game UI), Plaatje routes/WS handlers in `src/web/server.js`. Full design spec: `docs/superpowers/specs/2026-08-22-plaatje-game-design.md` (local, gitignored).
 
 ## Trivia Game
 
