@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLAATJE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #17091c;
+    --stagelight: #ff9d3c;
+    --hotpink: #ff2e88;
+    --teal: #22e0c0;
+    --cardboard: #f2e8d5;
+    --ink: #241a10;
+    --felt: #4a1330;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size:15px;
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 18%, rgba(255,157,60,.15), transparent 65%),
+      radial-gradient(ellipse 35% 30% at 10% 55%, rgba(255,46,136,.09), transparent 70%),
+      radial-gradient(ellipse 35% 30% at 90% 55%, rgba(34,224,192,.08), transparent 70%),
+      var(--night);
+    color:#f6eee2; min-height:100vh; display:flex; flex-direction:column; overflow-x:hidden;
+  }
+  body::before { content:''; position:fixed; inset:0; pointer-events:none; opacity:.32; mix-blend-mode:overlay; z-index:50;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E"); }
+
+  /* ── kop ── */
+  header { display:flex; align-items:center; gap:20px; padding:18px 30px 6px; }
+  .wordmark { font-family:'Anton'; font-size:1.9rem; letter-spacing:2px; color:var(--cardboard);
+    text-shadow:3px 3px 0 var(--hotpink), 6px 6px 0 rgba(0,0,0,.4); transform:rotate(-1.5deg); }
+  .wordmark span { color:var(--stagelight); }
+  .roominfo { font-size:.82rem; color:#c9a; }
+  .roominfo b { color:#fff; }
+  header .right { margin-left:auto; display:flex; gap:12px; align-items:center; }
+  .vc-toggle { font-size:.76rem; border:1px solid rgba(255,157,60,.5); color:var(--stagelight);
+    border-radius:999px; padding:6px 15px; background:rgba(255,157,60,.08); }
+  .vc-toggle b { color:#fff; }
+  .exit { font-size:.76rem; color:#b9a; background:none; border:none; text-decoration:underline dotted; cursor:pointer; }
+
+  /* ══ DECENNIUM-KAARTEN — drie maten, zelfde ziel ══ */
+  .kaart { border-radius:9px; flex-shrink:0; color:var(--ink); background:var(--cardboard);
+    box-shadow:0 6px 14px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.12);
+    display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; }
+  .kaart .jaar { font-family:'Anton'; line-height:1; position:relative; z-index:2; }
+  .kaart .titel { line-height:1.3; font-weight:600; opacity:.85; position:relative; z-index:2; }
+  .sz-l { width:150px; height:142px; padding:13px 14px; }
+  .sz-l .jaar { font-size:2.3rem; } .sz-l .titel { font-size:.72rem; }
+  .sz-m { width:114px; height:108px; padding:10px 11px; }
+  .sz-m .jaar { font-size:1.75rem; } .sz-m .titel { font-size:.6rem; }
+  .sz-s { width:92px; height:70px; padding:7px 9px; }
+  .sz-s .jaar { font-size:1.15rem; } .sz-s .titel { font-size:.55rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .k70 { background:linear-gradient(160deg,#e8c26a,#d18b2f); }
+  .kaart.k70::after { content:''; position:absolute; left:0; right:0; bottom:41%; height:8px;
+    background:repeating-linear-gradient(90deg,#8a4b18 0 9px, #c8742a 9px 18px, #e8a83e 18px 27px); opacity:.85; }
+  .k70 .jaar { color:#4a2708; }
+  .k80 { background:#141018; color:#fff; box-shadow:0 6px 14px rgba(0,0,0,.5), inset 0 0 0 2px var(--hotpink); }
+  .k80 .jaar { color:var(--hotpink); text-shadow:0 0 12px rgba(255,46,136,.8); }
+  .k80 .titel { color:#7de8de; opacity:1; }
+  .k90 { background:#efe7dc; }
+  .kaart.k90::after { content:''; position:absolute; inset:0; opacity:.32; pointer-events:none;
+    background-image:radial-gradient(circle 3px at 18% 22%, #12a58b 40%, transparent 45%), radial-gradient(circle 3px at 82% 30%, #ef476f 40%, transparent 45%),
+      linear-gradient(65deg, transparent 47%, #6a4c93 47% 52%, transparent 52%); }
+  .k90 .jaar { color:#12a58b; }
+  .k00 { background:linear-gradient(160deg,#e9eef4,#b9c6d4 60%, #dfe7ee); }
+  .k00 .jaar { color:#2b5f9e; background:linear-gradient(180deg,#3e7ec4,#173f6e); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .k10 { background:#ff6f61; color:#fff; }
+  .k10 .jaar { color:#fff; } .k10 .titel { color:#ffe3df; opacity:1; }
+
+  main { flex:1; display:flex; flex-direction:column; gap:24px; padding:16px 30px 20px; }
+
+  /* ── HET PODIUM: wie aan de beurt is, staat groot ── */
+  .spotlight { position:relative; border-radius:20px; padding:22px 26px 24px;
+    background:linear-gradient(180deg, rgba(255,157,60,.09), rgba(0,0,0,.28));
+    border:1.5px solid rgba(255,157,60,.45); box-shadow:0 0 44px rgba(255,157,60,.14), 0 14px 34px rgba(0,0,0,.4);
+    overflow:hidden; }
+  .spot-top { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:14px; position:relative; z-index:2; }
+  .spot-status { position:relative; z-index:2; display:flex; justify-content:center; }
+  .spot-foot { position:relative; z-index:2; }
+  /* het podium-licht: bundel van boven, lichtplas op de vloer */
+  .stage-floor { position:relative; padding:10px 0 6px; }
+  .beam { position:absolute; left:50%; top:-130px; width:620px; margin-left:-310px; height:calc(100% + 140px);
+    background:linear-gradient(180deg, rgba(255,235,190,.30), rgba(255,210,150,.12) 65%, rgba(255,200,130,.04));
+    clip-path:polygon(46.5% 0, 53.5% 0, 100% 100%, 0 100%); filter:blur(12px); mix-blend-mode:screen;
+    transform-origin:top center; animation:sway 7s ease-in-out infinite alternate; pointer-events:none; }
+  @keyframes sway { from{ transform:rotate(-4deg);} to{ transform:rotate(4deg);} }
+  .stage-floor::after { content:''; position:absolute; left:6%; right:6%; bottom:-6px; height:64%;
+    background:radial-gradient(ellipse at 50% 85%, rgba(255,195,115,.28), transparent 68%); pointer-events:none; }
+  .aanzet { font-family:'Anton'; font-size:.72rem; letter-spacing:2.5px; background:var(--stagelight); color:#301c05;
+    padding:5px 12px; border-radius:4px; transform:rotate(-2deg); box-shadow:0 3px 8px rgba(0,0,0,.4); }
+  .ava { width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.3);
+    display:inline-flex; align-items:center; justify-content:center; font-weight:800; font-size:.9rem; flex-shrink:0; }
+  .spot-name { font-family:'Anton'; font-size:1.6rem; letter-spacing:1px; color:#ffe9c9; }
+  .chips { display:flex; gap:5px; }
+  .chip { width:18px; height:18px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #ffd76e, #d99a1e 70%);
+    border:2px dashed rgba(60,30,0,.55); box-shadow:0 2px 4px rgba(0,0,0,.5); }
+  .deck { position:absolute; right:28px; top:20px; width:88px; height:88px; z-index:2; filter:drop-shadow(0 10px 18px rgba(0,0,0,.6)); }
+  .plaat { position:absolute; inset:0; border-radius:50%;
+    background:repeating-radial-gradient(circle, #0d0d0d 0 1.5px, #1f1f1f 1.5px 3.2px); animation:spin 2.8s linear infinite; }
+  .plaat::after { content:'?'; position:absolute; inset:28px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--hotpink), #a00f52); display:flex; align-items:center; justify-content:center;
+    font-family:'Anton'; font-size:1.2rem; color:#ffd; }
+  @keyframes spin { to{ transform:rotate(360deg);} }
+  .eq { display:flex; gap:3px; align-items:flex-end; height:26px; }
+  .eq i { width:5px; border-radius:3px; background:linear-gradient(180deg, var(--hotpink), var(--stagelight)); animation:eq .9s ease-in-out infinite; }
+  .eq i:nth-child(1){height:45%} .eq i:nth-child(2){height:80%;animation-delay:.12s} .eq i:nth-child(3){height:60%;animation-delay:.22s}
+  .eq i:nth-child(4){height:95%;animation-delay:.05s} .eq i:nth-child(5){height:50%;animation-delay:.3s} .eq i:nth-child(6){height:72%;animation-delay:.18s}
+  @keyframes eq { 50%{ transform:scaleY(.45);} }
+  .spot-status { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+  .luistert { font-size:1rem; color:#ffe9c9; }
+  .luistert b { color:var(--stagelight); }
+  .spot-lijn { display:flex; align-items:center; justify-content:center; gap:14px; overflow-x:auto; padding:6px 2px; position:relative; z-index:1; }
+  .spot-lijn .kaart { box-shadow:0 14px 26px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.12); }
+  .kaart.m2 { transform:rotate(-1.3deg); } .kaart.m4 { transform:rotate(1.1deg); }
+  .ghost-slot { width:52px; height:108px; border-radius:9px; border:2.5px dashed var(--stagelight); flex-shrink:0;
+    background:rgba(255,157,60,.1); display:flex; align-items:center; justify-content:center;
+    font-family:'Anton'; font-size:1.3rem; color:var(--stagelight); animation:knipper 1.1s infinite; }
+  @keyframes knipper { 50%{ opacity:.4; } }
+  .spot-foot { display:flex; align-items:center; gap:20px; margin-top:16px; }
+  .twijfel { font-size:.8rem; color:#d9c; }
+  .twijfel b { color:var(--stagelight); }
+  .gok { display:flex; gap:8px; margin-left:auto; align-items:center; }
+  .gok input { background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.18); color:#f6eee2; border-radius:9px;
+    padding:9px 13px; font-size:.8rem; width:225px; font-family:inherit; }
+  .gok input::placeholder { color:#a89; }
+  .knop { font-family:'Anton'; letter-spacing:1px; border:none; border-radius:9px; padding:9px 17px; cursor:pointer; font-size:.8rem; }
+  .knop.gok-btn { background:var(--teal); color:#053c33; }
+  .skip { background:none; border:none; color:#b9a; font-size:.73rem; text-decoration:underline dotted; cursor:pointer; }
+  .skip b { color:#ffd76e; }
+  .dim { opacity:.4; pointer-events:none; }
+
+  /* ── de rest van de tafel ── */
+  .others { display:flex; gap:22px; align-items:stretch; }
+  .pass { flex:1; background:linear-gradient(170deg,#2c1533,#221027); border-radius:14px; padding:14px 16px 12px;
+    border:1px solid rgba(255,255,255,.07); box-shadow:0 10px 24px rgba(0,0,0,.45); position:relative; }
+  .pass:nth-child(1){ transform:rotate(-.6deg); } .pass:nth-child(2){ transform:rotate(.5deg); }
+  .pass::before { content:''; position:absolute; top:-6px; left:50%; width:46px; height:11px; margin-left:-23px;
+    background:rgba(242,232,213,.14); border-radius:1px; transform:rotate(-2.5deg); }
+  .pass-head { display:flex; align-items:center; gap:10px; margin-bottom:11px; }
+  .pass-head .ava { width:30px; height:30px; font-size:.75rem; }
+  .p-name { font-weight:700; font-size:.95rem; }
+  .p-count { font-size:.72rem; color:#b9a; }
+  .p-count b { color:var(--teal); }
+  .pass .chips { margin-left:auto; }
+  .pass .chip { width:15px; height:15px; }
+  .pass-lijn { display:flex; gap:9px; overflow-x:auto; padding-bottom:4px; }
+
+  /* ── HITSTER: midden op het podium, onder de tijdlijn ── */
+  .hit-row { display:flex; align-items:center; justify-content:center; gap:20px; margin-top:20px; position:relative; z-index:2; }
+  .big-red { position:relative; width:158px; height:66px; border-radius:14px; border:none; cursor:pointer; flex-shrink:0;
+    font-family:'Anton'; font-size:1.3rem; letter-spacing:2px; color:#fff;
+    background:linear-gradient(180deg,#ff5560,#d61f3e 55%, #a3122c);
+    box-shadow:0 7px 0 #6d0b1d, 0 12px 26px rgba(214,31,62,.45); transform:rotate(-1deg); }
+  .big-red:active { transform:translateY(5px) rotate(-1deg); box-shadow:0 2px 0 #6d0b1d; }
+  .big-red small { display:block; font-family:'Bricolage Grotesque'; font-size:.55rem; letter-spacing:1px; opacity:.85; }
+  .hit-uitleg { font-size:.8rem; color:#d9c; line-height:1.5; max-width:520px; }
+  .hit-uitleg b { color:#ffd76e; }
+
+  /* ── JOUW TIJDLIJN: de vaste balk onderin ── */
+  .dock { margin-top:auto; border-radius:22px 22px 0 0; padding:18px 30px 24px;
+    background:linear-gradient(180deg, var(--felt), #350d23);
+    border-top:7px solid #7a5a2e; box-shadow:0 -12px 36px rgba(0,0,0,.5), inset 0 8px 22px rgba(0,0,0,.4); }
+  .dock-head { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .dock-title { font-family:'Anton'; letter-spacing:2px; font-size:1.15rem; color:#ffe9c9; }
+  .beurt-hint { font-size:.75rem; color:#d9b; margin-left:6px; }
+  .beurt-hint b { color:var(--stagelight); }
+  .score { font-size:.8rem; color:#d9b; margin-left:auto; }
+  .score b { color:var(--teal); font-size:1.05rem; }
+  .lijn { display:flex; align-items:center; gap:0; overflow-x:auto; padding:8px 2px 4px; }
+  .vak { width:44px; height:120px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .vak .plus { width:28px; height:28px; border-radius:50%; border:2px dashed rgba(255,255,255,.28); color:rgba(255,255,255,.42);
+    display:flex; align-items:center; justify-content:center; font-size:.95rem; }
+  .kaart.d1 { transform:rotate(-1.6deg);} .kaart.d3 { transform:rotate(1.2deg);} .kaart.d5 { transform:rotate(-.9deg);}
+
+  /* onthulling — landt op het podium zelf */
+  .stempel { position:absolute; left:28px; top:16px; background:var(--cardboard); color:var(--ink); border-radius:10px;
+    padding:13px 17px; transform:rotate(-2deg); box-shadow:0 12px 34px rgba(0,0,0,.6); border:2px solid var(--ink); z-index:5; }
+  .stempel .goed { font-family:'Anton'; letter-spacing:1px; color:#1c7a4e; font-size:1.05rem; }
+  .stempel .wat { font-size:.75rem; margin-top:4px; }
+  .stempel .wat b { color:#a3122c; }
+  .confetti { position:absolute; pointer-events:none; font-size:1rem; z-index:5; }
+
+  /* lobby */
+  .lobby { max-width:760px; margin:30px auto; padding:0 26px; display:flex; flex-direction:column; gap:22px; }
+  .lobby-title { font-family:'Anton'; letter-spacing:2px; color:#ffe9c9; }
+  .room-list { display:flex; flex-direction:column; gap:10px; }
+  .room-card { display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:12px;
+    background:linear-gradient(170deg,#2c1533,#221027); border:1px solid rgba(255,255,255,.08); }
+  .room-card .knop { margin-left:auto; }
+  .lobby-create { padding:18px 20px; border-radius:14px; background:rgba(0,0,0,.25);
+    border:1px solid rgba(255,157,60,.25); display:flex; flex-direction:column; gap:12px; }
+  .lobby-create label { display:flex; align-items:center; gap:10px; font-size:.85rem; color:#d9c; }
+  .lobby-create input, .lobby-create select { background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.18);
+    color:#f6eee2; border-radius:8px; padding:7px 10px; font-family:inherit; }
+  .import-box summary { cursor:pointer; color:#b9a; font-size:.8rem; }
+  .import-box table { width:100%; font-size:.75rem; border-collapse:collapse; }
+  .import-box td, .import-box th { padding:4px 6px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left; }
+  .import-box td input { width:70px; }
+  .leeg { color:#987; font-size:.85rem; }
+  /* interactiestatussen (gebruikt door Taak 8) */
+  .vak.kies .plus { border-color:var(--teal); color:var(--teal); cursor:pointer; }
+  .vak.hot .plus { border-color:var(--stagelight); color:var(--stagelight);
+    background:rgba(255,157,60,.15); transform:scale(1.3); }
+  .countdown { height:5px; border-radius:3px; background:rgba(255,255,255,.15); overflow:hidden; margin-top:10px; }
+  .countdown i { display:block; height:100%; background:linear-gradient(90deg,var(--hotpink),var(--stagelight));
+    transition:width 1s linear; }
+  .win-overlay { position:fixed; inset:0; background:rgba(23,9,28,.9); z-index:80;
+    display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; }
+  .win-overlay .wordmark { font-size:3rem; }
+  .mystery-kaart { border:2.5px dashed var(--stagelight); background:rgba(255,157,60,.09); color:var(--stagelight);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; gap:4px; cursor:grab; }
+  .mystery-kaart .q { font-family:'Anton'; font-size:2rem; }
+  .mystery-kaart small { font-size:.55rem; letter-spacing:1px; }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="wordmark">PLAAT<span>JE</span></div>
+    <div class="roominfo" id="roomInfo"></div>
+    <div class="right">
+      <span class="vc-toggle" id="audioModeLabel"></span>
+      <button class="exit" id="btnLeave">tafel verlaten</button>
+      <div id="jb-nav"></div>
+    </div>
+  </header>
+
+  <div id="lobbyView">
+    <section class="lobby">
+      <h2 class="lobby-title">KIES EEN TAFEL</h2>
+      <div id="roomList" class="room-list"></div>
+      <div class="lobby-create">
+        <h3>Nieuwe tafel</h3>
+        <label>Kaarten om te winnen <input id="setCards" type="number" min="5" max="15" value="10"></label>
+        <div id="poolChecks"></div>
+        <label>Audio
+          <select id="setAudio">
+            <option value="browser">Browser (iedereen luistert zelf)</option>
+            <option value="vc">Jerry draait in het voicekanaal</option>
+          </select>
+        </label>
+        <button id="btnCreate" class="knop gok-btn">Tafel maken</button>
+        <details class="import-box">
+          <summary>Playlist importeren als songpool</summary>
+          <input id="importUrl" placeholder="YouTube-playlist-URL">
+          <button id="btnImportFetch" class="knop">Ophalen</button>
+          <div id="importTable"></div>
+          <input id="importName" placeholder="Naam van de pool" style="display:none">
+          <button id="btnImportSave" class="knop gok-btn" style="display:none">Pool opslaan</button>
+        </details>
+      </div>
+    </section>
+  </div>
+
+  <div id="gameView" style="display:none">
+    <main>
+      <!-- wie aan de beurt is, staat in de spotlight -->
+      <section class="spotlight">
+        <div class="deck"><div class="plaat"></div></div>
+        <div class="spot-top" id="spotTop"></div>
+        <div class="spot-status" id="spotStatus"></div>
+        <div class="stage-floor">
+          <div class="beam"></div>
+          <div class="spot-lijn" id="spotLijn"></div>
+        </div>
+        <div class="hit-row" id="hitRow"></div>
+        <div class="spot-foot" id="spotFoot"></div>
+        <div id="stempelWrap"></div>
+      </section>
+
+      <!-- de andere spelers aan tafel -->
+      <section class="others" id="othersRow"></section>
+    </main>
+
+    <!-- jouw eigen tafelrand, vast onderin, groot -->
+    <section class="dock">
+      <div class="dock-head" id="dockHead"></div>
+      <div class="lijn" id="dockLijn"></div>
+    </section>
+  </div>
+
+  <audio id="roundAudio" preload="none"></audio>
+  <script src="/js/common.js"></script>
+  <script>
+    const escapeHtml = JB.escapeHtml;
+    let ws = null;
+    let me = null;
+    let currentRoom = null; // laatste plaatje:state
+    let mySpectator = false;
+    window._hitsterArmed = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function decadeClass(year) {
+      if (year < 1980) return 'k70';
+      if (year < 1990) return 'k80';
+      if (year < 2000) return 'k90';
+      if (year < 2010) return 'k00';
+      return 'k10';
+    }
+
+    function kaartHtml(card, sizeClass) {
+      return `<div class="kaart ${sizeClass} ${decadeClass(card.year)}">
+        <span class="jaar">${card.year}</span>
+        <span class="titel">${escapeHtml(card.title)}${sizeClass !== 'sz-s' ? '<br>' + escapeHtml(card.artist) : ''}</span>
+      </div>`;
+    }
+
+    function chipsHtml(n) {
+      return `<span class="chips">${'<span class="chip"></span>'.repeat(Math.max(0, n))}</span>`;
+    }
+
+    function avaHtml(p, size) {
+      const stijl = p.avatar ? `background-image:url(${p.avatar});background-size:cover` : 'background:linear-gradient(135deg,#6a5acd,#48b1f3)';
+      return `<span class="ava" style="${stijl};${size ? `width:${size}px;height:${size}px` : ''}">${p.avatar ? '' : escapeHtml((p.displayName || '?')[0].toUpperCase())}</span>`;
+    }
+
+    function showLobby() {
+      $('lobbyView').style.display = '';
+      $('gameView').style.display = 'none';
+      sessionStorage.removeItem('plaatjeRoomId');
+      ws?.send({ type: 'plaatje:room:list' });
+    }
+
+    function showGame() {
+      $('lobbyView').style.display = 'none';
+      $('gameView').style.display = '';
+    }
+
+    function renderRoomList(rooms) {
+      $('roomList').innerHTML = rooms.length ? rooms.map((r) => `
+        <div class="room-card">
+          <b>${escapeHtml(r.hostName)}</b>
+          <span class="leeg">${r.playerCount} speler(s) · eerste bij ${r.cardsToWin} · ${r.phase === 'lobby' ? 'wacht op start' : 'bezig'}</span>
+          <button class="knop gok-btn" data-join="${escapeHtml(r.roomId)}">${r.phase === 'lobby' ? 'Meedoen' : 'Meekijken'}</button>
+        </div>`).join('') : '<div class="leeg">Nog geen tafels — maak er een!</div>';
+      for (const btn of $('roomList').querySelectorAll('[data-join]')) {
+        btn.onclick = () => ws.send({ type: 'plaatje:room:join', roomId: btn.dataset.join });
+      }
+    }
+
+    function renderState(room) {
+      currentRoom = room;
+      showGame();
+      const actief = room.players.find((p) => p.id === room.activeUserId);
+      const ik = room.players.find((p) => p.id === me.id);
+      const isMijnBeurt = !mySpectator && room.activeUserId === me.id;
+
+      // kop
+      $('roomInfo').innerHTML = `ronde-tafel van <b>${escapeHtml(room.players.find((p) => p.id === room.hostId)?.displayName ?? '?')}</b> · eerste bij <b>${room.settings.cardsToWin}</b> kaarten`;
+      $('audioModeLabel').innerHTML = room.settings.audioMode === 'vc' ? '🔊 <b>Jerry draait in VC</b>' : '🎧 <b>Luister via je browser</b>';
+
+      if (room.phase === 'lobby') { renderLobbyRoom(room); return; }
+
+      // podium
+      $('spotTop').innerHTML = actief ? `
+        <span class="aanzet">AAN ZET</span>${avaHtml(actief, 38)}
+        <span class="spot-name">${escapeHtml(actief.displayName)}</span>${chipsHtml(actief.tokens)}` : '';
+      $('spotStatus').innerHTML = statusRegel(room, actief, isMijnBeurt);
+      $('spotLijn').innerHTML = actief ? podiumLijnHtml(actief, room, isMijnBeurt) : '';
+      $('hitRow').innerHTML = hitsterHtml(room, ik, isMijnBeurt);
+      $('spotFoot').innerHTML = spotFootHtml(room, isMijnBeurt, ik);
+      $('stempelWrap').innerHTML = room.lastReveal && room.phase === 'reveal' ? stempelHtml(room.lastReveal, room) : '';
+
+      // andere spelers (iedereen behalve de actieve)
+      $('othersRow').innerHTML = room.players.filter((p) => p.id !== room.activeUserId).map((p) => `
+        <div class="pass">
+          <div class="pass-head">${avaHtml(p, 30)}<span class="p-name">${escapeHtml(p.displayName)}</span>
+            <span class="p-count"><b>${p.timeline.length}</b> kaarten${p.connected ? '' : ' · ⚡ offline'}</span>
+            ${chipsHtml(p.tokens)}</div>
+          <div class="pass-lijn">${p.timeline.map((c) => kaartHtml(c, 'sz-s')).join('')}</div>
+        </div>`).join('');
+
+      // eigen tijdlijn
+      if (ik) {
+        $('dockHead').innerHTML = `${avaHtml(ik, 38)}<span class="dock-title">JOUW TIJDLIJN</span>${chipsHtml(ik.tokens)}
+          <span class="beurt-hint">${isMijnBeurt ? 'jij bent <b>aan zet</b> — sleep de mysteriekaart!' : beurtHint(room)}</span>
+          <span class="score"><b>${ik.timeline.length}</b> / ${room.settings.cardsToWin} kaarten</span>`;
+        $('dockLijn').innerHTML = dockLijnHtml(ik, room, isMijnBeurt);
+      } else {
+        $('dockHead').innerHTML = '<span class="dock-title">JE KIJKT MEE</span>';
+        $('dockLijn').innerHTML = '';
+      }
+      bindInteractie(room, isMijnBeurt, ik); // Taak 8
+      if (room.phase === 'finished') renderWinOverlay(room);
+    }
+
+    function beurtHint(room) {
+      const ids = room.players.map((p) => p.id);
+      const mijnIdx = ids.indexOf(me.id);
+      if (mijnIdx < 0) return '';
+      const actieveIdx = ids.indexOf(room.activeUserId);
+      const afstand = (mijnIdx - actieveIdx + ids.length) % ids.length;
+      const voor = room.players[(mijnIdx - 1 + ids.length) % ids.length];
+      return afstand === 1 ? 'jij bent <b>hierna</b>' : `jij bent aan de beurt <b>na ${escapeHtml(voor.displayName)}</b>`;
+    }
+
+    function statusRegel(room, actief, isMijnBeurt) {
+      if (room.phase === 'loading') return '<span class="luistert">De volgende plaat wordt opgezocht…</span>';
+      if (room.phase === 'reveal' || room.phase === 'finished') return '<span class="luistert">Onthulling!</span>';
+      const eq = '<div class="eq"><i></i><i></i><i></i><i></i><i></i><i></i></div>';
+      if (room.phase === 'challenge') {
+        return `<span class="luistert"><b>${escapeHtml(actief.displayName)}</b> heeft gelegd — laatste kans om HITSTER te roepen!</span>
+          <div class="countdown"><i id="challengeBar" style="width:100%"></i></div>`;
+      }
+      return `<span class="luistert">${isMijnBeurt ? 'Jij luistert — kies een plek' : `<b>${escapeHtml(actief.displayName)}</b> luistert en kiest een plek…`}</span>${eq}`;
+    }
+
+    function podiumLijnHtml(actief, room, isMijnBeurt) {
+      const delen = [];
+      const gelegd = room.round?.placedSlot;
+      for (let slot = 0; slot <= actief.timeline.length; slot++) {
+        const klasse = gelegd === slot ? 'ghost-slot' : `vak podium-vak${challengeKiesbaar(room) ? ' kies' : ''}`;
+        delen.push(gelegd === slot
+          ? '<div class="ghost-slot">?</div>'
+          : `<div class="${klasse}" data-podium-slot="${slot}"><span class="plus">+</span></div>`);
+        if (slot < actief.timeline.length) delen.push(kaartHtml(actief.timeline[slot], 'sz-m'));
+      }
+      return delen.join('');
+    }
+
+    function challengeKiesbaar(room) {
+      return !mySpectator && me.id !== room.activeUserId
+        && ['listening', 'challenge'].includes(room.phase)
+        && window._hitsterArmed === room.round?.nonce;
+    }
+
+    function hitsterHtml(room, ik, isMijnBeurt) {
+      if (isMijnBeurt || mySpectator || !['listening', 'challenge'].includes(room.phase)) return '';
+      const alGedaagd = room.round?.challengers.includes(me.id);
+      if (alGedaagd) return '<div class="hit-uitleg">HITSTER geroepen — je fiche ligt in de pot. Nu maar hopen…</div>';
+      if (!ik || ik.tokens < 1) return '<div class="hit-uitleg">Geen fiches — je kunt niet uitdagen.</div>';
+      if (window._hitsterArmed === room.round?.nonce) {
+        return '<div class="hit-uitleg"><b>Wijs de juiste plek aan</b> op de tijdlijn hierboven ↑</div>';
+      }
+      return `<button class="big-red" id="btnHitster">HITSTER!<small>zet 1 fiche in</small></button>
+        <div class="hit-uitleg">Denk je dat de kaart fout ligt? Sla <b>vóór de onthulling</b> en wijs de juiste plek aan.
+          Heb jij gelijk, dan steel je de kaart — anders ben je je fiche kwijt.</div>`;
+    }
+
+    function spotFootHtml(room, isMijnBeurt, ik) {
+      if (!isMijnBeurt || !['listening', 'challenge'].includes(room.phase)) return '';
+      const gok = room.round?.hasGuess
+        ? '<span class="twijfel">Gok geplaatst — je hoort het bij de onthulling</span>'
+        : `<div class="gok"><input id="gokArtiest" placeholder="artiest"><input id="gokTitel" placeholder="titel">
+           <button class="knop gok-btn" id="btnGok">GOK · +1 fiche</button></div>`;
+      const swap = room.phase === 'listening' && ik.tokens >= 1
+        ? '<button class="skip" id="btnSwap">⏭ plaat wisselen · kost <b>1 fiche</b></button>' : '';
+      return `${gok}${swap}`;
+    }
+
+    function stempelHtml(reveal, room) {
+      const naam = escapeHtml(room.players.find((p) => p.id === reveal.activeId)?.displayName ?? '?');
+      const kop = reveal.activeCorrect ? '✔ GOED GELEGD' : '✘ FOUT GELEGD';
+      const stal = reveal.stolenBy
+        ? `<br><b>${escapeHtml(room.players.find((p) => p.id === reveal.stolenBy)?.displayName ?? '?')}</b> steelt de kaart! 🎉` : '';
+      const gok = reveal.guessCorrect ? `<br>${naam} raadde artiest + titel: +1 fiche` : '';
+      return `<div class="stempel"><div class="goed" style="${reveal.activeCorrect ? '' : 'color:#a3122c'}">${kop}</div>
+        <div class="wat">Het was <b>${reveal.year}</b> — ${escapeHtml(reveal.title)} · ${escapeHtml(reveal.artist)}${stal}${gok}</div></div>
+        <span class="confetti" style="right:490px; top:14px; transform:rotate(-15deg)">🎉</span>`;
+    }
+
+    function dockLijnHtml(ik, room, isMijnBeurt) {
+      const sleepbaar = isMijnBeurt && room.phase === 'listening' && room.round?.placedSlot == null;
+      const delen = [];
+      for (let slot = 0; slot <= ik.timeline.length; slot++) {
+        delen.push(`<div class="vak${sleepbaar ? ' kies' : ''}" data-dock-slot="${slot}"><span class="plus">+</span></div>`);
+        if (slot < ik.timeline.length) delen.push(kaartHtml(ik.timeline[slot], 'sz-l'));
+      }
+      if (sleepbaar) {
+        delen.push(`<div class="kaart sz-l mystery-kaart" id="mysteryKaart" draggable="true">
+          <span class="q">?</span><small>SLEEP MIJ</small></div>`);
+      }
+      return delen.join('');
+    }
+
+    function renderLobbyRoom(room) {
+      // wachtkamer: spelerslijst + startknop voor de host, in het podiumvlak
+      $('spotTop').innerHTML = '<span class="spot-name">Wachten op spelers…</span>';
+      $('spotStatus').innerHTML = '';
+      $('spotLijn').innerHTML = room.players.map((p) => `
+        <div class="pass" style="flex:0 1 220px"><div class="pass-head">${avaHtml(p, 30)}
+          <span class="p-name">${escapeHtml(p.displayName)}</span>${p.id === room.hostId ? '<span class="nu" style="font-family:Anton;font-size:.6rem;background:var(--stagelight);color:#301c05;padding:2px 7px;border-radius:3px">HOST</span>' : ''}</div></div>`).join('');
+      $('hitRow').innerHTML = me.id === room.hostId
+        ? `<button class="big-red" id="btnStart" ${room.players.length < 2 ? 'disabled style="opacity:.5"' : ''}>START!<small>${room.players.length} speler(s)</small></button>`
+        : `<div class="hit-uitleg">Wachten tot de host start… (${room.players.length} speler(s))</div>`;
+      $('spotFoot').innerHTML = '';
+      $('stempelWrap').innerHTML = '';
+      $('othersRow').innerHTML = '';
+      $('dockHead').innerHTML = '';
+      $('dockLijn').innerHTML = '';
+      $('btnStart')?.addEventListener('click', () => ws.send({ type: 'plaatje:game:start' }));
+    }
+
+    function renderWinOverlay(room) {
+      const winnaar = room.players.find((p) => p.id === room.winnerId);
+      const bestaande = document.querySelector('.win-overlay');
+      if (bestaande || !winnaar) return;
+      const el = document.createElement('div');
+      el.className = 'win-overlay';
+      el.innerHTML = `<div class="wordmark">${escapeHtml(winnaar.displayName)} WINT! 🏆</div>
+        <div class="hit-uitleg">${room.players.map((p) => `${escapeHtml(p.displayName)}: ${p.timeline.length} kaarten`).join(' · ')}</div>
+        <button class="knop gok-btn" id="btnTerug">Terug naar de lobby</button>`;
+      document.body.appendChild(el);
+      $('btnTerug').onclick = () => { el.remove(); ws.send({ type: 'plaatje:room:leave' }); showLobby(); };
+    }
+
+    // ── Taak 8 vult deze interactielaag in (drag & drop, HITSTER-flow, audio) ──
+    function startRoundAudio(nonce) {}
+    function stopRoundAudio() {}
+    function toonHover(slot) {}
+    function bindInteractie(room, isMijnBeurt, ik) {}
+
+    async function init() {
+      me = await JB.me();
+      JB.initNav('plaatje');
+      const pools = await fetch('/api/plaatje/pools').then((r) => r.json());
+      $('poolChecks').innerHTML = pools.pools.map((p) => `
+        <label><input type="checkbox" value="${escapeHtml(p.id)}" ${p.id === 'base' ? 'checked' : ''}>
+          ${escapeHtml(p.name)} (${p.count})</label>`).join('');
+
+      ws = JB.connectSocket({
+        onOpen() {
+          const vorige = sessionStorage.getItem('plaatjeRoomId');
+          if (vorige) ws.send({ type: 'plaatje:room:rejoin', roomId: vorige });
+          else ws.send({ type: 'plaatje:room:list' });
+        },
+        onMessage(data) {
+          switch (data.type) {
+            case 'plaatje:room:list': renderRoomList(data.rooms); break;
+            case 'plaatje:room:joined':
+              mySpectator = data.you.isSpectator;
+              sessionStorage.setItem('plaatjeRoomId', data.room.roomId);
+              renderState(data.room);
+              break;
+            case 'plaatje:state': renderState(data.room); break;
+            case 'plaatje:round:audio': startRoundAudio(data.nonce); break;
+            case 'plaatje:turn:hover': toonHover(data.slot); break;
+            case 'plaatje:reveal': stopRoundAudio(); break; // state volgt apart
+            case 'plaatje:game:over': renderState(data.room); break;
+            case 'plaatje:room:rejoinFailed': showLobby(); break;
+            case 'plaatje:error': JB.toast(data.message, 'error'); break;
+          }
+        },
+      });
+
+      $('btnCreate').onclick = () => {
+        const poolIds = [...$('poolChecks').querySelectorAll('input:checked')].map((c) => c.value);
+        ws.send({ type: 'plaatje:room:create', cardsToWin: Number($('setCards').value), poolIds, audioMode: $('setAudio').value });
+      };
+      $('btnLeave').onclick = () => { ws.send({ type: 'plaatje:room:leave' }); stopRoundAudio(); showLobby(); };
+
+      $('btnImportFetch').onclick = async () => {
+        const res = await fetch('/api/plaatje/import/fetch', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: $('importUrl').value }),
+        });
+        const data = await res.json();
+        if (!res.ok) return JB.toast(data.error, 'error');
+        window._importRows = data.rows;
+        $('importName').value = data.name; $('importName').style.display = ''; $('btnImportSave').style.display = '';
+        $('importTable').innerHTML = `<table><tr><th>Artiest</th><th>Titel</th><th>Jaar</th></tr>${data.rows.map((r, i) => `
+          <tr><td><input data-imp="artist:${i}" value="${escapeHtml(r.artist)}"></td>
+          <td><input data-imp="title:${i}" value="${escapeHtml(r.title)}"></td>
+          <td><input data-imp="year:${i}" type="number" value="${r.year ?? ''}" placeholder="!"></td></tr>`).join('')}</table>`;
+      };
+      $('btnImportSave').onclick = async () => {
+        const rows = window._importRows.map((r, i) => ({
+          youtubeId: r.youtubeId,
+          artist: document.querySelector(`[data-imp="artist:${i}"]`).value,
+          title: document.querySelector(`[data-imp="title:${i}"]`).value,
+          year: Number(document.querySelector(`[data-imp="year:${i}"]`).value),
+        }));
+        const res = await fetch('/api/plaatje/import/save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: $('importName').value, songs: rows }),
+        });
+        const data = await res.json();
+        if (!res.ok) return JB.toast(data.error, 'error');
+        JB.toast(`Pool opgeslagen (${data.count} songs)`, 'success');
+        init(); // pools herladen
+      };
+    }
+    init();
+  </script>
+</body>
+</html>
