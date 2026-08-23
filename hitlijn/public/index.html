@@ -287,8 +287,9 @@
     </div>
     <div class="spotify-blok">
       <button class="knop-spotify" id="btnSpotify" hidden>◉ Verbind Spotify <span style="font-weight:400;font-size:.75rem">(optioneel)</span></button>
-      <div class="spotify-uitleg">Met Spotify Premium hoor je volledige nummers via je eigen account.<br>
+      <div class="spotify-uitleg" id="spotifyUitleg">Met Spotify Premium hoor je volledige nummers via je eigen account.<br>
         Zonder Spotify speel je gewoon mee met 30-seconden-previews — niets nodig.</div>
+      <div class="spotify-uitleg" id="spotifyVerbonden" hidden>✔ Verbonden met Spotify — je hoort straks volledige nummers</div>
     </div>
     <div class="instap-voet">Geen account nodig · we bewaren niets over jou<br>huisregel: niet op je Spotify-app spieken 😉</div>
   </div>
@@ -405,7 +406,7 @@
   }
   function bootstrap() {
     stuur('hl:hello', { playerId, name: naam });
-    stuur('hl:audio:mode', { mode: 'preview' });
+    stuur('hl:audio:mode', { mode: heeftSpotifyToken() ? 'spotify' : 'preview' }); // Taak 6
   }
   function connect() {
     let delay = 2000;
@@ -729,16 +730,26 @@
 
   const beperkteBeweging = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // ── preview-audio ────────────────────────────────────────────────────────
+  // ── audio: Spotify (indien verbonden) met terugval op preview ──────────────
   function startRondeAudio(payload) {
     const token = ++audioToken;
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
-    if (payload.spotifyId) { /* Taak 6: Spotify Premium-afspelen via de Web Playback SDK */ }
+    spotifyPlayingThisRound = false;
+    if (payload.spotifyId && heeftSpotifyToken()) {
+      setAudioIndicator('spotify');
+      speelSpotify(payload.spotifyId, token, payload.previewUrl); // Taak 6 — valt zelf terug op speelPreview() bij elke fout
+      return;
+    }
+    speelPreview(payload, token);
+  }
+  function speelPreview(payload, token) {
+    setAudioIndicator('preview');
     if (!payload.previewUrl) return; // geen preview deze ronde — stil, net als de besloten versie bij een gefaalde meting
     const audio = $('rondeAudio');
     audio.src = payload.previewUrl;
     const speelt = audio.play();
+    const knop = $('btnReplay');
     if (knop) knop.hidden = false; // altijd beschikbaar zodra er iets te herhalen valt, niet alleen bij een geblokkeerde autoplay
     if (speelt && typeof speelt.catch === 'function') {
       speelt.catch(() => {
@@ -754,6 +765,10 @@
     audio.removeAttribute('src');
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
+    if (spotifyPlayingThisRound) {
+      spotifyPlayingThisRound = false;
+      spotifyFetch('/me/player/pause', { method: 'PUT' }).catch(() => {}); // best effort, Taak 6
+    }
   }
   $('btnReplay').addEventListener('click', () => {
     const audio = $('rondeAudio');
@@ -895,19 +910,246 @@
     prevPhase = room.phase;
   }
 
+  // ── Taak 6: Spotify-laag (PKCE-login, SDK/Connect-afspelen, preview-terugval) ──────────
+  // Volledig client-side: geen server-secret, alleen PKCE. Zonder spotifyClientId in
+  // /api/config blijft deze hele laag inert (knop verborgen, mode blijft 'preview') — dat is
+  // vandaag de lanceerstand totdat de eigenaar de app bij Spotify registreert.
+  let spotifyClientId = null;           // uit /api/config, null = laag onzichtbaar
+  let spotifyTokens = null;             // { access, refresh, verlooptOm } — bewaard in sessionStorage
+  let spotifyRefreshing = null;         // in-flight refresh-promise, voorkomt dubbele refresh-grants
+  let spotifyPlayer = null;             // Web Playback SDK-instantie (alleen waar de SDK 'ready' wordt)
+  let spotifyDeviceId = null;           // SDK device_id zodra 'ready' — afwezig = Connect-only (mobiel)
+  let spotifySdkLoading = null;         // promise, laadt en initialiseert de SDK maar één keer
+  let spotifyPlayingThisRound = false;  // stuurt of stopRondeAudio() een pause moet versturen
+  let spotifyGeenDeviceGemeld = false;  // NO_ACTIVE_DEVICE-toast maar één keer per sessie
+
+  const SPOTIFY_ACCOUNTS = 'https://accounts.spotify.com';
+  const SPOTIFY_API = 'https://api.spotify.com/v1';
+  const SPOTIFY_SCOPES = 'streaming user-read-playback-state user-modify-playback-state user-read-email';
+
+  function genereerSpotifyVerifier() {
+    const alfabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    const bytes = new Uint8Array(64);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (const b of bytes) out += alfabet[b % alfabet.length];
+    return out;
+  }
+  async function genereerSpotifyChallenge(verifier) {
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    let bin = '';
+    for (const b of new Uint8Array(hash)) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function laadSpotifyTokens() {
+    try {
+      const raw = sessionStorage.getItem('hlSpotifyTokens');
+      spotifyTokens = raw ? JSON.parse(raw) : null;
+    } catch { spotifyTokens = null; }
+  }
+  function bewaarSpotifyTokens() {
+    if (spotifyTokens) sessionStorage.setItem('hlSpotifyTokens', JSON.stringify(spotifyTokens));
+    else sessionStorage.removeItem('hlSpotifyTokens');
+  }
+  function heeftSpotifyToken() { return Boolean(spotifyTokens && spotifyTokens.access); }
+
+  function updateSpotifyKnop() {
+    const btn = $('btnSpotify'); if (!btn) return;
+    const verbonden = heeftSpotifyToken();
+    btn.hidden = verbonden || !spotifyClientId;
+    const uitleg = $('spotifyUitleg'); if (uitleg) uitleg.hidden = verbonden;
+    const status = $('spotifyVerbonden'); if (status) status.hidden = !verbonden;
+  }
+  function setAudioIndicator(modus) {
+    const el = $('audioInd'); if (!el) return;
+    el.innerHTML = modus === 'spotify' ? '<span class="dot-sp"></span> Spotify' : '🎧 preview';
+  }
+
+  // Volledige terugval: tokens weg, server op de hoogte, knop weer zichtbaar, korte uitleg.
+  function valSpotifyTerug(bericht) {
+    spotifyTokens = null;
+    bewaarSpotifyTokens();
+    stuur('hl:audio:mode', { mode: 'preview' });
+    updateSpotifyKnop();
+    setAudioIndicator('preview');
+    toonFout(bericht ?? 'Spotify-verbinding verbroken — je speelt verder met previews');
+  }
+
+  async function verversSpotifyToken() {
+    if (!spotifyTokens?.refresh || !spotifyClientId) throw new Error('geen refresh-token');
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token', refresh_token: spotifyTokens.refresh, client_id: spotifyClientId,
+    });
+    const res = await fetch(`${SPOTIFY_ACCOUNTS}/api/token`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
+    });
+    if (!res.ok) throw new Error('refresh mislukt');
+    const json = await res.json();
+    spotifyTokens = {
+      access: json.access_token,
+      refresh: json.refresh_token || spotifyTokens.refresh, // Spotify geeft niet altijd een nieuwe refresh_token terug
+      verlooptOm: Date.now() + json.expires_in * 1000,
+    };
+    bewaarSpotifyTokens();
+  }
+
+  // Bearer-wrapper met precies één refresh-en-retry bij een 401. Faalt de refresh, dan valt de
+  // hele Spotify-laag terug op preview — de aanroeper hoeft alleen de reject af te vangen.
+  async function spotifyFetch(pad, opties = {}) {
+    if (!heeftSpotifyToken()) throw new Error('geen spotify-token');
+    const doFetch = () => fetch(SPOTIFY_API + pad, {
+      ...opties, headers: { ...(opties.headers || {}), Authorization: 'Bearer ' + spotifyTokens.access },
+    });
+    let res = await doFetch();
+    if (res.status === 401) {
+      try {
+        if (!spotifyRefreshing) spotifyRefreshing = verversSpotifyToken().finally(() => { spotifyRefreshing = null; });
+        await spotifyRefreshing;
+      } catch {
+        valSpotifyTerug();
+        throw new Error('spotify-token-refresh mislukt');
+      }
+      res = await doFetch();
+      if (res.status === 401) { valSpotifyTerug(); throw new Error('spotify blijft 401 na refresh'); }
+    }
+    return res;
+  }
+
+  // Web Playback SDK — alleen op desktop wordt 'ready' bereikt; op mobiel blijft spotifyDeviceId
+  // leeg en valt het afspeel-pad vanzelf terug op Connect-only (het actieve device = de
+  // Spotify-app van de speler).
+  function laadSpotifySdk() {
+    if (spotifySdkLoading) return spotifySdkLoading;
+    spotifySdkLoading = new Promise((resolve) => {
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        try {
+          spotifyPlayer = new Spotify.Player({
+            name: 'HITLIJN',
+            getOAuthToken: (cb) => cb(spotifyTokens?.access ?? ''),
+            volume: 0.8,
+          });
+          spotifyPlayer.addListener('ready', ({ device_id }) => { spotifyDeviceId = device_id; resolve(true); });
+          spotifyPlayer.addListener('not_ready', () => { spotifyDeviceId = null; });
+          spotifyPlayer.addListener('initialization_error', () => resolve(false));
+          spotifyPlayer.addListener('authentication_error', () => resolve(false));
+          spotifyPlayer.addListener('account_error', () => resolve(false));
+          spotifyPlayer.connect();
+        } catch { resolve(false); }
+      };
+      // Geen integrity-attribuut: Spotify's SDK is een evergreen script zonder stabiele hash —
+      // SRI zou het afspelen breken zodra Spotify opnieuw deployt; dit is hun ondersteunde laadpad.
+      const script = document.createElement('script');
+      script.src = 'https://sdk.scdn.co/spotify-player.js';
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+      setTimeout(() => resolve(false), 8000); // geen 'ready' binnen 8s — geef het mobiel-pad de kans
+    });
+    return spotifySdkLoading;
+  }
+  async function activeerSpotify() {
+    if (!heeftSpotifyToken()) return;
+    updateSpotifyKnop();
+    await laadSpotifySdk();
+  }
+
+  // Afspelen: met device_id (SDK, desktop) of zonder (Connect-API op het actieve device,
+  // mobiel). Elke fout in deze keten valt terug op de preview uit dezelfde hl:round-payload —
+  // nooit een kapotte ronde.
+  async function speelSpotify(spotifyId, token, previewUrlTerugval) {
+    try {
+      const pad = spotifyDeviceId ? `/me/player/play?device_id=${encodeURIComponent(spotifyDeviceId)}` : '/me/player/play';
+      const res = await spotifyFetch(pad, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uris: ['spotify:track:' + spotifyId] }),
+      });
+      if (audioToken !== token) return; // alweer een nieuwe ronde — niets meer te melden
+      if (!res.ok) {
+        if (res.status === 404 && !spotifyDeviceId && !spotifyGeenDeviceGemeld) {
+          spotifyGeenDeviceGemeld = true;
+          toonFout('Open je Spotify-app even en speel 1 seconde iets af');
+        }
+        throw new Error('spotify-play mislukt: ' + res.status);
+      }
+      spotifyPlayingThisRound = true;
+    } catch {
+      if (audioToken !== token) return;
+      setAudioIndicator('preview');
+      speelPreview({ previewUrl: previewUrlTerugval }, token);
+    }
+  }
+
+  // PKCE-login: verifier in sessionStorage, S256-challenge naar Spotify's authorize-endpoint.
+  $('btnSpotify').addEventListener('click', async () => {
+    if (!spotifyClientId) return;
+    try {
+      const verifier = genereerSpotifyVerifier();
+      sessionStorage.setItem('hlSpotifyVerifier', verifier);
+      const challenge = await genereerSpotifyChallenge(verifier);
+      const params = new URLSearchParams({
+        client_id: spotifyClientId,
+        response_type: 'code',
+        redirect_uri: location.origin + '/callback',
+        scope: SPOTIFY_SCOPES,
+        code_challenge_method: 'S256',
+        code_challenge: challenge,
+      });
+      location.href = `${SPOTIFY_ACCOUNTS}/authorize?${params.toString()}`;
+    } catch { toonFout('Kon Spotify-login niet starten'); }
+  });
+
+  // Landing na de Spotify-redirect: ruilt de code voor tokens (PKCE, geen secret) en trekt de
+  // adresbalk daarna altijd terug naar '/' — ook als de uitwisseling faalt, anders blijft een
+  // eenmalige code in de URL staan die bij een refresh toch niet meer werkt.
+  async function verwerkSpotifyCallback() {
+    if (location.pathname !== '/callback') return;
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    const err = params.get('error');
+    try {
+      if (err) { toonFout('Spotify-login geweigerd'); return; }
+      if (!code) return;
+      const verifier = sessionStorage.getItem('hlSpotifyVerifier');
+      sessionStorage.removeItem('hlSpotifyVerifier');
+      if (!verifier || !spotifyClientId) { toonFout('Spotify-login verlopen — probeer opnieuw'); return; }
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code', code,
+        redirect_uri: location.origin + '/callback', client_id: spotifyClientId, code_verifier: verifier,
+      });
+      const res = await fetch(`${SPOTIFY_ACCOUNTS}/api/token`, {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
+      });
+      if (!res.ok) throw new Error('token-uitwisseling mislukt');
+      const json = await res.json();
+      spotifyTokens = { access: json.access_token, refresh: json.refresh_token, verlooptOm: Date.now() + json.expires_in * 1000 };
+      bewaarSpotifyTokens();
+    } catch {
+      toonFout('Spotify-login mislukt');
+    } finally {
+      history.replaceState(null, '', '/');
+    }
+  }
+
   // ── boot ─────────────────────────────────────────────────────────────────
   async function initConfig() {
     try {
       const cfg = await fetch('/api/config').then((r) => r.json());
       if (cfg.shout) SHOUT = cfg.shout;
-      if (cfg.spotifyClientId) $('btnSpotify').hidden = false;
+      spotifyClientId = cfg.spotifyClientId || null;
     } catch { /* preview-only blijft werken zonder config */ }
   }
 
   $('veldNaam').value = naam;
   showEntry();
-  initConfig();
-  connect();
+  laadSpotifyTokens();
+  (async () => {
+    await initConfig();               // spotifyClientId + SHOUT
+    await verwerkSpotifyCallback();   // ruilt ?code in als we net van Spotify terugkomen
+    updateSpotifyKnop();
+    if (heeftSpotifyToken()) activeerSpotify(); // lazy SDK-load, alleen na een geldig token
+    connect();
+  })();
 </script>
 </body>
 </html>
