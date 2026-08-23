@@ -143,8 +143,11 @@
     background:rgba(255,157,60,.12); display:flex; align-items:center; justify-content:center;
     font-family:'Anton'; color:var(--stagelight); animation:knipper 1.1s infinite; }
   @keyframes knipper { 50% { opacity:.4; } }
+  .band-lijn .vak { width:28px; height:70px; } /* mini-formaat, past bij sz-s kaarten in de band */
   .countdown { height:5px; border-radius:3px; background:rgba(255,255,255,.15); overflow:hidden; margin-top:9px; }
   .countdown i { display:block; height:100%; width:100%; background:linear-gradient(90deg,#d61f3e,var(--stagelight)); }
+  .band.paniek .countdown i { animation:paniekpuls .35s ease-in-out infinite alternate; }
+  @keyframes paniekpuls { from { opacity:1; } to { opacity:.55; } }
 
   /* reveal-stempel (niet in de mockup — compacte variant van de besloten versie) */
   .stempel-mobiel { margin:8px 12px 0; background:var(--cardboard); color:var(--ink); border-radius:10px;
@@ -156,6 +159,14 @@
     0% { transform:scale(2.4) rotate(6deg); opacity:0; }
     65% { transform:scale(.95) rotate(-2deg); opacity:1; }
     100% { transform:scale(1) rotate(-1.2deg); }
+  }
+
+  /* reveal-confetti (JS zaait ≤16 deeltjes, elk met eigen --dx/--dy/--rot) */
+  .hl-deeltje { position:fixed; width:8px; height:11px; border-radius:2px; pointer-events:none; z-index:70;
+    animation:hl-deeltje .9s cubic-bezier(.15,.6,.4,1) forwards; }
+  @keyframes hl-deeltje {
+    0% { transform:translate(0,0) rotate(0); opacity:1; }
+    100% { transform:translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity:0; }
   }
 
   /* tegenstanders: compacte chips-rij */
@@ -198,6 +209,7 @@
     display:flex; align-items:center; justify-content:center; font-size:.8rem; }
   .vak.kies .plus { border-color:var(--teal); color:var(--teal); cursor:pointer; }
   .vak.hot .plus { border-color:var(--teal); color:var(--teal); background:rgba(34,224,192,.15); transform:scale(1.25); }
+  .mijn-lijn .spook { width:34px; height:88px; } /* zelfde ghost als de band, maar op mijn-lijn-formaat */
 
   /* onderbalk: duimzone */
   .duimzone { padding:10px 14px calc(18px + env(safe-area-inset-bottom)); position:relative; z-index:2; }
@@ -529,9 +541,11 @@
 
   function bandLijnHtml(actief, room) {
     const gelegd = room.round?.placedSlot;
+    const kiesbaar = shoutArmed;
     const delen = [];
     for (let slot = 0; slot <= actief.timeline.length; slot++) {
       if (gelegd === slot) delen.push('<div class="spook">?</div>');
+      else delen.push(`<div class="vak${kiesbaar ? ' kies' : ''}" data-band-slot="${slot}"><span class="plus">+</span></div>`);
       if (slot < actief.timeline.length) delen.push(kaartHtml(actief.timeline[slot], 'sz-s'));
     }
     return delen.join('');
@@ -564,9 +578,10 @@
       <span class="mijn-score"><b>${ik.timeline.length}</b>/${room.settings.cardsToWin}</span>`;
     const legFase = isMijnBeurt && ['listening', 'challenge'].includes(room.phase);
     if (legFase) {
+      const gelegd = room.round?.placedSlot;
       const delen = [];
       for (let slot = 0; slot <= ik.timeline.length; slot++) {
-        delen.push(`<div class="vak" data-mijn-slot="${slot}"><span class="plus">+</span></div>`);
+        delen.push(gelegd === slot ? '<div class="spook">?</div>' : `<div class="vak" data-mijn-slot="${slot}"><span class="plus">+</span></div>`);
         if (slot < ik.timeline.length) delen.push(kaartHtml(ik.timeline[slot], 'sz-m2'));
       }
       $('mijnLijn').innerHTML = delen.join('');
@@ -606,6 +621,10 @@
       const alGeroepen = (room.round?.challengers ?? []).includes(me.id);
       if (alGeroepen) {
         zone.innerHTML = '<div class="duim-uitleg">geroepen — je fiche ligt in de pot, nu maar hopen…</div>';
+        return;
+      }
+      if (shoutArmed) {
+        zone.innerHTML = `<button class="roep-knop" id="btnRoep">WIJS EEN PLEK AAN ↑<small>tik een vak in de tijdlijn hierboven — of tik hier om te annuleren</small></button>`;
         return;
       }
       const kan = ik.tokens >= 1;
@@ -690,10 +709,191 @@
     };
   }
 
-  // ── Taak 5-stubs (leeg — interactielaag) ────────────────────────────────
-  function startRondeAudio(payload) {}
-  function stopRondeAudio() {}
-  function bindInteractie(room, isMijnBeurt, ik) {}
+  // ── Taak 5: interactielaag ───────────────────────────────────────────────
+  // Let op: room.round.nonce blijft in de huidige serverkern (PlaatjeRoom.beginRound in
+  // src/utils/plaatjeGame.js) elke ronde op 1 staan — beginRound berekent 'm uit
+  // this.round.nonce, maar resolveReveal() heeft this.round dan al naar null gezet, dus de
+  // nonce "verhoogt" altijd vanaf 0. Dat maakt een nonce-vergelijking onbruikbaar om rondes van
+  // elkaar te onderscheiden. Deze pagina verankert ronde-overgangen daarom aan de FASE
+  // (prevPhase) i.p.v. aan de servernonce, en gebruikt voor audio een eigen, lokaal oplopende
+  // teller (audioToken) in plaats van de servernonce. Een echte fix hoort in plaatjeGame.js,
+  // buiten de scope van dit bestand — die raakt ook de besloten (bureaublad-)versie van het spel.
+  let gekozenSlot = null;      // mijn-lijn-slot dat "hot" staat, wacht op de bevestigende tweede tik
+  let shoutArmed = false;      // staat de HITLIJN-roep op dit moment gewapend?
+  let audioToken = 0;          // lokale, altijd-oplopende teller — onafhankelijk van de servernonce
+  let challengeStartedAt = null; // wall-clock ms waarop DEZE client de huidige challenge-fase voor het eerst zag
+  let paniekActief = false;
+  let paniekTimer = null;
+  let chipTimer = null;
+  let prevPhase = null;        // voor de reveal-confetti én het verankeren van challengeStartedAt/shoutArmed
+
+  const beperkteBeweging = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── preview-audio ────────────────────────────────────────────────────────
+  function startRondeAudio(payload) {
+    const token = ++audioToken;
+    const knop = $('btnReplay');
+    if (knop) knop.hidden = true;
+    if (payload.spotifyId) { /* Taak 6: Spotify Premium-afspelen via de Web Playback SDK */ }
+    if (!payload.previewUrl) return; // geen preview deze ronde — stil, net als de besloten versie bij een gefaalde meting
+    const audio = $('rondeAudio');
+    audio.src = payload.previewUrl;
+    const speelt = audio.play();
+    if (knop) knop.hidden = false; // altijd beschikbaar zodra er iets te herhalen valt, niet alleen bij een geblokkeerde autoplay
+    if (speelt && typeof speelt.catch === 'function') {
+      speelt.catch(() => {
+        if (audioToken !== token) return; // alweer een nieuwe ronde gestart — niets meer te melden
+        toonFout('Tik ▶ om de plaat te starten — browser blokkeerde autoplay');
+      });
+    }
+  }
+  function stopRondeAudio() {
+    audioToken++; // ontkracht een eventueel nog lopende .catch() van de vorige ronde
+    const audio = $('rondeAudio');
+    audio.pause();
+    audio.removeAttribute('src');
+    const knop = $('btnReplay');
+    if (knop) knop.hidden = true;
+  }
+  $('btnReplay').addEventListener('click', () => {
+    const audio = $('rondeAudio');
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  });
+
+  // ── countdown + paniekpuls ───────────────────────────────────────────────
+  // Verankerd op de overgang ín de challenge-fase (prevPhase), niet op room.round.nonce — zie
+  // de toelichting hierboven. Eenmaal verankerd blijft challengeStartedAt staan voor de rest
+  // van deze fase, zodat een tussentijdse render (een gok, een tweede uitdager) de balk niet
+  // terugzet — exact hetzelfde gedrag als het nonce-patroon van de besloten versie zou geven
+  // als die nonce wél per ronde uniek was.
+  function updateCountdown(room) {
+    const bandEl = document.querySelector('.band');
+    if (room.phase !== 'challenge' || !room.round) {
+      if (paniekTimer) { clearTimeout(paniekTimer); paniekTimer = null; }
+      paniekActief = false;
+      challengeStartedAt = null;
+      bandEl?.classList.remove('paniek');
+      return;
+    }
+    if (challengeStartedAt == null) challengeStartedAt = Date.now();
+    const remaining = Math.max(0, 7000 - (Date.now() - challengeStartedAt));
+    const bar = $('countdownBar');
+    if (bar) {
+      bar.style.transition = 'none';
+      bar.style.width = (remaining / 7000) * 100 + '%';
+      void bar.offsetWidth;
+      bar.style.transition = 'width ' + remaining + 'ms linear';
+      bar.style.width = '0%';
+    }
+    if (remaining <= 2000) {
+      bandEl?.classList.add('paniek');
+    } else {
+      bandEl?.classList.remove('paniek');
+      if (!paniekActief) {
+        if (paniekTimer) clearTimeout(paniekTimer);
+        paniekTimer = setTimeout(() => { document.querySelector('.band')?.classList.add('paniek'); }, remaining - 2000);
+      }
+    }
+    paniekActief = true;
+  }
+
+  // ── reveal-confetti (compact: ≤16 deeltjes, zelfremmend, alleen transform/opacity) ──
+  function runRevealConfetti() {
+    try {
+      if (beperkteBeweging()) return;
+      const stempel = document.querySelector('.stempel-mobiel');
+      if (!stempel) return;
+      const r = stempel.getBoundingClientRect();
+      const kleuren = ['#ff2e88', '#ff9d3c', '#22e0c0', '#ffd76e', '#f2e8d5'];
+      for (let i = 0; i < 16; i++) {
+        const d = document.createElement('i');
+        d.className = 'hl-deeltje';
+        d.style.left = (r.left + r.width / 2) + 'px';
+        d.style.top = (r.top + 16) + 'px';
+        d.style.background = kleuren[i % kleuren.length];
+        const hoek = (Math.PI * 2 * i) / 16 + Math.random() * .5;
+        const kracht = 55 * (0.5 + Math.random());
+        d.style.setProperty('--dx', Math.cos(hoek) * kracht + 'px');
+        d.style.setProperty('--dy', (Math.sin(hoek) * kracht - 30) + 'px');
+        d.style.setProperty('--rot', (Math.random() * 720 - 360) + 'deg');
+        document.body.appendChild(d);
+        setTimeout(() => d.remove(), 950);
+      }
+    } catch { /* decoratie mag het spel nooit breken */ }
+  }
+
+  // ── tik-tik plaatsing (eigen tijdlijn) ────────────────────────────────────
+  function syncGekozenUI() {
+    for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) {
+      vak.classList.toggle('hot', Number(vak.dataset.mijnSlot) === gekozenSlot);
+    }
+    document.getElementById('mysterieKaart')?.classList.toggle('gekozen', gekozenSlot != null);
+  }
+  function tikMijnVak(slot, room, isMijnBeurt) {
+    if (!isMijnBeurt || room.phase !== 'listening') return; // niet aan zet of al gelegd — tik doet niets
+    if (gekozenSlot === slot) { gekozenSlot = null; stuur('hl:turn:place', { slot }); }
+    else gekozenSlot = slot;
+    syncGekozenUI();
+  }
+
+  // ── spelerchip-tik: tijdlijn-peek ─────────────────────────────────────────
+  function tikSpelerChip(id, room) {
+    const speler = room.players.find((p) => p.id === id);
+    const el = $('chipUitklap');
+    if (!speler || !el) return;
+    clearTimeout(chipTimer);
+    el.innerHTML = `<div class="uitklap-kop">${esc(speler.displayName)}'s tijdlijn</div>
+      <div class="band-lijn">${speler.timeline.map((c) => kaartHtml(c, 'sz-s')).join('') || '<span style="font-size:.65rem;color:#987">nog geen kaarten</span>'}</div>`;
+    el.hidden = false;
+    chipTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ''; }, 5000);
+  }
+
+  function bindInteractie(room, isMijnBeurt, ik) {
+    updateCountdown(room);
+
+    // een ronde die het listening/challenge-venster verlaat neemt lokale, per-ronde
+    // interactiestate met zich mee — anders overleeft een vergeten keuze/wapening de volgende ronde
+    if (!['listening', 'challenge'].includes(room.phase)) shoutArmed = false;
+
+    // tik-tik plaatsing
+    if (!(isMijnBeurt && room.phase === 'listening')) gekozenSlot = null;
+    for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) {
+      vak.addEventListener('click', () => tikMijnVak(Number(vak.dataset.mijnSlot), room, isMijnBeurt));
+    }
+    syncGekozenUI();
+
+    // gok + wissel
+    $('btnGok')?.addEventListener('click', () => {
+      stuur('hl:turn:guess', { artist: $('gokArtiest')?.value ?? '', title: $('gokTitel')?.value ?? '' });
+    });
+    $('btnWissel')?.addEventListener('click', () => stuur('hl:turn:swap'));
+
+    // HITLIJN-roep: wapenen/ontwapenen + band-vakken kiezen (shoutArmed wordt hierboven al
+    // ontwapend zodra de ronde het listening/challenge-venster verlaat)
+    $('btnRoep')?.addEventListener('click', () => {
+      shoutArmed = !shoutArmed;
+      renderState(currentRoom); // hertekent duimzone + band-vakken met/zonder .kies
+    });
+    for (const vak of document.querySelectorAll('#bandLijn [data-band-slot]')) {
+      vak.addEventListener('click', () => {
+        if (!shoutArmed) return;
+        shoutArmed = false;
+        stuur('hl:challenge', { slot: Number(vak.dataset.bandSlot) });
+      });
+    }
+
+    // spelerchip-tik
+    for (const chip of document.querySelectorAll('#spelersRij [data-speler]')) {
+      chip.addEventListener('click', () => tikSpelerChip(chip.dataset.speler, room));
+    }
+
+    // reveal-confetti: alleen op de overgang ín de reveal-fase, nooit bij een herhaalde render
+    try {
+      if (room.phase === 'reveal' && prevPhase !== 'reveal') runRevealConfetti();
+    } catch { /* decoratie mag het spel nooit breken */ }
+    prevPhase = room.phase;
+  }
 
   // ── boot ─────────────────────────────────────────────────────────────────
   async function initConfig() {
