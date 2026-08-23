@@ -1,7 +1,10 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { listPools } from '../utils/plaatjeAudio.js';
 import { clampCardsToWin } from '../utils/plaatjeGame.js';
-import { createPlaatjeRoomFromDiscord } from '../web/server.js';
+// server.js wordt lazy geladen in execute(): een statische import houdt het
+// deploy-script (npm run deploy) eeuwig in leven via de open handles die
+// server.js bij module-load aanmaakt. Tijdens bot-runtime is server.js al
+// geladen door index.js, dus de dynamic import is dan een gratis cache-hit.
 
 export default {
   data: new SlashCommandBuilder()
@@ -68,6 +71,7 @@ export default {
       avatar: interaction.user.avatar ? `https://cdn.discordapp.com/avatars/${interaction.user.id}/${interaction.user.avatar}.png` : null,
     };
 
+    const { createPlaatjeRoomFromDiscord } = await import('../web/server.js');
     const roomId = createPlaatjeRoomFromDiscord(hostUser, { cardsToWin, poolIds: [poolId], audioMode });
     const joinUrl = `${base}/hitster?room=${roomId}`;
 
