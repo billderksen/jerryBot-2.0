@@ -41,6 +41,7 @@ import { existsSync, createReadStream } from 'fs';
 import { execSync } from 'child_process';
 import { randomBytes } from 'node:crypto';
 import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
+import { parseSpotifyUrl, getTrack, getPlaylistTracks, getAlbumTracks, searchTracks, resolveToYouTube } from '../utils/spotifyResolve.js';
 
 // Detect system yt-dlp for Linux
 let ytDlpExec = ytDlpPkg;
@@ -1167,10 +1168,32 @@ app.post('/api/playlists/:id/shuffle', async (req, res) => {
 app.get('/api/search', rateLimit('search', 15, 60_000), async (req, res) => {
   const query = req.query.q;
   const count = Math.max(1, Math.min(parseInt(req.query.count) || 10, 50)); // Default 10, max 50
+  const source = req.query.source === 'spotify' ? 'spotify' : 'youtube';
   if (!query || query.length < 2) {
     return res.json([]);
   }
-  
+
+  if (source === 'spotify') {
+    // Spotify errors degrade to a friendly error payload rather than an empty array — distinct
+    // from the YouTube branch below on purpose, so the frontend can tell "no results" apart from
+    // "Spotify search is down" (the YouTube source keeps working either way).
+    try {
+      const tracks = await searchTracks(query, count);
+      const songs = tracks.map(track => ({
+        title: `${track.artist} – ${track.title}`,
+        url: track.spotifyUrl,
+        duration: track.durationSec,
+        thumbnail: track.thumbnail,
+        channel: track.artist,
+        spotify: true
+      }));
+      return res.json(songs);
+    } catch (error) {
+      console.error('Spotify search error:', error);
+      return res.status(502).json({ error: 'Spotify-zoekopdracht is momenteel niet beschikbaar.' });
+    }
+  }
+
   try {
     // Check if query is a direct YouTube video URL
     const ytVideoMatch = query.match(/^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -1501,6 +1524,126 @@ app.get('/api/lyrics', async (req, res) => {
   }
 });
 
+// Resolves a list of normalized Spotify tracks (spotifyResolve.js's normalizeTrack shape) to
+// YouTube and hands each one to `queueTrack` sequentially. Exported so Task 3's /play command
+// can reuse this exact loop instead of duplicating it — only "how do I actually queue a song"
+// (web dashboard vs. a Discord interaction) differs between call sites.
+export async function resolveAndQueueSpotifyTracks(tracks, queueTrack) {
+  let added = 0;
+  let failed = 0;
+
+  for (const track of tracks) {
+    try {
+      const resolved = await resolveToYouTube(track, ytDlpExec);
+      if (!resolved?.url) {
+        failed++;
+        continue;
+      }
+      const song = {
+        title: `${track.artist} – ${track.title}`,
+        artist: track.artist,
+        url: resolved.url,
+        thumbnail: track.thumbnail,
+        duration: track.durationSec,
+        spotify: true
+      };
+      const result = await queueTrack(song);
+      if (result && result.success === false) {
+        failed++;
+      } else {
+        added++;
+      }
+    } catch (error) {
+      console.error(`[spotify] Failed to resolve/queue "${track?.artist ?? ''} - ${track?.title ?? ''}":`, error);
+      failed++;
+    }
+  }
+
+  return { added, failed, total: tracks.length };
+}
+
+// Spotify API errors (spotifyResolve.js's spotifyFetch) come through as a plain Error with the
+// HTTP status embedded in the message; pull it back out so a 403 on a Spotify-owned editorial
+// playlist (client-credentials tokens can't read those) can get its own friendly message.
+function spotifyErrorStatus(error) {
+  const match = /Spotify (?:API|token) request failed: (\d{3})/.exec(error?.message ?? '');
+  return match ? parseInt(match[1], 10) : null;
+}
+
+// Spotify URL branch of /api/queue/add: a track resolves to one YouTube song through the same
+// addSongHandler path a normal URL takes; a playlist/album fetches its tracks (capped at 100)
+// and resolves+queues them one at a time via resolveAndQueueSpotifyTracks, so every successful
+// add gets the same broadcastState() the existing YouTube-playlist "Add All" flow produces by
+// calling this endpoint once per track.
+async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requestedById, isRadio }, res) {
+  if (!addSongHandler) {
+    return res.status(500).json({ error: 'Queue not available' });
+  }
+
+  const logAdd = (title) => {
+    if (!activityLogger || !activityLogger.logWebAction) return;
+    if (isRadio) {
+      activityLogger.logWebAction('📻 Radio', 'radio-add', title);
+    } else {
+      activityLogger.logWebAction(requestedBy, 'play', title);
+    }
+  };
+
+  try {
+    if (type === 'track') {
+      const track = await getTrack(id);
+      const resolved = await resolveToYouTube(track, ytDlpExec);
+      if (!resolved?.url) {
+        return res.status(404).json({ error: `Kon "${track.artist} – ${track.title}" niet vinden op YouTube.` });
+      }
+      const song = {
+        title: `${track.artist} – ${track.title}`,
+        artist: track.artist,
+        url: resolved.url,
+        thumbnail: track.thumbnail,
+        duration: track.durationSec,
+        spotify: true,
+        requestedBy,
+        requestedById,
+        source: 'youtube'
+      };
+      const result = await addSongHandler(song, targetGuildId);
+      if (result.success === false) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      logAdd(song.title);
+      return res.json({ success: true, song, result });
+    }
+
+    // playlist or album — cap 100 (getPlaylistTracks enforces its own cap; getAlbumTracks has
+    // no cap of its own, so it's applied here too)
+    const tracks = type === 'playlist' ? await getPlaylistTracks(id, 100) : (await getAlbumTracks(id)).slice(0, 100);
+    if (tracks.length === 0) {
+      return res.status(400).json({ error: 'Deze Spotify-playlist/album bevat geen beschikbare tracks.' });
+    }
+
+    const { added, failed, total } = await resolveAndQueueSpotifyTracks(tracks, async (song) => {
+      const result = await addSongHandler({ ...song, requestedBy, requestedById, source: 'youtube' }, targetGuildId);
+      if (result?.success !== false) logAdd(song.title);
+      return result;
+    });
+
+    const message = failed > 0
+      ? `${added} van ${total} toegevoegd; ${failed} niet gevonden`
+      : `${added} van ${total} toegevoegd`;
+    return res.json({ success: true, spotifyPlaylist: true, added, failed, total, message });
+  } catch (error) {
+    const status = spotifyErrorStatus(error);
+    if (status === 403) {
+      return res.status(403).json({
+        error: 'Deze Spotify-playlist is door Spotify zelf beheerd en niet op te vragen — gebruik een playlist van een gebruiker.'
+      });
+    }
+    console.error('Spotify add error:', error);
+    return res.status(502).json({ error: 'Kon de Spotify-gegevens niet ophalen. Probeer het later opnieuw.' });
+  }
+}
+
 // API endpoint to add song to queue
 app.post('/api/queue/add', rateLimit('queueadd', 20, 60_000), async (req, res) => {
   const { url, title, duration, thumbnail, guildId, requestedBy: customRequestedBy } = req.body;
@@ -1508,15 +1651,23 @@ app.post('/api/queue/add', rateLimit('queueadd', 20, 60_000), async (req, res) =
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
-  if (!isAllowedMediaUrl(url)) {
-    return res.status(400).json({ error: 'Invalid or unsupported URL' });
-  }
 
   // Use custom requestedBy if provided (e.g., for Radio), otherwise use session username
   const requestedBy = customRequestedBy || req.session?.user?.username || 'Web Dashboard';
   const requestedById = req.session?.user?.id || null;
   const isRadio = customRequestedBy && customRequestedBy.toLowerCase().includes('radio');
-  
+
+  // Spotify URLs (track/playlist/album) branch off before the YouTube-only isAllowedMediaUrl
+  // gate below — they resolve to YouTube internally via handleSpotifyAdd.
+  const spotifyRef = parseSpotifyUrl(url);
+  if (spotifyRef) {
+    return handleSpotifyAdd(spotifyRef, { targetGuildId: guildId || currentState.guildId, requestedBy, requestedById, isRadio }, res);
+  }
+
+  if (!isAllowedMediaUrl(url)) {
+    return res.status(400).json({ error: 'Invalid or unsupported URL' });
+  }
+
   try {
     // Get full song info if needed (skip if we already have title, duration, and thumbnail)
     let song = { url, title, duration, thumbnail, requestedBy, requestedById, source: 'youtube' };
