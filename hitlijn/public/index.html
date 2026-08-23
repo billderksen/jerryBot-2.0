@@ -329,7 +329,7 @@
 <div id="spelView" hidden>
   <div class="topbar">
     <div class="wordmark">HIT<span>LIJN</span></div>
-    <span class="kamercode" id="kamercodeLabel"></span>
+    <span class="kamercode" id="kamercodeLabel" role="button" tabindex="0"></span>
     <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren">🔗</button>
     <span class="audio-ind" id="audioInd">🎧 preview</span>
   </div>
@@ -466,16 +466,31 @@
   function bindTikKopieer(el, waardeFn, succesHtmlFn) {
     if (!el || el.dataset.tikKopieerBound) return;
     el.dataset.tikKopieerBound = '1';
-    el.addEventListener('click', async () => {
+    // Vastgelegd nu, vóór de eerste tik ooit kan flippen — niet bij elke klik opnieuw uit
+    // el.innerHTML gelezen, want een tweede tik binnen het succes-venster zou dan de al
+    // geflipte "✔"-content als "origineel" vastleggen en daar permanent op vast blijven zitten.
+    el.dataset.origineleInhoud = el.innerHTML;
+    const kopieerActie = async () => {
       const waarde = waardeFn();
       if (!waarde) return;
       const ok = await kopieerNaarKlembord(waarde);
       if (!ok) { toonFout(waarde); return; } // laatste redmiddel: toon 'm zodat iemand 'm met de hand kan overtikken
-      const origineel = el.innerHTML;
       el.innerHTML = succesHtmlFn();
       clearTimeout(el._kopieerTimer);
-      el._kopieerTimer = setTimeout(() => { el.innerHTML = origineel; }, 1500);
-    });
+      el._kopieerTimer = setTimeout(() => { el.innerHTML = el.dataset.origineleInhoud; }, 1500);
+    };
+    el.addEventListener('click', kopieerActie);
+    // <button>-elementen krijgen Enter/Spatie al gratis van de browser (synthetische click) —
+    // alleen de span-chips (role="button") hebben hier zelf een handler voor nodig. Zonder deze
+    // guard zou een <button> de actie dubbel uitvoeren: eigen keydown + browser's synthetische click.
+    if (el.tagName !== 'BUTTON') {
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+          ev.preventDefault();
+          kopieerActie();
+        }
+      });
+    }
   }
 
   // ── reconnecting WebSocket (eigen, ~20 regels, patroon van common.js) ──────
