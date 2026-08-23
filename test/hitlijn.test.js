@@ -62,16 +62,14 @@ test('audioSourceFor: keuzeketen spotify → preview → skip', () => {
 test('beoordeelDeezerHit: fuzzy op beide velden', () => {
   const song = { artist: 'Nirvana', title: 'Smells Like Teen Spirit' };
   assert.equal(beoordeelDeezerHit({ artist: { name: 'Nirvana' }, title: 'Smells Like Teen Spirit' }, song), true);
+  assert.equal(beoordeelDeezerHit({ artist: { name: 'Nirvana' }, title: 'Smells Like Teen Spirit - Live at Reading' }, song), true);
   assert.equal(beoordeelDeezerHit({ artist: { name: 'Nirvana Tribute Band' }, title: 'Smells Like Teen Spirit (Karaoke)' }, song), false);
   assert.equal(beoordeelDeezerHit(null, song), false);
 });
 
 test('beoordeelSpotifyHit: eerste artiest, fuzzy beide velden', () => {
   const song = { artist: 'Queen', title: 'Bohemian Rhapsody' };
-  assert.equal(beoordeelSpotifyHit({ name: 'Bohemian Rhapsody', artists: [{ name: 'Queen' }] }, song), true);
-  // A "- Remastered YYYY" suffix isn't stripped by normalizeField (only parenthetical/
-  // bracketed text is), so this scores similarity ≈0.515 (< MATCH 0.7) and misses.
-  assert.equal(beoordeelSpotifyHit({ name: 'Bohemian Rhapsody - Remastered 2011', artists: [{ name: 'Queen' }] }, song), false);
+  assert.equal(beoordeelSpotifyHit({ name: 'Bohemian Rhapsody - Remastered 2011', artists: [{ name: 'Queen' }] }, song), true);
   assert.equal(beoordeelSpotifyHit({ name: 'Bohemian Rhapsody', artists: [{ name: 'Panic! At The Disco' }] }, song), false);
   assert.equal(beoordeelSpotifyHit(undefined, song), false);
 });

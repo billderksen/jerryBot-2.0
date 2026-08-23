@@ -57,14 +57,28 @@ export function audioSourceFor({ mode, spotifyOk, previewUrl }) {
 
 const MATCH = 0.7;
 
+// Streaming titels dragen vaak een " - Remastered YYYY" / " - Live" / " - Single Version"
+// staart die normalizeField niet wegknipt (die strip alleen haakjes-inhoud). Ook de kale
+// titel vóór het streepje proberen voorkomt dat zulke titels de fuzzy-match missen.
+function titelVarianten(titel) {
+  const heel = normalizeField(titel);
+  const kaal = normalizeField(String(titel ?? '').split(/\s+-\s+/)[0]);
+  return heel === kaal ? [heel] : [heel, kaal];
+}
+
+function titelMatch(hitTitel, songTitel) {
+  const doel = normalizeField(songTitel);
+  return titelVarianten(hitTitel).some((variant) => similarity(variant, doel) >= MATCH);
+}
+
 export function beoordeelDeezerHit(hit, song) {
   if (!hit?.artist?.name || !hit?.title) return false;
   return similarity(normalizeField(hit.artist.name), normalizeField(song.artist)) >= MATCH
-    && similarity(normalizeField(hit.title), normalizeField(song.title)) >= MATCH;
+    && titelMatch(hit.title, song.title);
 }
 
 export function beoordeelSpotifyHit(item, song) {
   if (!item?.name || !item?.artists?.[0]?.name) return false;
   return similarity(normalizeField(item.artists[0].name), normalizeField(song.artist)) >= MATCH
-    && similarity(normalizeField(item.name), normalizeField(song.title)) >= MATCH;
+    && titelMatch(item.name, song.title);
 }
