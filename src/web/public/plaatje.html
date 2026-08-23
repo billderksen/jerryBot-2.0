@@ -469,6 +469,11 @@
 
     function cssEsc(s) { return String(s).replace(/"/g, '\\"'); }
 
+    // De CSS-media-query dooft alleen CSS-animation/transition — de twee WAAPI
+    // .animate()-vluchten (steal, muntje) draaien daarbuiten om en moeten dit
+    // zelf checken.
+    const beperkteBeweging = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     function fxHerstart(el, klasse) {
       if (!el) return;
       el.classList.remove(klasse); void el.offsetWidth; el.classList.add(klasse);
@@ -651,7 +656,10 @@
             fxDeeltjes(rr.left + rr.width / 2, rr.top, 14, 80);
           } catch { /* nooit het spel breken */ }
         };
-        if (typeof clone.animate === 'function') {
+        if (beperkteBeweging()) {
+          // geen vlucht — kloon meteen weg, eindstand direct zichtbaar
+          landen();
+        } else if (typeof clone.animate === 'function') {
           clone.animate([
             { transform: 'translate(0,0) scale(1) rotate(0deg)' },
             { transform: `translate(${(eindRect.left - b.left) * .55}px, ${(eindRect.top - b.top) - 90}px) scale(.9) rotate(200deg)`, offset: .55 },
@@ -708,7 +716,10 @@
         munt.style.cssText = `left:${vRect.left}px;top:${vRect.top}px;`;
         document.body.appendChild(munt);
         const opruimen = () => munt.remove();
-        if (typeof munt.animate === 'function') {
+        if (beperkteBeweging()) {
+          // geen vlucht — munt meteen weg, het −1-tekstje hieronder blijft de credit tonen
+          opruimen();
+        } else if (typeof munt.animate === 'function') {
           munt.animate([
             { transform: 'translate(0,0) rotateY(0)' },
             { transform: `translate(${pRect.left + pRect.width / 2 - vRect.left}px, ${pRect.top + pRect.height / 2 - vRect.top - 70}px) rotateY(720deg)`, offset: .7 },

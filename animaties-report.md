@@ -105,10 +105,8 @@ elementen (klasse toevoegen volstaat, geen restart-truc nodig).
 `z-index:90` (boven de vlieger/muntje-laag) en de `fadein`-intro.
 
 **Reduced motion** — de hele `@media (prefers-reduced-motion: reduce)`-regel
-1-op-1 overgenomen. Bekende beperking (al aanwezig in de demo, niet
-geïntroduceerd door mij): de twee WAAPI-animaties (steal-vlucht, muntje) zijn
-JS-`.animate()`-calls met een hardcoded duration en worden dus niet
-ingekort door die media query — alleen CSS-`animation`/`transition` wel.
+1-op-1 overgenomen, plus (zie **Fix 1** onderaan) een JS-side check voor de
+twee WAAPI-vluchten die de CSS-regel niet kan raken.
 
 ## Robuustheid
 
@@ -128,3 +126,25 @@ ontbreekt.
   `plaatje:round:audio` bevestigd in `server.js` (zie afwijking hierboven);
   `plaatje:reveal` vóór zijn `plaatje:state` bevestigd (`doPlaatjeReveal()`,
   regel 2885-2886) — dat deel klopte wél met de aanname in de opdracht.
+
+## Fix-log
+
+### Fix 1 — `prefers-reduced-motion` respecteren in de WAAPI-vluchten
+
+Reviewbevinding (Medium): de CSS-media-query dooft alleen CSS-`animation`/
+`transition`, niet de twee JS-`.animate()`-calls (steal-vlucht in
+`runFoutStealFx()`, muntje-vlucht in `runFicheVerliesFx()`) — die hadden een
+hardcoded duration en negeerden de voorkeur.
+
+Fix: nieuwe module-level `beperkteBeweging()` (`window.matchMedia(...).matches`)
+in beide functies vóór de `typeof clone.animate === 'function'` /
+`typeof munt.animate === 'function'`-check. Als de voorkeur staat, wordt
+`.animate()` overgeslagen en direct de bestaande opruim-/eindstand-functie
+aangeroepen (`landen()` resp. `opruimen()`) — kloon/munt verdwijnt meteen,
+bestemmingskaart wordt meteen zichtbaar, pass-flits en confetti-burst/"−1"-
+tekst draaien nog wel (die zijn zelf al CSS-`animation`-gedreven en dus al
+door de bestaande media query ingekort). `runFicheWinstFx()` had geen WAAPI-
+call (alleen de CSS-`plop`-class) en is niet aangepast.
+
+Verificatie na de fix: inline-script parse check → `OK`; `npm test` → 337
+totaal, 335 pass, 0 fail, 2 skipped (ongewijzigd t.o.v. voor de fix).
