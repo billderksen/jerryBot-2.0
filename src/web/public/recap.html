@@ -903,6 +903,8 @@
       // Games
       const gameNames = ['pesten', 'plaatje', 'pictionary'];
       const gameIcons = { pesten: '\uD83C\uDCCF', plaatje: '\uD83D\uDCBF', pictionary: '\uD83C\uDFA8' };
+      // Display labels - the internal key stays 'plaatje', only the shown name is HITSTER.
+      const gameLabels = { pesten: 'Pesten', plaatje: 'Hitster', pictionary: 'Pictionary' };
       const activeGames = gameNames.filter(n => g[n] && g[n].players.length > 0);
       if (activeGames.length > 0) {
         const sec = createEl('div', { class: 'section' });
@@ -915,7 +917,7 @@
         activeGames.forEach(name => {
           const game = g[name];
           const card = createEl('div', { class: 'game-card' });
-          card.appendChild(createTextEl('div', 'game-card-title', gameIcons[name] + ' ' + name.charAt(0).toUpperCase() + name.slice(1)));
+          card.appendChild(createTextEl('div', 'game-card-title', gameIcons[name] + ' ' + gameLabels[name]));
           game.players.forEach(p => {
             const row = createEl('div', { class: 'game-player' });
             row.appendChild(createTextEl('span', 'game-player-name', p.displayName));

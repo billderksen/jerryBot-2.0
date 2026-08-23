@@ -529,10 +529,12 @@ app.get('/api/pesten/rooms', (req, res) => {
   res.json(getPestenRoomList());
 });
 
-// Serve Plaatje game page
-app.get('/plaatje', requireAuth, (req, res) => {
+// Serve Plaatje game page — user-facing name is HITSTER; internal module/route
+// names keep the historical "plaatje" name (see CLAUDE.md).
+app.get('/hitster', requireAuth, (req, res) => {
   res.sendFile(join(__dirname, 'public', 'plaatje.html'));
 });
+app.get('/plaatje', (req, res) => res.redirect('/hitster'));
 
 // Plaatje API endpoints
 
@@ -2720,6 +2722,18 @@ function broadcastPlaatjeState(roomId) {
 function broadcastPlaatjeRoomList() {
   const msg = JSON.stringify({ type: 'plaatje:room:list', rooms: getPlaatjeRoomList() });
   for (const client of clients) if (client.readyState === 1) client.send(msg);
+}
+
+// Creates a HITSTER table from the /hitster slash command (no websocket open yet).
+export function createPlaatjeRoomFromDiscord(hostUser, settings) {
+  const roomId = `plaatje_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const room = createPlaatjeRoom(roomId, hostUser, settings);
+  // Host heeft nog geen websocket open: markeer als offline zodat de bestaande
+  // lege-kamer-opruiming een nooit-geopende tafel na 5 min verwijdert.
+  room.markDisconnected(hostUser.id, Date.now());
+  armPlaatjeEmptyTimer(roomId);
+  broadcastPlaatjeRoomList();
+  return roomId;
 }
 
 function clearPlaatjeTimer(roomId) {

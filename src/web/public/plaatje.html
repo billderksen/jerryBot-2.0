@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PLAATJE</title>
+<title>HITSTER</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
 <style>
@@ -245,7 +245,7 @@
 <body>
 
   <header>
-    <div class="wordmark">PLAAT<span>JE</span></div>
+    <div class="wordmark">HIT<span>STER</span></div>
     <div class="roominfo" id="roomInfo"></div>
     <div class="right">
       <span class="vc-toggle" id="audioModeLabel"></span>
@@ -700,14 +700,25 @@
       } else {
         $('userAvatar').textContent = (me.displayName || me.username || '?').charAt(0).toUpperCase();
       }
-      JB.initNav('plaatje');
+      JB.initNav('hitster');
       await laadPools();
+
+      // Deep-link join (?room=... van /hitster room-command) gaat vóór de
+      // sessionStorage-rejoin — een klik op de join-link moet altijd naar die
+      // kamer, ook als deze browser toevallig nog een andere tafel onthield.
+      const deepLinkRoomId = new URLSearchParams(location.search).get('room');
+      let deepLinkJoinFailed = false;
 
       ws = JB.connectSocket({
         onOpen() {
-          const vorige = sessionStorage.getItem('plaatjeRoomId');
-          if (vorige) ws.send({ type: 'plaatje:room:rejoin', roomId: vorige });
-          else ws.send({ type: 'plaatje:room:list' });
+          if (deepLinkRoomId) {
+            ws.send({ type: 'plaatje:room:join', roomId: deepLinkRoomId });
+            history.replaceState(null, '', '/hitster');
+          } else {
+            const vorige = sessionStorage.getItem('plaatjeRoomId');
+            if (vorige) ws.send({ type: 'plaatje:room:rejoin', roomId: vorige });
+            else ws.send({ type: 'plaatje:room:list' });
+          }
         },
         onMessage(data) {
           switch (data.type) {
@@ -723,7 +734,15 @@
             case 'plaatje:reveal': stopRoundAudio(); break; // state volgt apart
             case 'plaatje:game:over': renderState(data.room); break;
             case 'plaatje:room:rejoinFailed': showLobby(); break;
-            case 'plaatje:error': JB.toast(data.message, 'error'); break;
+            case 'plaatje:error':
+              JB.toast(data.message, 'error');
+              // Een mislukte deep-link join laat anders alleen de foutmelding zien
+              // zonder lobby erachter — vraag alsnog de kamerlijst op.
+              if (deepLinkRoomId && !deepLinkJoinFailed) {
+                deepLinkJoinFailed = true;
+                showLobby();
+              }
+              break;
           }
         },
       });

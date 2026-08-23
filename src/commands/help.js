@@ -14,7 +14,7 @@ const CATEGORIES = [
     emoji: '🎮',
     label: 'Games',
     description: 'Multiplayer games',
-    commands: ['trivia', 'challenge', 'f1']
+    commands: ['trivia', 'challenge', 'f1', 'hitster']
   },
   {
     id: 'social',

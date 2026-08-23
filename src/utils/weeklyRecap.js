@@ -17,6 +17,10 @@ const PICTIONARY_LEADERBOARD = join(DATA_DIR, 'pictionaryLeaderboard.json');
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Display names for the games embed field. The internal key stays 'plaatje'
+// (module/WS-prefix/data-file name); only the label shown to users is HITSTER.
+const GAME_LABELS = { pesten: 'Pesten', plaatje: 'Hitster', pictionary: 'Pictionary' };
+
 let recapData = { channelId: null, scheduleDay: 0, scheduleHour: 0, recaps: [] };
 let snapshots = {};
 let discordClient = null;
@@ -373,7 +377,8 @@ export function buildDiscordEmbed(recap) {
     const g = recap.games[game];
     if (g && g.players.length > 0) {
       const top = g.players[0];
-      gameLines.push(`**${game.charAt(0).toUpperCase() + game.slice(1)}** — ${g.players.length} player${g.players.length !== 1 ? 's' : ''}, top: ${top.displayName} (${top.gamesWon}W/${top.gamesPlayed}P)`);
+      const label = GAME_LABELS[game] ?? (game.charAt(0).toUpperCase() + game.slice(1));
+      gameLines.push(`**${label}** — ${g.players.length} player${g.players.length !== 1 ? 's' : ''}, top: ${top.displayName} (${top.gamesWon}W/${top.gamesPlayed}P)`);
     }
   }
   if (gameLines.length > 0) {

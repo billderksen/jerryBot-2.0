@@ -23,7 +23,7 @@
     { page: 'stats', href: '/stats', label: 'Listening Stats', icon: ICON_STATS },
     { page: 'pesten', href: '/pesten', label: 'Pesten Card Game', icon: ICON_PESTEN },
     { page: 'pictionary', href: '/pictionary', label: 'Pictionary Game', icon: ICON_PICTIONARY },
-    { page: 'plaatje', href: '/plaatje', label: 'Plaatje', icon: ICON_PLAATJE },
+    { page: 'hitster', href: '/hitster', label: 'Hitster', icon: ICON_PLAATJE },
     { page: 'trivia', href: '/trivia', label: 'Trivia', icon: ICON_TRIVIA },
     { page: 'f1', href: '/f1', label: 'F1 Predictions', icon: ICON_F1 },
     { page: 'birthdays', href: '/birthdays', label: 'Birthdays', icon: ICON_BIRTHDAYS },
