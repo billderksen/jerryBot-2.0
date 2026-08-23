@@ -2,7 +2,7 @@
 // De clip is de enige audio die de server ooit uitserveert: begrensd (75s),
 // zonder metadata, onder een anonieme URL — de geheimhoudings-invariant hangt hierop.
 import { spawn, execSync } from 'child_process';
-import { existsSync, unlinkSync, readdirSync, statSync } from 'fs';
+import { existsSync, unlinkSync, readdirSync, statSync, copyFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -18,6 +18,15 @@ import { loadJsonSync } from './jsonStore.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SONGS_FILE = join(__dirname, '../../data/hitsterSongs.json');
 const IMPORTS_FILE = join(__dirname, '../../data/plaatjeImports.json');
+const CLIPS_DIR = join(__dirname, '../../data/plaatjeClips');
+
+// Voorgesneden clip uit de permanente cache (gevuld door de editie-pijplijn).
+// dir is injecteerbaar voor tests.
+export function cachedClipPath(youtubeId, dir = CLIPS_DIR) {
+  if (!/^[\w-]{11}$/.test(String(youtubeId))) return null;
+  const p = join(dir, `${youtubeId}.mp3`);
+  return existsSync(p) ? p : null;
+}
 
 // Zelfde voorkeursvolgorde als musicQueue: ffmpeg-static, maar op Linux wint het systeem-ffmpeg.
 let ffmpegPath = ffmpegStatic;
@@ -103,6 +112,14 @@ function runFfmpeg(args) {
 }
 
 export async function prepareRoundClip(song, roomId) {
+  const cached = cachedClipPath(song.youtubeId);
+  if (cached) {
+    // Kopieer naar een ronde-eigen tmp-pad: de bestaande removeClip-lifecycle
+    // mag de cache zelf nooit opruimen.
+    const mp3Path = join(tmpdir(), `plaatje_${roomId}_${Date.now()}.mp3`);
+    copyFileSync(cached, mp3Path);
+    return { mp3Path, offsetSec: 0 };
+  }
   const url = `https://www.youtube.com/watch?v=${song.youtubeId}`;
   const meta = await ytDlpExec(url, {
     ...ytCookieOpts, dumpSingleJson: true, noCheckCertificates: true, noWarnings: true, skipDownload: true,

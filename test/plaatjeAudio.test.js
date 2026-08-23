@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClipArgs, pickSongFrom, isStalePlaatjeFile } from '../src/utils/plaatjeAudio.js';
+import { mkdtempSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { buildClipArgs, pickSongFrom, isStalePlaatjeFile, cachedClipPath } from '../src/utils/plaatjeAudio.js';
 
 test('buildClipArgs: offset, 75s cap, mp3 128k, geen video, metadata strip', () => {
   const args = buildClipArgs('/tmp/in.opus', '/tmp/out.mp3', 30);
@@ -27,4 +30,24 @@ test('isStalePlaatjeFile: stale plaatje file true, fresh false, non-plaatje fals
   assert.equal(isStalePlaatjeFile('plaatje_room1_12345', oneHourAgo, now), true);
   assert.equal(isStalePlaatjeFile('plaatje_room2_12345', fiveMinutesAgo, now), false);
   assert.equal(isStalePlaatjeFile('other_file_name', oneHourAgo, now), false);
+});
+
+test('cachedClipPath: returns null when cached file does not exist', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'plaatje-test-'));
+  assert.equal(cachedClipPath('dQw4w9WgXcQ', dir), null);
+});
+
+test('cachedClipPath: returns path when cached file exists', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'plaatje-test-'));
+  const youtubeId = 'dQw4w9WgXcQ';
+  const filePath = join(dir, `${youtubeId}.mp3`);
+  writeFileSync(filePath, 'dummy mp3 content');
+  assert.equal(cachedClipPath(youtubeId, dir), filePath);
+});
+
+test('cachedClipPath: returns null for invalid id even with unspecified dir', () => {
+  assert.equal(cachedClipPath('../../etc/passwd'), null);
+  assert.equal(cachedClipPath('abc'), null);
+  assert.equal(cachedClipPath(''), null);
+  assert.equal(cachedClipPath(null), null);
 });
