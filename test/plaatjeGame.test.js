@@ -53,6 +53,10 @@ test('clampCardsToWin', () => {
   assert.equal(clampCardsToWin(3), 5);
   assert.equal(clampCardsToWin(99), 15);
   assert.equal(clampCardsToWin('x'), 10);
+  // Number(null) === 0, which is finite, so this clamps to 5, NOT the "no value" default of 10 —
+  // a caller using null as an "option omitted" sentinel (e.g. Discord's getInteger()) must
+  // coalesce to 10 itself before calling in (see src/commands/hitster.js).
+  assert.equal(clampCardsToWin(null), 5);
 });
 
 test('canHostSkipTurn en shouldDeleteRoom: drempels', () => {

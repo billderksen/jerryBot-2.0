@@ -56,7 +56,10 @@ export default {
     const poolId = validPool ? validPool.id : 'base';
     const poolName = (validPool ?? basePool)?.name ?? 'Basis';
 
-    const cardsToWin = clampCardsToWin(interaction.options.getInteger('kaarten'));
+    // getInteger returns null (not undefined) when the option is omitted, and
+    // clampCardsToWin(null) clamps to 5 (Number(null) === 0), not the documented
+    // default of 10 — coalesce the omitted case before clamping.
+    const cardsToWin = clampCardsToWin(interaction.options.getInteger('kaarten') ?? 10);
     const audioMode = interaction.options.getString('audio') === 'vc' ? 'vc' : 'browser';
 
     const hostUser = {
