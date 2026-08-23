@@ -74,6 +74,8 @@ export class PlaatjeRoom {
     this.winnerId = null;
     this.emptySince = null;
     this.loadFailStreak = 0;
+    this.rondeTeller = 0; // persistente ronde-teller — this.round wordt tussen rondes genuld,
+    // dus die kan de nonce niet leveren (zie beginRound)
     this.addPlayer(hostUser);
   }
 
@@ -137,8 +139,11 @@ export class PlaatjeRoom {
   beginRound(song, offsetSec) {
     if (this.phase !== 'loading') return { ok: false };
     this.usedSongIds.add(song.youtubeId);
+    // this.round is al genuld door resolveReveal() tegen de tijd dat de volgende ronde begint,
+    // dus (this.round?.nonce ?? 0) + 1 zou hier altijd op 1 uitkomen — vandaar de losstaande teller.
+    this.rondeTeller += 1;
     this.round = {
-      song, offsetSec, nonce: (this.round?.nonce ?? 0) + 1,
+      song, offsetSec, nonce: this.rondeTeller,
       placedSlot: null, guess: null, challenges: [],
     };
     this.lastReveal = null;

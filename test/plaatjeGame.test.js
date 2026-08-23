@@ -176,6 +176,23 @@ test('room: swap kan niet meer nadat HITSTER is geroepen', () => {
   deletePlaatjeRoom('r1');
 });
 
+test('guard: round.nonce actually increments across rounds', () => {
+  // Regressietest voor een bug waarbij resolveReveal() this.round al naar null zet vóórdat de
+  // volgende beginRound() draait, waardoor de oude (this.round?.nonce ?? 0) + 1-berekening élke
+  // ronde weer bij 1 begon — een persistente this.rondeTeller lost dat op.
+  const room = maakKamer();
+  room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'eeeeeeeeeee' }, 0);
+  const eersteNonce = room.round.nonce;
+  room.place('u1', room.players.get('u1').timeline.length); // achteraan = altijd goed
+  room.resolveReveal();
+  room.nextTurn();
+  room.beginRound({ title: 'X2', artist: 'Y2', year: 1991, youtubeId: 'fffffffffff' }, 0);
+  const tweedeNonce = room.round.nonce;
+  assert.equal(eersteNonce, 1);
+  assert.equal(tweedeNonce, eersteNonce + 1);
+  deletePlaatjeRoom('r1');
+});
+
 test('guard: resolveReveal() before beginRound returns null, no throw', () => {
   const room = createPlaatjeRoom('r3', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 10 });
   room.addPlayer({ id: 'u2', displayName: 'Koen', avatar: null });
