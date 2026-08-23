@@ -32,6 +32,7 @@ const rooms = new Map();       // code -> { room: PlaatjeRoom, poolId, usedIds:S
 const clients = new Map();     // code -> Set<ws>
 const timers = new Map();      // code -> Timeout (fase-timer)
 const emptyTimers = new Map(); // code -> Timeout
+const rondeLatch = new Set();  // code -> startRonde in-flight (voorkomt dubbele Deezer-fetch)
 
 // simpele sliding-window rate limiter per IP
 const hits = new Map();
@@ -55,6 +56,7 @@ function clearTimer(code) { const t = timers.get(code); if (t) { clearTimeout(t)
 function setTimer(code, ms, fn) { clearTimer(code); timers.set(code, setTimeout(() => { timers.delete(code); fn(); }, ms)); }
 
 function destroyRoom(code) {
+  broadcast(code, 'hl:error', { message: 'Deze tafel is gesloten.' });
   clearTimer(code);
   const t = emptyTimers.get(code); if (t) { clearTimeout(t); emptyTimers.delete(code); }
   rooms.delete(code);
@@ -70,10 +72,15 @@ function armEmptyTimer(code) {
   }, 5 * 60_000 + 1000));
 }
 
-// absolute levensduur: elke 30 min vegen
+// absolute levensduur: elke 30 min vegen (+ grove opruiming van de rate-limit-hits,
+// anders groeit die Map onbegrensd met keys voor allang inactieve ip:actie-paren)
 setInterval(() => {
   const nu = Date.now();
   for (const [code, k] of rooms) if (nu - k.born > 12 * 3600_000) destroyRoom(code);
+  for (const [key, lijst] of hits) {
+    const jongste = lijst[lijst.length - 1] ?? 0;
+    if (nu - jongste > 10 * 60_000) hits.delete(key);
+  }
 }, 30 * 60_000);
 
 // ── rondemotor: geen bestanden, alleen berichtjes ──────────────────────────
@@ -91,32 +98,38 @@ async function versePreview(song) {
 }
 
 async function startRonde(code) {
-  const k = rooms.get(code);
-  if (!k || k.room.phase !== 'loading') return;
-  const pool = laadPools().find((p) => p.id === k.poolId);
-  const song = pool ? pickSong(pool.songs, k.usedIds) : null;
-  if (!song) {
-    broadcast(code, 'hl:error', { message: 'De songpool is leeg — spel voorbij.' });
-    k.room.phase = 'finished';
+  if (rondeLatch.has(code)) return; // dubbele trigger (bv. host-skip 2x snel) niet opnieuw starten
+  rondeLatch.add(code);
+  try {
+    const k = rooms.get(code);
+    if (!k || k.room.phase !== 'loading') return;
+    const pool = laadPools().find((p) => p.id === k.poolId);
+    const song = pool ? pickSong(pool.songs, k.usedIds) : null;
+    if (!song) {
+      broadcast(code, 'hl:error', { message: 'De songpool is leeg — spel voorbij.' });
+      k.room.phase = 'finished';
+      broadcastState(code);
+      return;
+    }
+    const previewUrl = await versePreview(song);
+    const kNa = rooms.get(code);
+    if (kNa !== k || k.room.phase !== 'loading') return; // kamer weg of ingehaald tijdens await
+    song.previewUrl = previewUrl;
+    k.usedIds.add(song.id);
+    k.room.beginRound({ title: song.title, artist: song.artist, year: song.year, youtubeId: song.id.slice(0, 11).padEnd(11, 'x') }, 0);
+    k.spotifyIdVoorRonde = song.spotifyId ?? null;
+    const nonce = k.room.round.nonce;
     broadcastState(code);
-    return;
-  }
-  const previewUrl = await versePreview(song);
-  const kNa = rooms.get(code);
-  if (kNa !== k || k.room.phase !== 'loading') return; // kamer weg of ingehaald tijdens await
-  song.previewUrl = previewUrl;
-  k.usedIds.add(song.id);
-  k.room.beginRound({ title: song.title, artist: song.artist, year: song.year, youtubeId: song.id.slice(0, 11).padEnd(11, 'x') }, 0);
-  k.spotifyIdVoorRonde = song.spotifyId ?? null;
-  const nonce = k.room.round.nonce;
-  broadcastState(code);
-  const set = clients.get(code) ?? new Set();
-  for (const c of set) {
-    if (c.readyState !== 1) continue;
-    const bron = audioSourceFor({ mode: c.audioMode ?? 'preview', spotifyOk: Boolean(song.spotifyId), previewUrl: song.previewUrl });
-    const payload = { type: 'hl:round', nonce, previewUrl: song.previewUrl ?? null };
-    if (bron === 'spotify') payload.spotifyId = song.spotifyId;
-    c.send(JSON.stringify(payload));
+    const set = clients.get(code) ?? new Set();
+    for (const c of set) {
+      if (c.readyState !== 1) continue;
+      const bron = audioSourceFor({ mode: c.audioMode ?? 'preview', spotifyOk: Boolean(song.spotifyId), previewUrl: song.previewUrl });
+      const payload = { type: 'hl:round', nonce, previewUrl: song.previewUrl ?? null };
+      if (bron === 'spotify') payload.spotifyId = song.spotifyId;
+      c.send(JSON.stringify(payload));
+    }
+  } finally {
+    rondeLatch.delete(code);
   }
 }
 
@@ -154,10 +167,29 @@ function doeReveal(code) {
 const server = createServer(app);
 const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 });
 
+// Origin exact-match, geen prefix: 'http://localhost.evil.com' zou anders ook door een
+// startsWith-check komen. Dit verdedigt alleen tegen browser-gemedieerd (CSRF-achtig)
+// misbruik — niet-browser clients sturen vaak geen Origin en worden door de rate limits geremd.
+const LOCALHOST_ORIGIN = /^http:\/\/localhost(:\d+)?$/;
+
+// XFF wordt alleen vertrouwd als de directe peer localhost is (nginx op dezelfde machine);
+// nginx *append* het echte client-IP achteraan een eventuele door de aanvaller meegestuurde
+// lijst, dus het rechtste element is altijd wat nginx zelf zag.
+function clientIp(req) {
+  const peer = req.socket.remoteAddress ?? '';
+  const lokaal = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
+  const xff = req.headers['x-forwarded-for'];
+  if (lokaal && typeof xff === 'string' && xff.length) return xff.split(',').pop().trim();
+  return peer;
+}
+
 wss.on('connection', (ws, req) => {
   const origin = req.headers.origin ?? '';
-  if (origin && !ORIGINS.includes(origin) && !origin.startsWith('http://localhost')) { ws.close(); return; }
-  ws.ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ?? req.socket.remoteAddress;
+  if (origin && !ORIGINS.includes(origin) && !LOCALHOST_ORIGIN.test(origin)) { ws.close(); return; }
+  ws.ip = clientIp(req);
+
+  const perIp = [...wss.clients].filter((c) => c.ip === ws.ip).length;
+  if (perIp > 20 || wss.clients.size > 500) { ws.close(); return; }
 
   ws.on('message', (raw) => {
     let data; try { data = JSON.parse(raw); } catch { return; }
@@ -178,6 +210,9 @@ function fout(ws, message) { stuur(ws, 'hl:error', { message }); }
 
 function afhandelen(ws, data) {
   switch (data.type) {
+    // playerId is een client-gegenereerde, ongokbare uuid zonder token-binding: wie
+    // andermans id kent kan die speler overnemen. Geaccepteerd voor een accountloos
+    // feestspel (zelfde model als de kamercode zelf).
     case 'hl:hello': {
       const naam = validateName(data.name);
       if (!naam || typeof data.playerId !== 'string' || data.playerId.length < 8 || data.playerId.length > 64) return fout(ws, 'Vul een naam van 2-20 tekens in');
@@ -279,6 +314,7 @@ function afhandelen(ws, data) {
     case 'hl:host:skipTurn': {
       const k = rooms.get(ws.roomCode); if (!k) break;
       if (ws.playerId !== k.room.hostId) return fout(ws, 'Alleen de host kan dit');
+      if (!rateLimit(ws.ip, 'skip', 10, 60_000)) return fout(ws, 'Rustig aan');
       const actief = k.room.players.get(k.room.activeUserId);
       if (!actief || actief.connected || !canHostSkipTurn({ disconnectedAtMs: actief.disconnectedAt, nowMs: Date.now() })) {
         return fout(ws, 'De actieve speler is (nog) niet 60s weg');
