@@ -28,7 +28,7 @@ function laadPools() {
 }
 
 // ── kamers ─────────────────────────────────────────────────────────────────
-const rooms = new Map();       // code -> { room: PlaatjeRoom, poolId, usedIds:Set, timer, born, spotifyIdVoorRonde }
+const rooms = new Map();       // code -> { room: PlaatjeRoom, poolId, usedIds:Set, timer, born, spotifyIdVoorRonde, previewVoorRonde }
 const clients = new Map();     // code -> Set<ws>
 const timers = new Map();      // code -> Timeout (fase-timer)
 const emptyTimers = new Map(); // code -> Timeout
@@ -118,6 +118,7 @@ async function startRonde(code) {
     k.usedIds.add(song.id);
     k.room.beginRound({ title: song.title, artist: song.artist, year: song.year, youtubeId: song.id.slice(0, 11).padEnd(11, 'x') }, 0);
     k.spotifyIdVoorRonde = song.spotifyId ?? null;
+    k.previewVoorRonde = previewUrl;
     const nonce = k.room.round.nonce;
     broadcastState(code);
     const set = clients.get(code) ?? new Set();
@@ -149,6 +150,8 @@ function doeReveal(code) {
   const reveal = k.room.resolveReveal();
   if (!reveal) return;
   broadcast(code, 'hl:reveal', reveal);
+  k.spotifyIdVoorRonde = null;
+  k.previewVoorRonde = null;
   broadcastState(code);
   if (k.room.phase === 'finished') {
     broadcast(code, 'hl:game:over', { winnerId: k.room.winnerId, room: k.room.publicState() });
@@ -229,7 +232,7 @@ function afhandelen(ws, data) {
       if (!rateLimit(ws.ip, 'create', 5, 60_000)) return fout(ws, 'Rustig aan — probeer het zo weer');
       const code = makeRoomCode(new Set(rooms.keys()));
       const room = new PlaatjeRoom(code, { id: ws.playerId, displayName: ws.naam, avatar: null }, { cardsToWin: data.cardsToWin });
-      rooms.set(code, { room, poolId: null, usedIds: new Set(), born: Date.now(), spotifyIdVoorRonde: null });
+      rooms.set(code, { room, poolId: null, usedIds: new Set(), born: Date.now(), spotifyIdVoorRonde: null, previewVoorRonde: null });
       ws.roomCode = code;
       if (!clients.has(code)) clients.set(code, new Set());
       clients.get(code).add(ws);
@@ -249,6 +252,16 @@ function afhandelen(ws, data) {
       const t = emptyTimers.get(code); if (t) { clearTimeout(t); emptyTimers.delete(code); }
       stuur(ws, 'hl:room:joined', { room: k.room.publicState(), you: { id: ws.playerId, isSpectator } });
       broadcastState(code);
+      // (Re)joiners tijdens listening/challenge misten anders de rondeaudio tot de volgende ronde:
+      // hl:round werd alleen bij startRonde() gebroadcast, nooit ingehaald voor wie later binnenkomt.
+      // ws.audioMode staat hier al vast — de client stuurt hl:audio:mode vlak na hl:hello, vóór
+      // hl:room:join (zie bootstrap() in public/index.html), dus dat bericht is al verwerkt.
+      if ((k.room.phase === 'listening' || k.room.phase === 'challenge') && k.room.round) {
+        const bron = audioSourceFor({ mode: ws.audioMode ?? 'preview', spotifyOk: Boolean(k.spotifyIdVoorRonde), previewUrl: k.previewVoorRonde });
+        const payload = { type: 'hl:round', nonce: k.room.round.nonce, previewUrl: k.previewVoorRonde ?? null };
+        if (bron === 'spotify') payload.spotifyId = k.spotifyIdVoorRonde;
+        ws.send(JSON.stringify(payload));
+      }
       break;
     }
     case 'hl:room:leave': {
@@ -321,6 +334,8 @@ function afhandelen(ws, data) {
       }
       clearTimer(ws.roomCode);
       k.room.round = null;
+      k.spotifyIdVoorRonde = null;
+      k.previewVoorRonde = null;
       k.room.nextTurn();
       broadcastState(ws.roomCode);
       startRonde(ws.roomCode);

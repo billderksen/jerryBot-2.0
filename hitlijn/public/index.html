@@ -711,14 +711,11 @@
   }
 
   // ── Taak 5: interactielaag ───────────────────────────────────────────────
-  // Let op: room.round.nonce blijft in de huidige serverkern (PlaatjeRoom.beginRound in
-  // src/utils/plaatjeGame.js) elke ronde op 1 staan — beginRound berekent 'm uit
-  // this.round.nonce, maar resolveReveal() heeft this.round dan al naar null gezet, dus de
-  // nonce "verhoogt" altijd vanaf 0. Dat maakt een nonce-vergelijking onbruikbaar om rondes van
-  // elkaar te onderscheiden. Deze pagina verankert ronde-overgangen daarom aan de FASE
-  // (prevPhase) i.p.v. aan de servernonce, en gebruikt voor audio een eigen, lokaal oplopende
-  // teller (audioToken) in plaats van de servernonce. Een echte fix hoort in plaatjeGame.js,
-  // buiten de scope van dit bestand — die raakt ook de besloten (bureaublad-)versie van het spel.
+  // De servernonce (room.round.nonce, via de persistente rondeTeller in PlaatjeRoom.beginRound,
+  // src/utils/plaatjeGame.js) klimt inmiddels wel correct per ronde (e87874c). Deze pagina blijft
+  // desondanks ronde-overgangen verankeren aan de FASE (prevPhase) en gebruikt voor audio een
+  // eigen lokale teller (audioToken) — bewust, voor FX-anchoring op het moment dat déze client de
+  // fase ziet veranderen, niet op wanneer het servernonce-bericht arriveert.
   let gekozenSlot = null;      // mijn-lijn-slot dat "hot" staat, wacht op de bevestigende tweede tik
   let shoutArmed = false;      // staat de HITLIJN-roep op dit moment gewapend?
   let audioToken = 0;          // lokale, altijd-oplopende teller — onafhankelijk van de servernonce
@@ -780,8 +777,7 @@
   // Verankerd op de overgang ín de challenge-fase (prevPhase), niet op room.round.nonce — zie
   // de toelichting hierboven. Eenmaal verankerd blijft challengeStartedAt staan voor de rest
   // van deze fase, zodat een tussentijdse render (een gok, een tweede uitdager) de balk niet
-  // terugzet — exact hetzelfde gedrag als het nonce-patroon van de besloten versie zou geven
-  // als die nonce wél per ronde uniek was.
+  // terugzet.
   function updateCountdown(room) {
     const bandEl = document.querySelector('.band');
     if (room.phase !== 'challenge' || !room.round) {

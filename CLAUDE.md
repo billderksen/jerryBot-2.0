@@ -279,6 +279,19 @@ link from Deezer's API per round (`versePreview()` in `server.mjs`), falling bac
 URL only if that live fetch fails. The stored URLs carry short-lived signed tokens and go stale
 within hours, so a fresh Deezer fetch is expected on essentially every round.
 
+**Deployment note**: because `hitlijn/data/` is gitignored by design, a fresh checkout or a merge
+never brings `pools.json` with it — the server boots healthy either way, but with zero pools the
+lobby has nothing to offer and no game can start. After any fresh checkout/merge, copy
+`hitlijn/data/pools.json` into place manually (and optionally `hitlijn/tools/decks/` +
+`hitlijn/tools/resolve-state.json` too, if you want to be able to resume a rebuild rather than
+re-run `resolve-pools.mjs` from scratch):
+
+```bash
+scp -r old-host:/path/to/jerryBot/hitlijn/data/pools.json  ./hitlijn/data/pools.json
+scp -r old-host:/path/to/jerryBot/hitlijn/tools/decks       ./hitlijn/tools/
+scp    old-host:/path/to/jerryBot/hitlijn/tools/resolve-state.json  ./hitlijn/tools/
+```
+
 **Spotify app registration**: client id/secret live in `.env` as `SPOTIFY_CLIENT_ID` /
 `SPOTIFY_CLIENT_SECRET` (shared with the main bot's `.env`, read directly by `hitlijn/server.mjs`
 via its own `loadEnv.js` import). Registered in the Spotify Developer Dashboard with the
