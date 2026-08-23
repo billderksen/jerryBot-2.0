@@ -3540,15 +3540,19 @@
     }
 
     // Check if input is a Spotify link (track/playlist/album) — routed straight to the
-    // direct-add path below rather than treated as a search query.
+    // direct-add path below rather than treated as a search query. Optionally skips a leading
+    // locale segment (`/intl-nl/track/...`, what the Dutch Spotify app puts on share links),
+    // mirroring spotifyResolve.js's parseSpotifyUrl() so a locale-prefixed link isn't missed
+    // here and left to silently degrade into a garbage text search.
     function isSpotifyLink(text) {
-      return /^https?:\/\/(open\.)?spotify\.com\/(track|playlist|album)\//.test(text);
+      return /^https?:\/\/(open\.)?spotify\.com\/(?:intl-[a-zA-Z]{2}\/)?(track|playlist|album)\//.test(text);
     }
 
     // Playlist/album links add up to 100 tracks in one go and always get a confirm step first
     // (see showSpotifyBulkConfirm below) — unlike a single track link, which adds instantly.
+    // Non-capturing locale group keeps the (playlist|album) capture at index 2, same as before.
     function spotifyBulkLinkType(text) {
-      const match = /^https?:\/\/(open\.)?spotify\.com\/(playlist|album)\//.exec(text);
+      const match = /^https?:\/\/(open\.)?spotify\.com\/(?:intl-[a-zA-Z]{2}\/)?(playlist|album)\//.exec(text);
       return match ? match[2] : null;
     }
 
