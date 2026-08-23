@@ -7,6 +7,7 @@ A feature-rich Discord bot with a web dashboard, music player, multiplayer games
 ### Music Player
 - **Web Dashboard** - Beautiful web interface to control music playback
 - **YouTube Integration** - Play songs from YouTube URLs or search queries
+- **Spotify Search** - Search Spotify or paste a track/playlist/album link (source toggle + auto-detect); audio still plays through YouTube, matched by title/artist
 - **Queue Management** - Add, remove, reorder, and shuffle songs
 - **Playback Controls** - Play, pause, skip, previous, seek, volume control
 - **Loop Modes** - Off, single track, or entire queue

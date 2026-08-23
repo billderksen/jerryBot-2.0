@@ -96,8 +96,43 @@
       position: relative;
     }
 
+    .search-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .search-input-wrapper {
       position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-source-toggle {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .search-source-toggle:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .search-source-toggle.spotify-active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--text-primary);
     }
 
     .search-input {
@@ -319,6 +354,44 @@
       color: var(--text-muted);
     }
 
+    .spotify-bulk-confirm-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .spotify-bulk-confirm-add,
+    .spotify-bulk-confirm-cancel {
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .spotify-bulk-confirm-add {
+      background: var(--accent);
+      border: none;
+      color: var(--text-primary);
+    }
+
+    .spotify-bulk-confirm-add:hover {
+      background: var(--accent-hover);
+    }
+
+    .spotify-bulk-confirm-cancel {
+      background: var(--surface-light);
+      border: 2px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    .spotify-bulk-confirm-cancel:hover {
+      border-color: var(--text-muted);
+    }
+
     .search-history-header {
       display: flex;
       align-items: center;
@@ -461,19 +534,6 @@
       font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
-    }
-
-    .spotify-thumb {
-      background: linear-gradient(135deg, #1DB954 0%, #191414 100%);
-    }
-
-    .spotify-placeholder {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
     }
 
     .status {
@@ -3161,10 +3221,13 @@
       </div>
 
       <div class="search-container">
-        <div class="search-input-wrapper">
-          <span class="search-icon"><svg><use href="#icon-search"/></svg></span>
-          <input type="text" class="search-input" id="searchInput" placeholder="Search for songs..." autocomplete="off">
-          <button class="search-clear" id="searchClear"><svg style="width:14px;height:14px;"><use href="#icon-close"/></svg></button>
+        <div class="search-bar-row">
+          <div class="search-input-wrapper">
+            <span class="search-icon"><svg><use href="#icon-search"/></svg></span>
+            <input type="text" class="search-input" id="searchInput" placeholder="Search for songs..." autocomplete="off">
+            <button class="search-clear" id="searchClear"><svg style="width:14px;height:14px;"><use href="#icon-close"/></svg></button>
+          </div>
+          <button type="button" class="search-source-toggle" id="searchSourceToggle" title="Search source (click to switch)">YT</button>
         </div>
         <div class="search-results" id="searchResults"></div>
       </div>
@@ -3372,10 +3435,37 @@
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
     const searchClear = document.getElementById('searchClear');
+    const searchSourceToggle = document.getElementById('searchSourceToggle');
     let searchTimeout;
     let currentSearchQuery = '';
     let currentSearchCount = 10;
     let currentSearchResults = [];
+
+    // Search source (YouTube vs Spotify), persisted across visits
+    const SEARCH_SOURCE_KEY = 'searchSource';
+    let searchSource = localStorage.getItem(SEARCH_SOURCE_KEY) === 'spotify' ? 'spotify' : 'youtube';
+
+    function renderSearchSourceToggle() {
+      const isSpotify = searchSource === 'spotify';
+      searchSourceToggle.textContent = isSpotify ? 'Spotify' : 'YT';
+      searchSourceToggle.classList.toggle('spotify-active', isSpotify);
+      searchSourceToggle.title = `Search source: ${isSpotify ? 'Spotify' : 'YouTube'} (click to switch)`;
+    }
+    renderSearchSourceToggle();
+
+    searchSourceToggle.addEventListener('click', () => {
+      searchSource = searchSource === 'spotify' ? 'youtube' : 'spotify';
+      localStorage.setItem(SEARCH_SOURCE_KEY, searchSource);
+      renderSearchSourceToggle();
+
+      // Re-run the current search under the new source, if one is showing
+      const query = searchInput.value.trim();
+      if (query.length >= 2 && !isSpotifyLink(query) && !isYouTubePlaylistUrl(query)) {
+        currentSearchResults = [];
+        currentSearchCount = 10;
+        searchSongs(query, 10, false);
+      }
+    });
 
     // Search history
     const SEARCH_HISTORY_KEY = 'searchHistory';
@@ -3449,9 +3539,21 @@
       searchResults.classList.add('visible');
     }
 
-    // Check if input is a Spotify URL
-    function isSpotifyUrl(text) {
-      return /^https?:\/\/(open\.)?spotify\.com\/(track|playlist|album)\//.test(text);
+    // Check if input is a Spotify link (track/playlist/album) — routed straight to the
+    // direct-add path below rather than treated as a search query. Optionally skips a leading
+    // locale segment (`/intl-nl/track/...`, what the Dutch Spotify app puts on share links),
+    // mirroring spotifyResolve.js's parseSpotifyUrl() so a locale-prefixed link isn't missed
+    // here and left to silently degrade into a garbage text search.
+    function isSpotifyLink(text) {
+      return /^https?:\/\/(open\.)?spotify\.com\/(?:intl-[a-zA-Z]{2}\/)?(track|playlist|album)\//.test(text);
+    }
+
+    // Playlist/album links add up to 100 tracks in one go and always get a confirm step first
+    // (see showSpotifyBulkConfirm below) — unlike a single track link, which adds instantly.
+    // Non-capturing locale group keeps the (playlist|album) capture at index 2, same as before.
+    function spotifyBulkLinkType(text) {
+      const match = /^https?:\/\/(open\.)?spotify\.com\/(?:intl-[a-zA-Z]{2}\/)?(playlist|album)\//.exec(text);
+      return match ? match[2] : null;
     }
 
     function isYouTubePlaylistUrl(text) {
@@ -3480,12 +3582,21 @@
         currentSearchResults = [];
         currentSearchCount = 10;
       }
-      
+
+      // A playlist/album link always confirms before adding (up to 100 tracks) — no client-side
+      // preview exists for Spotify bulk fetches, unlike the YouTube-playlist path below, so a
+      // confirm step is the lightweight substitute. A single track link stays instant.
+      const bulkType = spotifyBulkLinkType(query);
+      if (bulkType) {
+        searchTimeout = setTimeout(() => showSpotifyBulkConfirm(query, bulkType), 100);
+        return;
+      }
+
       // Determine loading message
       let loadingText = 'Searching...';
-      if (isSpotifyUrl(query)) loadingText = 'Loading Spotify...';
+      if (isSpotifyLink(query)) loadingText = 'Adding from Spotify...';
       else if (isYouTubePlaylistUrl(query)) loadingText = 'Loading YouTube Playlist...';
-      
+
       searchResults.innerHTML = `
         <div class="search-loading">
           <div class="search-loading-spinner"></div>
@@ -3493,10 +3604,10 @@
         </div>
       `;
       searchResults.classList.add('visible');
-      
+
       // Handle special URLs differently
-      if (isSpotifyUrl(query)) {
-        searchTimeout = setTimeout(() => handleSpotifyUrl(query), 100);
+      if (isSpotifyLink(query)) {
+        searchTimeout = setTimeout(() => addSpotifyLink(query), 100);
       } else if (isYouTubePlaylistUrl(query)) {
         searchTimeout = setTimeout(() => handleYouTubePlaylistUrl(query), 100);
       } else {
@@ -3528,11 +3639,17 @@
 
     async function searchSongs(query, count = 10, append = false) {
       currentSearchQuery = query;
-      
+      const source = searchSource;
+
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&count=${count}`);
+        const sourceParam = source === 'spotify' ? '&source=spotify' : '';
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&count=${count}${sourceParam}`);
         const songs = await response.json();
-        
+
+        if (!response.ok) {
+          throw new Error(songs?.error || 'Search failed. Please try again.');
+        }
+
         if (append) {
           // Filter out duplicates when loading more
           const existingUrls = new Set(currentSearchResults.map(s => s.url));
@@ -3543,7 +3660,7 @@
           addToSearchHistory(query);
         }
         currentSearchCount = count;
-        
+
         if (currentSearchResults.length === 0) {
           searchResults.innerHTML = `
             <div class="search-empty">
@@ -3553,7 +3670,7 @@
           `;
         } else {
           const resultsHtml = currentSearchResults.map(song => `
-            <div class="search-result-item" data-url="${escapeHtml(song.url)}" data-title="${escapeHtml(song.title)}" data-duration="${song.duration}" data-thumbnail="${escapeHtml(song.thumbnail || '')}">
+            <div class="search-result-item" data-url="${escapeHtml(song.url)}" data-title="${escapeHtml(song.title)}" data-duration="${song.duration}" data-thumbnail="${escapeHtml(song.thumbnail || '')}" data-spotify="${song.spotify ? 'true' : 'false'}">
               <div class="search-result-thumb">
                 ${song.thumbnail
                   ? `<img src="${escapeHtml(song.thumbnail)}" alt="" onerror="handleThumbnailError(this)">`
@@ -3563,6 +3680,7 @@
               <div class="search-result-info">
                 <div class="search-result-title">${escapeHtml(song.title)}</div>
                 <div class="search-result-meta">
+                  ${song.spotify ? '<span class="spotify-badge">Spotify</span><span>•</span>' : ''}
                   <span>${escapeHtml(song.channel)}</span>
                   <span>•</span>
                   <span>${formatDuration(song.duration)}</span>
@@ -3571,14 +3689,14 @@
               <button class="search-result-add" onclick="addSong(event, this)">+ Add</button>
             </div>
           `).join('');
-          
+
           // Add "Load More" button if we got full results
           const loadMoreHtml = songs.length >= 10 ? `
             <button class="load-more-btn" onclick="loadMoreResults()">
               Load More Results
             </button>
           ` : '';
-          
+
           searchResults.innerHTML = resultsHtml + loadMoreHtml;
         }
       } catch (error) {
@@ -3586,7 +3704,7 @@
         searchResults.innerHTML = `
           <div class="search-empty">
             <div>❌</div>
-            <div>Search failed. Please try again.</div>
+            <div>${escapeHtml(error.message || 'Search failed. Please try again.')}</div>
           </div>
         `;
       }
@@ -3606,212 +3724,76 @@
       await searchSongs(currentSearchQuery, newCount, true);
     }
 
-    // Handle Spotify URLs (tracks, playlists, albums)
-    async function handleSpotifyUrl(url) {
-      try {
-        const response = await fetch(`/api/spotify/track?url=${encodeURIComponent(url)}`);
-        const data = await response.json();
-        
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        
-        if (data.type === 'track') {
-          // Single track - show it with option to add
-          displaySpotifyTracks(data.tracks, null);
-        } else {
-          // Playlist or album - show tracks with "Add All" button
-          displaySpotifyTracks(data.tracks, data.name, data.type, data.total);
-        }
-      } catch (error) {
-        console.error('Spotify error:', error);
-        searchResults.innerHTML = `
-          <div class="search-empty">
-            <div>❌</div>
-            <div>Failed to load Spotify link. Make sure it's a valid track, playlist, or album URL.</div>
-          </div>
-        `;
-      }
-    }
+    // Confirm bar shown for a pasted Spotify playlist/album link before it's added (see the
+    // input handler above) — there's no client-side preview for Spotify bulk fetches, so this
+    // is the lightweight stand-in that stops a stray paste from silently queuing 100 tracks.
+    let pendingSpotifyBulkUrl = null;
 
-    function displaySpotifyTracks(tracks, playlistName, type = 'track', totalCount = 0) {
-      let html = '';
-      
-      // Show playlist/album header with "Add All" button
-      if (playlistName) {
-        const icon = type === 'album' ? '💿' : '📋';
-        html += `
-          <div class="spotify-header">
-            <div class="spotify-header-info">
-              <span class="spotify-icon">${icon}</span>
-              <span class="spotify-name">${escapeHtml(playlistName)}</span>
-              <span class="spotify-count">(${tracks.length}${totalCount > tracks.length ? ' of ' + totalCount : ''} tracks)</span>
-            </div>
-            <button class="spotify-add-all" onclick="addAllSpotifyTracks(event, this)">
-              <span>+ Add All</span>
-            </button>
+    function showSpotifyBulkConfirm(url, type) {
+      pendingSpotifyBulkUrl = url;
+      searchResults.innerHTML = `
+        <div class="search-empty">
+          <div>🎧</div>
+          <div>Spotify ${escapeHtml(type)} detected — add up to 100 tracks?</div>
+          <div class="spotify-bulk-confirm-actions">
+            <button type="button" class="spotify-bulk-confirm-add" onclick="confirmSpotifyBulkAdd()">Add</button>
+            <button type="button" class="spotify-bulk-confirm-cancel" onclick="cancelSpotifyBulkAdd()">Cancel</button>
           </div>
-        `;
-      }
-      
-      // Show individual tracks
-      html += tracks.map((track, index) => `
-        <div class="search-result-item spotify-track" 
-             data-search-query="${escapeHtml(track.searchQuery)}" 
-             data-title="${escapeHtml(track.title)}" 
-             data-duration="${track.duration}" 
-             data-thumbnail="${escapeHtml(track.thumbnail || '')}"
-             data-index="${index}">
-          <div class="search-result-thumb spotify-thumb">
-            ${track.thumbnail
-              ? `<img src="${escapeHtml(track.thumbnail)}" alt="" onerror="handleThumbnailError(this)">`
-              : '<div class="spotify-placeholder">🎵</div>'
-            }
-          </div>
-          <div class="search-result-info">
-            <div class="search-result-title">${escapeHtml(track.title)}</div>
-            <div class="search-result-meta">
-              <span class="spotify-badge">Spotify</span>
-              <span>•</span>
-              <span>${formatDuration(track.duration)}</span>
-            </div>
-          </div>
-          <button class="search-result-add" onclick="addSpotifyTrack(event, this)">+ Add</button>
         </div>
-      `).join('');
-      
-      searchResults.innerHTML = html;
+      `;
+      searchResults.classList.add('visible');
     }
 
-    // Add a single Spotify track by searching YouTube
-    async function addSpotifyTrack(event, button) {
-      event.stopPropagation();
-      const item = button.closest('.search-result-item');
-      const searchQuery = item.dataset.searchQuery;
-      const title = item.dataset.title;
-      const thumbnail = item.dataset.thumbnail;
-      
-      button.disabled = true;
-      button.textContent = 'Finding...';
-      
+    function confirmSpotifyBulkAdd() {
+      const url = pendingSpotifyBulkUrl;
+      pendingSpotifyBulkUrl = null;
+      if (!url) return;
+      searchResults.innerHTML = `
+        <div class="search-loading">
+          <div class="search-loading-spinner"></div>
+          Adding from Spotify...
+        </div>
+      `;
+      addSpotifyLink(url);
+    }
+
+    function cancelSpotifyBulkAdd() {
+      pendingSpotifyBulkUrl = null;
+      searchInput.value = '';
+      searchClear.classList.remove('visible');
+      searchResults.classList.remove('visible');
+    }
+
+    // Adds a Spotify link (track — instant; playlist/album — only after confirmation above) via
+    // the server's own detection in POST /api/queue/add, which resolves track vs. playlist/album
+    // and does the bulk work itself — no client-side preview step here.
+    let spotifyLinkPending = false;
+    async function addSpotifyLink(url) {
+      if (spotifyLinkPending) return;
+      spotifyLinkPending = true;
+
       try {
-        // Search YouTube for the song
-        const ytResponse = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery)}`);
-        const ytData = await ytResponse.json();
-        
-        if (ytData.error) {
-          throw new Error('Could not find song on YouTube');
-        }
-        
-        button.textContent = 'Adding...';
-        
-        // Add to queue
         const response = await fetch('/api/queue/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            url: ytData.url, 
-            title: title, // Keep original Spotify title
-            duration: ytData.duration, 
-            thumbnail: thumbnail || ytData.thumbnail, 
-            guildId: state.guildId 
-          })
+          body: JSON.stringify({ url, guildId: state.guildId })
         });
-        
         const result = await response.json();
-        
-        if (result.success) {
-          button.textContent = '✓ Added';
-          button.style.background = 'var(--bg-tertiary)';
-          showToast(`Added: ${title}`, 'success');
-        } else {
-          throw new Error(result.error || 'Failed to add song');
-        }
-      } catch (error) {
-        console.error('Error adding Spotify track:', error);
-        button.disabled = false;
-        button.textContent = '+ Add';
-        showToast(error.message || 'Failed to add song', 'error');
-      }
-    }
 
-    // Add all Spotify tracks from playlist/album
-    async function addAllSpotifyTracks(event, button) {
-      event.stopPropagation();
-      
-      const trackItems = document.querySelectorAll('.spotify-track');
-      const totalTracks = trackItems.length;
-      let addedCount = 0;
-      let failedCount = 0;
-      
-      button.disabled = true;
-      button.innerHTML = `<span>Adding 0/${totalTracks}...</span>`;
-      
-      for (const item of trackItems) {
-        const addButton = item.querySelector('.search-result-add');
-        if (addButton.textContent === '✓ Added') {
-          addedCount++;
-          continue; // Skip already added tracks
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to add Spotify link');
         }
-        
-        const searchQuery = item.dataset.searchQuery;
-        const title = item.dataset.title;
-        const thumbnail = item.dataset.thumbnail;
-        
-        addButton.disabled = true;
-        addButton.textContent = 'Adding...';
-        
-        try {
-          // Search YouTube for the song
-          const ytResponse = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery)}`);
-          const ytData = await ytResponse.json();
-          
-          if (ytData.error) {
-            throw new Error('Not found');
-          }
-          
-          // Add to queue
-          const response = await fetch('/api/queue/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              url: ytData.url, 
-              title: title,
-              duration: ytData.duration, 
-              thumbnail: thumbnail || ytData.thumbnail, 
-              guildId: state.guildId 
-            })
-          });
-          
-          const result = await response.json();
-          
-          if (result.success) {
-            addButton.textContent = '✓ Added';
-            addButton.style.background = 'var(--bg-tertiary)';
-            addedCount++;
-          } else {
-            throw new Error('Failed');
-          }
-        } catch (error) {
-          console.error(`Failed to add: ${title}`, error);
-          addButton.disabled = false;
-          addButton.textContent = '+ Add';
-          failedCount++;
-        }
-        
-        button.innerHTML = `<span>Adding ${addedCount}/${totalTracks}...</span>`;
-        
-        // Small delay to prevent rate limiting
-        await new Promise(r => setTimeout(r, 200));
-      }
-      
-      button.innerHTML = `<span>✓ Added ${addedCount}</span>`;
-      button.style.background = 'var(--bg-tertiary)';
-      
-      if (failedCount > 0) {
-        showToast(`Added ${addedCount} songs (${failedCount} failed)`, 'warning');
-      } else {
-        showToast(`Added ${addedCount} songs from playlist`, 'success');
+
+        const message = result.spotifyPlaylist ? result.message : `Added: ${result.song?.title || 'song'}`;
+        showToast(message, result.spotifyPlaylist && result.failed > 0 ? 'warning' : 'success');
+        searchInput.value = '';
+        searchClear.classList.remove('visible');
+      } catch (error) {
+        console.error('Spotify add error:', error);
+        showToast(error.message || 'Failed to add Spotify link', 'error');
+      } finally {
+        spotifyLinkPending = false;
+        searchResults.classList.remove('visible');
       }
     }
 
@@ -3999,7 +3981,15 @@
       }
     }
 
-    function isSongInQueue(url) {
+    function isSongInQueue(url, isSpotify = false, title = '') {
+      if (isSpotify) {
+        // A Spotify search result carries a Spotify URL, but a queued Spotify-origin song
+        // stores its resolved YouTube URL instead — so it can never match by url. Match on
+        // normalized title.
+        const normalized = title.trim().toLowerCase();
+        if (state.currentSong && state.currentSong.title.trim().toLowerCase() === normalized) return true;
+        return state.queue.some(s => s.title.trim().toLowerCase() === normalized);
+      }
       if (state.currentSong && state.currentSong.url === url) return true;
       return state.queue.some(s => s.url === url);
     }
@@ -4011,8 +4001,9 @@
       const title = item.dataset.title;
       const duration = parseInt(item.dataset.duration) || 0;
       const thumbnail = item.dataset.thumbnail;
+      const isSpotify = item.dataset.spotify === 'true';
 
-      if (isSongInQueue(url)) {
+      if (isSongInQueue(url, isSpotify, title)) {
         showToast('This song is already in the queue', 'error');
         return;
       }
@@ -4623,6 +4614,7 @@
 
       const songUrl = state.currentSong.url;
       const songTitle = state.currentSong.title;
+      const songArtist = state.currentSong.artist;
 
       // Already have lyrics for this song
       if (lastLyricsSongUrl === songUrl && lyricsData !== null) return;
@@ -4643,7 +4635,8 @@
       if (indicator) indicator.classList.add('hidden');
 
       try {
-        const response = await fetch(`/api/lyrics?title=${encodeURIComponent(songTitle)}`, {
+        const artistParam = songArtist ? `&artist=${encodeURIComponent(songArtist)}` : '';
+        const response = await fetch(`/api/lyrics?title=${encodeURIComponent(songTitle)}${artistParam}`, {
           signal: lyricsFetchController.signal
         });
 
@@ -4746,7 +4739,8 @@
       lastLyricsSongUrl = state.currentSong.url;
 
       try {
-        const response = await fetch(`/api/lyrics?title=${encodeURIComponent(state.currentSong.title)}`);
+        const artistParam = state.currentSong.artist ? `&artist=${encodeURIComponent(state.currentSong.artist)}` : '';
+        const response = await fetch(`/api/lyrics?title=${encodeURIComponent(state.currentSong.title)}${artistParam}`);
 
         if (!response.ok) {
           throw new Error('Lyrics not found');
