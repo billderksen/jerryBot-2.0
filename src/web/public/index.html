@@ -354,6 +354,44 @@
       color: var(--text-muted);
     }
 
+    .spotify-bulk-confirm-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .spotify-bulk-confirm-add,
+    .spotify-bulk-confirm-cancel {
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .spotify-bulk-confirm-add {
+      background: var(--accent);
+      border: none;
+      color: var(--text-primary);
+    }
+
+    .spotify-bulk-confirm-add:hover {
+      background: var(--accent-hover);
+    }
+
+    .spotify-bulk-confirm-cancel {
+      background: var(--surface-light);
+      border: 2px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    .spotify-bulk-confirm-cancel:hover {
+      border-color: var(--text-muted);
+    }
+
     .search-history-header {
       display: flex;
       align-items: center;
@@ -3507,6 +3545,13 @@
       return /^https?:\/\/(open\.)?spotify\.com\/(track|playlist|album)\//.test(text);
     }
 
+    // Playlist/album links add up to 100 tracks in one go and always get a confirm step first
+    // (see showSpotifyBulkConfirm below) — unlike a single track link, which adds instantly.
+    function spotifyBulkLinkType(text) {
+      const match = /^https?:\/\/(open\.)?spotify\.com\/(playlist|album)\//.exec(text);
+      return match ? match[2] : null;
+    }
+
     function isYouTubePlaylistUrl(text) {
       return /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/(playlist\?list=|watch\?.*list=)/.test(text);
     }
@@ -3533,7 +3578,16 @@
         currentSearchResults = [];
         currentSearchCount = 10;
       }
-      
+
+      // A playlist/album link always confirms before adding (up to 100 tracks) — no client-side
+      // preview exists for Spotify bulk fetches, unlike the YouTube-playlist path below, so a
+      // confirm step is the lightweight substitute. A single track link stays instant.
+      const bulkType = spotifyBulkLinkType(query);
+      if (bulkType) {
+        searchTimeout = setTimeout(() => showSpotifyBulkConfirm(query, bulkType), 100);
+        return;
+      }
+
       // Determine loading message
       let loadingText = 'Searching...';
       if (isSpotifyLink(query)) loadingText = 'Adding from Spotify...';
@@ -3666,9 +3720,49 @@
       await searchSongs(currentSearchQuery, newCount, true);
     }
 
-    // A pasted Spotify link (track/playlist/album) is added directly — the server's own
-    // detection in POST /api/queue/add resolves track vs. playlist/album and does the bulk
-    // work itself, so there's no client-side preview step here (unlike YouTube playlists below).
+    // Confirm bar shown for a pasted Spotify playlist/album link before it's added (see the
+    // input handler above) — there's no client-side preview for Spotify bulk fetches, so this
+    // is the lightweight stand-in that stops a stray paste from silently queuing 100 tracks.
+    let pendingSpotifyBulkUrl = null;
+
+    function showSpotifyBulkConfirm(url, type) {
+      pendingSpotifyBulkUrl = url;
+      searchResults.innerHTML = `
+        <div class="search-empty">
+          <div>🎧</div>
+          <div>Spotify ${escapeHtml(type)} detected — add up to 100 tracks?</div>
+          <div class="spotify-bulk-confirm-actions">
+            <button type="button" class="spotify-bulk-confirm-add" onclick="confirmSpotifyBulkAdd()">Add</button>
+            <button type="button" class="spotify-bulk-confirm-cancel" onclick="cancelSpotifyBulkAdd()">Cancel</button>
+          </div>
+        </div>
+      `;
+      searchResults.classList.add('visible');
+    }
+
+    function confirmSpotifyBulkAdd() {
+      const url = pendingSpotifyBulkUrl;
+      pendingSpotifyBulkUrl = null;
+      if (!url) return;
+      searchResults.innerHTML = `
+        <div class="search-loading">
+          <div class="search-loading-spinner"></div>
+          Adding from Spotify...
+        </div>
+      `;
+      addSpotifyLink(url);
+    }
+
+    function cancelSpotifyBulkAdd() {
+      pendingSpotifyBulkUrl = null;
+      searchInput.value = '';
+      searchClear.classList.remove('visible');
+      searchResults.classList.remove('visible');
+    }
+
+    // Adds a Spotify link (track — instant; playlist/album — only after confirmation above) via
+    // the server's own detection in POST /api/queue/add, which resolves track vs. playlist/album
+    // and does the bulk work itself — no client-side preview step here.
     let spotifyLinkPending = false;
     async function addSpotifyLink(url) {
       if (spotifyLinkPending) return;
