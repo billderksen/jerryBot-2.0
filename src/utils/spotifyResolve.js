@@ -275,6 +275,8 @@ export async function resolveToYouTube(track, ytDlpExec) {
 export async function resolveAndQueueSpotifyTracks(tracks, queueTrack, ytDlpExec) {
   let added = 0;
   let failed = 0;
+  let queueAttempts = 0;
+  let queueFailures = 0;
 
   for (const track of tracks) {
     try {
@@ -292,14 +294,24 @@ export async function resolveAndQueueSpotifyTracks(tracks, queueTrack, ytDlpExec
         spotify: true
       };
       const result = await queueTrack(song);
-      if (result && result.success === false) {
+      queueAttempts++;
+      if (!result || result.success === false) {
         failed++;
+        queueFailures++;
       } else {
         added++;
       }
     } catch (error) {
       console.error(`[spotifyResolve] Failed to resolve/queue "${track?.artist ?? ''} - ${track?.title ?? ''}":`, error);
       failed++;
+    }
+
+    // If queueTrack itself is the thing failing (e.g. the bot isn't in a voice channel), every
+    // remaining track will fail identically — bail after 3 straight queueTrack failures instead
+    // of burning a yt-dlp search per remaining track (up to ~190s for a 100-track playlist) on a
+    // bulk add that was never going to succeed.
+    if (queueAttempts === 3 && queueFailures === 3) {
+      return { added, failed, aborted: true };
     }
   }
 

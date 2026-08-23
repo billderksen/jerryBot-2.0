@@ -203,3 +203,22 @@ test('resolveAndQueueSpotifyTracks: a queueTrack failure ({success: false}) coun
   const result = await resolveAndQueueSpotifyTracks(tracks, queueTrack, fakeYtDlpExec);
   assert.deepEqual(result, { added: 0, failed: 1, total: 1 });
 });
+
+test('resolveAndQueueSpotifyTracks: aborts after the first 3 queueTrack failures instead of resolving the rest', async () => {
+  const tracks = Array.from({ length: 10 }, (_, i) => (
+    { title: `Song ${i}`, artist: 'Artist A', durationSec: 200, thumbnail: null }
+  ));
+  const fakeYtDlpExec = async () => ({
+    entries: [{ id: 'x', title: 'Artist A - Song', duration: 200, channel: 'Artist A' }]
+  });
+  let queueTrackCalls = 0;
+  const queueTrack = async () => {
+    queueTrackCalls++;
+    return { success: false, error: 'no voice channel' };
+  };
+
+  const result = await resolveAndQueueSpotifyTracks(tracks, queueTrack, fakeYtDlpExec);
+
+  assert.deepEqual(result, { added: 0, failed: 3, aborted: true });
+  assert.equal(queueTrackCalls, 3, 'queueTrack should not be called again once the first 3 calls all failed');
+});

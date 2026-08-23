@@ -1198,6 +1198,10 @@ app.get('/api/search', rateLimit('search', 15, 60_000), async (req, res) => {
       }));
       return res.json(songs);
     } catch (error) {
+      const status = spotifyErrorStatus(error);
+      if (status === 429) {
+        return res.status(429).json({ error: 'Spotify-zoeklimiet tijdelijk bereikt — probeer het later; een Spotify-link plakken werkt meestal wél.' });
+      }
       console.error('Spotify search error:', error);
       return res.status(502).json({ error: 'Spotify-zoekopdracht is momenteel niet beschikbaar.' });
     }
@@ -1601,11 +1605,15 @@ async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requ
       return res.status(400).json({ error: 'Deze Spotify-playlist/album bevat geen beschikbare tracks.' });
     }
 
-    const { added, failed, total } = await resolveAndQueueSpotifyTracks(tracks, async (song) => {
+    const { added, failed, total, aborted } = await resolveAndQueueSpotifyTracks(tracks, async (song) => {
       const result = await addSongHandler({ ...song, requestedBy, requestedById, source: 'youtube' }, targetGuildId);
       if (result?.success !== false) logAdd(song.title);
       return result;
     }, ytDlpExec);
+
+    if (aborted) {
+      return res.status(400).json({ error: 'Toevoegen mislukt — zit de bot wel in een voicekanaal?' });
+    }
 
     const message = failed > 0
       ? `${added} van ${total} toegevoegd; ${failed} niet gevonden`
@@ -1618,6 +1626,9 @@ async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requ
         ? 'Dit Spotify-album is niet op te vragen — probeer het later opnieuw.'
         : 'Deze Spotify-playlist is door Spotify zelf beheerd en niet op te vragen — gebruik een playlist van een gebruiker.';
       return res.status(403).json({ error: message });
+    }
+    if (status === 429) {
+      return res.status(429).json({ error: 'Spotify-zoeklimiet tijdelijk bereikt — probeer het over een minuutje opnieuw.' });
     }
     console.error('Spotify add error:', error);
     return res.status(502).json({ error: 'Kon de Spotify-gegevens niet ophalen. Probeer het later opnieuw.' });

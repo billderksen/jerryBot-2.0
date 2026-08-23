@@ -131,7 +131,11 @@ async function handleSpotifyBulkPlay(interaction, { type, id }, voiceChannel) {
       return { success: true };
     };
 
-    const { added, failed, total } = await resolveAndQueueSpotifyTracks(tracks, queueTrack, ytDlpExec);
+    const { added, failed, total, aborted } = await resolveAndQueueSpotifyTracks(tracks, queueTrack, ytDlpExec);
+
+    if (aborted) {
+      return await interaction.editReply({ content: '❌ Toevoegen mislukt — zit de bot wel in een voicekanaal?' });
+    }
 
     const message = failed > 0
       ? `${added} van ${total} toegevoegd; ${failed} niet gevonden`
@@ -150,6 +154,14 @@ async function handleSpotifyBulkPlay(interaction, { type, id }, voiceChannel) {
         : 'Deze Spotify-playlist is door Spotify zelf beheerd en niet op te vragen — gebruik een playlist van een gebruiker.';
       try {
         await interaction.editReply({ content: `❌ ${message}` });
+      } catch {
+        // Interaction already expired
+      }
+      return;
+    }
+    if (status === 429) {
+      try {
+        await interaction.editReply({ content: '❌ Spotify-zoeklimiet tijdelijk bereikt — probeer het over een minuutje opnieuw.' });
       } catch {
         // Interaction already expired
       }
