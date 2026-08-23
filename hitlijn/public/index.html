@@ -98,7 +98,10 @@
 
   /* lobby-uitbreiding (niet in de mockup — zelfde stijltaal) */
   .kamercode-groot { font-family:'Anton'; letter-spacing:3px; font-size:1.7rem; color:var(--stagelight);
-    border:1px solid rgba(255,157,60,.45); border-radius:10px; padding:8px 20px; }
+    border:1px solid rgba(255,157,60,.45); border-radius:10px; padding:7px 20px;
+    display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .kamercode-eyebrow { font-family:'Bricolage Grotesque'; font-weight:600; text-transform:lowercase;
+    letter-spacing:1.5px; font-size:.52rem; color:#c9a; }
   .lobby-lijst { display:flex; flex-direction:column; gap:8px; width:100%; }
   .lobby-rij { display:flex; align-items:center; gap:10px; width:100%; padding:9px 12px; border-radius:10px;
     background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08); font-size:.82rem; }
@@ -106,12 +109,29 @@
     background:var(--stagelight); color:#301c05; padding:2px 7px; border-radius:3px; }
   select.veld { -webkit-appearance:none; appearance:none; }
 
+  /* deel-link: instap-hint + lobby-chip (zelfde stijltaal als de rest — geen nieuwe kleuren/fonts) */
+  .deel-hint { width:100%; background:rgba(34,224,192,.12); border:1px solid rgba(34,224,192,.35);
+    color:#bdf0e6; font-size:.72rem; text-align:center; border-radius:10px; padding:8px 12px; }
+  .deel-chip { width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+    background:rgba(0,0,0,.32); border:1.5px dashed rgba(255,157,60,.45); border-radius:12px;
+    padding:11px 14px; color:#ffd9b0; font-size:.78rem; font-family:inherit; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+  .deel-chip:active { background:rgba(0,0,0,.5); }
+  .deel-chip .deel-chip-icon { font-size:.95rem; }
+
   /* ══ spelscherm ══ */
   #spelView { display:flex; flex-direction:column; min-height:100dvh; position:relative; z-index:2; }
   .topbar { display:flex; align-items:center; gap:9px; padding:calc(14px + env(safe-area-inset-top)) 14px 8px; position:relative; z-index:2; }
   .topbar .wordmark { font-size:1.05rem; }
   .kamercode { font-family:'Anton'; letter-spacing:2.5px; font-size:.72rem; color:var(--stagelight);
-    border:1px solid rgba(255,157,60,.45); border-radius:7px; padding:3px 9px; }
+    border:1px solid rgba(255,157,60,.45); border-radius:7px; padding:3px 9px;
+    cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .kamercode-eyebrow-inline { font-family:'Bricolage Grotesque'; font-weight:600; text-transform:lowercase;
+    letter-spacing:.5px; font-size:.85em; opacity:.75; margin-right:3px; }
+  .deel-chip-compact { background:rgba(0,0,0,.32); border:1px dashed rgba(255,157,60,.45); border-radius:7px;
+    padding:3px 8px; font-size:.78rem; line-height:1; color:#ffd9b0; font-family:inherit; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+  .deel-chip-compact:active { background:rgba(0,0,0,.5); }
   .audio-ind { margin-left:auto; font-size:.62rem; color:#9c8; display:flex; align-items:center; gap:5px; }
   .dot-sp { width:8px; height:8px; border-radius:50%; background:#1db954; box-shadow:0 0 7px #1db954; }
 
@@ -274,6 +294,7 @@
   <div class="instap" id="instapForm">
     <div class="wordmark">HIT<span>LIJN</span></div>
     <div class="tagline">het muziek-tijdlijnspel — raad wanneer, steel de kaart, win de avond</div>
+    <div class="deel-hint" id="deelHint" hidden>👋 vul je naam in en je zit erbij</div>
     <input class="veld" id="veldNaam" placeholder="Je naam" maxlength="20" autocomplete="off">
     <button class="knop-groot knop-maak" id="btnMaak">KAMER MAKEN</button>
     <div class="cards-rij">
@@ -296,7 +317,8 @@
 
   <div class="instap" id="instapLobby" hidden>
     <div class="wordmark">HIT<span>LIJN</span></div>
-    <span class="kamercode-groot" id="lobbyCode"></span>
+    <span class="kamercode-groot" id="lobbyCode" role="button" tabindex="0"></span>
+    <button type="button" class="deel-chip" id="lobbyDeelChip"></button>
     <div class="lobby-lijst" id="lobbySpelers"></div>
     <div id="lobbyPools" style="width:100%"></div>
     <div id="lobbyActie" style="width:100%"></div>
@@ -308,6 +330,7 @@
   <div class="topbar">
     <div class="wordmark">HIT<span>LIJN</span></div>
     <span class="kamercode" id="kamercodeLabel"></span>
+    <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren">🔗</button>
     <span class="audio-ind" id="audioInd">🎧 preview</span>
   </div>
 
@@ -351,6 +374,23 @@
   if (!playerId) { playerId = crypto.randomUUID(); localStorage.setItem('hitlijnPlayerId', playerId); }
   let naam = localStorage.getItem('hitlijnNaam') || '';
   let kamer = localStorage.getItem('hitlijnKamer') || null;
+
+  // ── deel-link (?kamer=CODE) ─────────────────────────────────────────────
+  // Wint van een opgeslagen hitlijnKamer-herverbinding wanneer beide bestaan (kamer wordt
+  // hieronder overschreven). De param wordt altijd gestript, ook zonder opgeslagen naam, zodat
+  // een refresh terugvalt op de normale opgeslagen-kamer-flow in plaats van 'm opnieuw te lezen.
+  let deelLinkCode = null;
+  {
+    const params = new URLSearchParams(location.search);
+    const linkCode = params.get('kamer');
+    if (linkCode) {
+      deelLinkCode = linkCode.toUpperCase().trim();
+      if (naam) kamer = deelLinkCode; // met naam: neemt de deel-link direct over als doelkamer
+      params.delete('kamer');
+      const rest = params.toString();
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+  }
 
   let me = null;            // { id, isSpectator } uit hl:room:joined
   let currentRoom = null;   // laatste hl:state/hl:room:joined room
@@ -397,6 +437,45 @@
     el.textContent = msg; el.hidden = false;
     clearTimeout(foutTimer);
     foutTimer = setTimeout(() => { el.hidden = true; }, 3500);
+  }
+
+  // ── tik-om-te-kopiëren (deel-link + kamercode) ──────────────────────────
+  async function kopieerNaarKlembord(tekst) {
+    try {
+      await navigator.clipboard.writeText(tekst);
+      return true;
+    } catch { /* val terug op execCommand */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = tekst;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.pointerEvents = 'none';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const gelukt = document.execCommand('copy');
+      ta.remove();
+      if (gelukt) return true;
+    } catch { /* val verder terug */ }
+    return false;
+  }
+  // Bindt precies één keer per element (dataset-guard, want de meeste dragers hier overleven
+  // her-renders). waardeFn/succesHtmlFn lezen live state op het moment van de tik, niet op het
+  // moment van binden — zo blijft de waarde correct ook als er intussen opnieuw gerenderd is.
+  function bindTikKopieer(el, waardeFn, succesHtmlFn) {
+    if (!el || el.dataset.tikKopieerBound) return;
+    el.dataset.tikKopieerBound = '1';
+    el.addEventListener('click', async () => {
+      const waarde = waardeFn();
+      if (!waarde) return;
+      const ok = await kopieerNaarKlembord(waarde);
+      if (!ok) { toonFout(waarde); return; } // laatste redmiddel: toon 'm zodat iemand 'm met de hand kan overtikken
+      const origineel = el.innerHTML;
+      el.innerHTML = succesHtmlFn();
+      clearTimeout(el._kopieerTimer);
+      el._kopieerTimer = setTimeout(() => { el.innerHTML = origineel; }, 1500);
+    });
   }
 
   // ── reconnecting WebSocket (eigen, ~20 regels, patroon van common.js) ──────
@@ -460,9 +539,11 @@
         toonFout(data.message);
         if (rejoining) {
           rejoining = false;
+          const gefaaldeCode = kamer; // ook de niet-deel-link herverbinding profiteert van de prefill
           kamer = null;
           localStorage.removeItem('hitlijnKamer');
           showEntry();
+          if (gefaaldeCode) $('veldCode').value = gefaaldeCode;
         }
         break;
     }
@@ -509,8 +590,12 @@
   function renderLobby(room) {
     currentRoom = room;
     showInstap('lobby');
-    $('lobbyCode').textContent = ''; // esc() niet nodig voor textContent, maar houd consistent met de rest
-    $('lobbyCode').textContent = esc(room.roomId);
+    $('lobbyCode').innerHTML = `<span class="kamercode-eyebrow">kamercode</span><span>${esc(room.roomId)}</span>`;
+    bindTikKopieer($('lobbyCode'), () => currentRoom?.roomId,
+      () => '<span class="kamercode-eyebrow">kamercode</span><span>✔</span>');
+    $('lobbyDeelChip').innerHTML = '<span class="deel-chip-icon">🔗</span><span class="deel-chip-tekst">Deel-link — tik om te kopiëren</span>';
+    bindTikKopieer($('lobbyDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '',
+      () => '<span class="deel-chip-icon">🔗</span><span class="deel-chip-tekst">✔ Gekopieerd!</span>');
     $('lobbySpelers').innerHTML = room.players.map((p) => `
       <div class="lobby-rij">${avaHtml(p, 26)}<span>${esc(p.displayName)}</span>${p.id === room.hostId ? '<span class="host-tag">HOST</span>' : ''}</div>
     `).join('');
@@ -641,7 +726,9 @@
     const ik = me ? room.players.find((p) => p.id === me.id) : null;
     const isMijnBeurt = Boolean(ik) && room.activeUserId === me.id;
 
-    $('kamercodeLabel').textContent = esc(room.roomId);
+    $('kamercodeLabel').innerHTML = `<span class="kamercode-eyebrow-inline">kamer</span> ${esc(room.roomId)}`;
+    bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => '✔');
+    bindTikKopieer($('topbarDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '', () => '✔');
 
     $('bandKop').innerHTML = actief ? `
       <span class="aanzet-mini">AAN ZET</span>${avaHtml(actief, 26)}<span class="band-naam">${esc(actief.displayName)}</span>
@@ -1146,6 +1233,11 @@
 
   $('veldNaam').value = naam;
   showEntry();
+  if (!naam && deelLinkCode) {
+    $('veldCode').value = deelLinkCode;
+    $('veldNaam').focus();
+    $('deelHint').hidden = false;
+  }
   laadSpotifyTokens();
   (async () => {
     await initConfig();               // spotifyClientId + SHOUT
