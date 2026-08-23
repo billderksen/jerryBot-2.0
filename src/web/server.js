@@ -41,7 +41,7 @@ import { existsSync, createReadStream } from 'fs';
 import { execSync } from 'child_process';
 import { randomBytes } from 'node:crypto';
 import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
-import { parseSpotifyUrl, getTrack, getPlaylistTracks, getAlbumTracks, searchTracks, resolveToYouTube } from '../utils/spotifyResolve.js';
+import { parseSpotifyUrl, getTrack, getPlaylistTracks, getAlbumTracks, searchTracks, resolveToYouTube, resolveAndQueueSpotifyTracks } from '../utils/spotifyResolve.js';
 
 // Detect system yt-dlp for Linux
 let ytDlpExec = ytDlpPkg;
@@ -184,16 +184,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// Tiny in-memory sliding-window rate limiter, keyed per user (or IP if logged out)
+// Tiny in-memory sliding-window rate limiter, keyed per user (or IP if logged out).
+// checkRateLimit is the primitive (usable straight from inside a handler, not just as route
+// middleware — the Spotify bulk-add branch of /api/queue/add needs its own limiter applied
+// only on part of a shared route, where wiring a second app.post middleware doesn't fit).
 const rateBuckets = new Map(); // key -> [timestamps]
+function checkRateLimit(name, maxHits, windowMs, req) {
+  const key = `${name}:${req.session?.user?.id || req.ip}`;
+  const now = Date.now();
+  const hits = (rateBuckets.get(key) || []).filter(t => now - t < windowMs);
+  if (hits.length >= maxHits) return false;
+  hits.push(now);
+  rateBuckets.set(key, hits);
+  return true;
+}
 function rateLimit(name, maxHits, windowMs) {
   return (req, res, next) => {
-    const key = `${name}:${req.session?.user?.id || req.ip}`;
-    const now = Date.now();
-    const hits = (rateBuckets.get(key) || []).filter(t => now - t < windowMs);
-    if (hits.length >= maxHits) return res.status(429).json({ error: 'Rate limit exceeded' });
-    hits.push(now);
-    rateBuckets.set(key, hits);
+    if (!checkRateLimit(name, maxHits, windowMs, req)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
     next();
   };
 }
@@ -1524,44 +1533,6 @@ app.get('/api/lyrics', async (req, res) => {
   }
 });
 
-// Resolves a list of normalized Spotify tracks (spotifyResolve.js's normalizeTrack shape) to
-// YouTube and hands each one to `queueTrack` sequentially. Exported so Task 3's /play command
-// can reuse this exact loop instead of duplicating it — only "how do I actually queue a song"
-// (web dashboard vs. a Discord interaction) differs between call sites.
-export async function resolveAndQueueSpotifyTracks(tracks, queueTrack) {
-  let added = 0;
-  let failed = 0;
-
-  for (const track of tracks) {
-    try {
-      const resolved = await resolveToYouTube(track, ytDlpExec);
-      if (!resolved?.url) {
-        failed++;
-        continue;
-      }
-      const song = {
-        title: `${track.artist} – ${track.title}`,
-        artist: track.artist,
-        url: resolved.url,
-        thumbnail: track.thumbnail,
-        duration: track.durationSec,
-        spotify: true
-      };
-      const result = await queueTrack(song);
-      if (result && result.success === false) {
-        failed++;
-      } else {
-        added++;
-      }
-    } catch (error) {
-      console.error(`[spotify] Failed to resolve/queue "${track?.artist ?? ''} - ${track?.title ?? ''}":`, error);
-      failed++;
-    }
-  }
-
-  return { added, failed, total: tracks.length };
-}
-
 // Spotify API errors (spotifyResolve.js's spotifyFetch) come through as a plain Error with the
 // HTTP status embedded in the message; pull it back out so a 403 on a Spotify-owned editorial
 // playlist (client-credentials tokens can't read those) can get its own friendly message.
@@ -1572,10 +1543,10 @@ function spotifyErrorStatus(error) {
 
 // Spotify URL branch of /api/queue/add: a track resolves to one YouTube song through the same
 // addSongHandler path a normal URL takes; a playlist/album fetches its tracks (capped at 100)
-// and resolves+queues them one at a time via resolveAndQueueSpotifyTracks, so every successful
-// add gets the same broadcastState() the existing YouTube-playlist "Add All" flow produces by
-// calling this endpoint once per track.
-async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requestedById, isRadio }, res) {
+// and resolves+queues them one at a time via resolveAndQueueSpotifyTracks (spotifyResolve.js),
+// so every successful add gets the same broadcastState() the existing YouTube-playlist "Add
+// All" flow produces by calling this endpoint once per track.
+async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requestedById, isRadio }, req, res) {
   if (!addSongHandler) {
     return res.status(500).json({ error: 'Queue not available' });
   }
@@ -1615,8 +1586,16 @@ async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requ
       return res.json({ success: true, song, result });
     }
 
-    // playlist or album — cap 100 (getPlaylistTracks enforces its own cap; getAlbumTracks has
-    // no cap of its own, so it's applied here too)
+    // playlist or album — a bulk import is expensive (up to 100 sequential yt-dlp searches), so
+    // it gets its own tighter limiter rather than sharing 'queueadd's 20/min with single-track
+    // adds; 3/min per user is generous for real usage and caps worst case at ~300 yt-dlp spawns
+    // per user per minute on this shared box.
+    if (!checkRateLimit('spotifybulk', 3, 60_000, req)) {
+      return res.status(429).json({ error: 'Rate limit exceeded voor Spotify-playlists/albums — probeer het over een minuutje opnieuw.' });
+    }
+
+    // cap 100 (getPlaylistTracks enforces its own cap; getAlbumTracks has no cap of its own, so
+    // it's applied here too)
     const tracks = type === 'playlist' ? await getPlaylistTracks(id, 100) : (await getAlbumTracks(id)).slice(0, 100);
     if (tracks.length === 0) {
       return res.status(400).json({ error: 'Deze Spotify-playlist/album bevat geen beschikbare tracks.' });
@@ -1626,7 +1605,7 @@ async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requ
       const result = await addSongHandler({ ...song, requestedBy, requestedById, source: 'youtube' }, targetGuildId);
       if (result?.success !== false) logAdd(song.title);
       return result;
-    });
+    }, ytDlpExec);
 
     const message = failed > 0
       ? `${added} van ${total} toegevoegd; ${failed} niet gevonden`
@@ -1635,9 +1614,10 @@ async function handleSpotifyAdd({ type, id }, { targetGuildId, requestedBy, requ
   } catch (error) {
     const status = spotifyErrorStatus(error);
     if (status === 403) {
-      return res.status(403).json({
-        error: 'Deze Spotify-playlist is door Spotify zelf beheerd en niet op te vragen — gebruik een playlist van een gebruiker.'
-      });
+      const message = type === 'album'
+        ? 'Dit Spotify-album is niet op te vragen — probeer het later opnieuw.'
+        : 'Deze Spotify-playlist is door Spotify zelf beheerd en niet op te vragen — gebruik een playlist van een gebruiker.';
+      return res.status(403).json({ error: message });
     }
     console.error('Spotify add error:', error);
     return res.status(502).json({ error: 'Kon de Spotify-gegevens niet ophalen. Probeer het later opnieuw.' });
@@ -1661,7 +1641,7 @@ app.post('/api/queue/add', rateLimit('queueadd', 20, 60_000), async (req, res) =
   // gate below — they resolve to YouTube internally via handleSpotifyAdd.
   const spotifyRef = parseSpotifyUrl(url);
   if (spotifyRef) {
-    return handleSpotifyAdd(spotifyRef, { targetGuildId: guildId || currentState.guildId, requestedBy, requestedById, isRadio }, res);
+    return handleSpotifyAdd(spotifyRef, { targetGuildId: guildId || currentState.guildId, requestedBy, requestedById, isRadio }, req, res);
   }
 
   if (!isAllowedMediaUrl(url)) {

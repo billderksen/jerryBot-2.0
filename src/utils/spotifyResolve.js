@@ -263,3 +263,45 @@ export async function resolveToYouTube(track, ytDlpExec) {
   const url = best.url || (best.id ? `https://www.youtube.com/watch?v=${best.id}` : null);
   return { url, confidence: bestScore };
 }
+
+// --- Bulk resolve + queue (IO, orchestration only) ---------------------------
+
+// Resolves a list of normalized tracks (see normalizeTrack) to YouTube and hands each one to
+// `queueTrack` sequentially. ytDlpExec is injected here too, threaded straight through to
+// resolveToYouTube — same pattern as that function, so this stays testable with a fake and has
+// no dependency on any particular caller's module (the web dashboard's /api/queue/add and the
+// /play command both drive it with their own "how do I actually queue a song" callback, rather
+// than duplicating this loop).
+export async function resolveAndQueueSpotifyTracks(tracks, queueTrack, ytDlpExec) {
+  let added = 0;
+  let failed = 0;
+
+  for (const track of tracks) {
+    try {
+      const resolved = await resolveToYouTube(track, ytDlpExec);
+      if (!resolved?.url) {
+        failed++;
+        continue;
+      }
+      const song = {
+        title: `${track.artist} – ${track.title}`,
+        artist: track.artist,
+        url: resolved.url,
+        thumbnail: track.thumbnail,
+        duration: track.durationSec,
+        spotify: true
+      };
+      const result = await queueTrack(song);
+      if (result && result.success === false) {
+        failed++;
+      } else {
+        added++;
+      }
+    } catch (error) {
+      console.error(`[spotifyResolve] Failed to resolve/queue "${track?.artist ?? ''} - ${track?.title ?? ''}":`, error);
+      failed++;
+    }
+  }
+
+  return { added, failed, total: tracks.length };
+}

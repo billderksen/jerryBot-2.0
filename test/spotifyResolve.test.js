@@ -5,7 +5,8 @@ import {
   parseSpotifyUrl,
   normalizeTrack,
   scoreYouTubeCandidate,
-  resolveToYouTube
+  resolveToYouTube,
+  resolveAndQueueSpotifyTracks
 } from '../src/utils/spotifyResolve.js';
 
 test('parseSpotifyUrl: track/playlist/album links, with and without locale prefix', () => {
@@ -158,4 +159,47 @@ test('resolveToYouTube: queries ytsearch3 with artist and title', async () => {
   };
   await resolveToYouTube(track, fakeYtDlpExec);
   assert.equal(seenQuery, 'ytsearch3:Artist Name Song Title');
+});
+
+test('resolveAndQueueSpotifyTracks: resolves each track and hands it to queueTrack, counting added vs. failed', async () => {
+  const tracks = [
+    { title: 'Found Song', artist: 'Artist A', durationSec: 200, thumbnail: 'https://img/a.jpg' },
+    { title: 'Missing Song', artist: 'Artist B', durationSec: 180, thumbnail: null }
+  ];
+  // One search yields a match, the other yields zero entries (Artist B).
+  const fakeYtDlpExec = async (query) => {
+    if (query.includes('Artist A')) {
+      return { entries: [{ id: 'found1', title: 'Artist A - Found Song', duration: 200, channel: 'Artist A' }] };
+    }
+    return { entries: [] };
+  };
+  const queued = [];
+  const queueTrack = async (song) => {
+    queued.push(song);
+    return { success: true };
+  };
+
+  const result = await resolveAndQueueSpotifyTracks(tracks, queueTrack, fakeYtDlpExec);
+
+  assert.deepEqual(result, { added: 1, failed: 1, total: 2 });
+  assert.equal(queued.length, 1);
+  assert.deepEqual(queued[0], {
+    title: 'Artist A – Found Song',
+    artist: 'Artist A',
+    url: 'https://www.youtube.com/watch?v=found1',
+    thumbnail: 'https://img/a.jpg',
+    duration: 200,
+    spotify: true
+  });
+});
+
+test('resolveAndQueueSpotifyTracks: a queueTrack failure ({success: false}) counts as failed, not a thrown error', async () => {
+  const tracks = [{ title: 'Song', artist: 'Artist A', durationSec: 200, thumbnail: null }];
+  const fakeYtDlpExec = async () => ({
+    entries: [{ id: 'x', title: 'Artist A - Song', duration: 200, channel: 'Artist A' }]
+  });
+  const queueTrack = async () => ({ success: false, error: 'no voice channel' });
+
+  const result = await resolveAndQueueSpotifyTracks(tracks, queueTrack, fakeYtDlpExec);
+  assert.deepEqual(result, { added: 0, failed: 1, total: 1 });
 });
