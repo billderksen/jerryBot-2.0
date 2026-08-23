@@ -2,14 +2,58 @@ import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getQueue, createQueue, ytDlpExec, ytCookieOpts } from '../utils/musicQueue.js';
 import { logCommandAction } from '../utils/activityLogger.js';
 import { isAllowedMediaUrl, sanitizeSearchQuery } from '../utils/urlValidation.js';
-import Spotify from 'spotify-url-info';
-import { fetch } from 'undici';
+import {
+  parseSpotifyUrl,
+  getTrack,
+  getPlaylistTracks,
+  getAlbumTracks,
+  resolveToYouTube,
+  resolveAndQueueSpotifyTracks
+} from '../utils/spotifyResolve.js';
 
-const { getPreview, getTracks } = Spotify(fetch);
+// Spotify API errors (spotifyResolve.js's spotifyFetch) come through as a plain Error with the
+// HTTP status embedded in the message; pull it back out so a 403 on a Spotify-owned editorial
+// playlist (client-credentials tokens can't read those) can get its own friendly message. Mirrors
+// server.js's handleSpotifyAdd — same wording, so a user sees one consistent message regardless
+// of whether they hit this from Discord or the web dashboard.
+function spotifyErrorStatus(error) {
+  const match = /Spotify (?:API|token) request failed: (\d{3})/.exec(error?.message ?? '');
+  return match ? parseInt(match[1], 10) : null;
+}
 
-// Helper to check if URL is Spotify
-function isSpotifyUrl(url) {
-  return url.includes('spotify.com') || url.includes('spotify:');
+// Adds a song to the guild's queue, joining the requester's voice channel first if the queue
+// isn't connected yet, and starts playback if nothing is currently playing. Shared by the
+// single-song path below and the Spotify playlist/album bulk-queue path, which both need
+// "queue it, and start it if the queue was idle" but only the former reports per-song status
+// back to the interaction.
+async function queueAndMaybePlay(interaction, voiceChannel, song) {
+  let queue = getQueue(interaction.guildId);
+
+  if (!queue) {
+    const guildInfo = {
+      name: interaction.guild.name,
+      icon: interaction.guild.iconURL({ size: 128 })
+    };
+    queue = createQueue(interaction.guildId, guildInfo);
+  }
+
+  // A queue can exist without being in a channel: a restart restores the queue but stays out
+  // of an empty channel (see musicQueue's restoreQueueState). /play is what puts the bot
+  // there, whether the queue is new or was waiting.
+  if (!queue.connection) {
+    await queue.join(voiceChannel);
+    queue.addSong(song);
+    const outcome = await queue.play();
+    return { queue, outcome };
+  }
+
+  queue.addSong(song);
+  if (!queue.isPlaying) {
+    const outcome = await queue.play();
+    return { queue, outcome };
+  }
+
+  return { queue, outcome: null };
 }
 
 // Search YouTube via yt-dlp (replaces the unmaintained play-dl search). Reuses
@@ -57,6 +101,67 @@ function describeStart(outcome, song) {
   // Something else took the queue over while this was starting (a skip, a stop, another song),
   // so the song this command added is in the queue rather than playing
   return `➕ Added to queue: **${acted.title}**${tag}`;
+}
+
+// Spotify playlist/album branch of /play: fetches the tracklist (capped at 100, same as the web
+// dashboard's equivalent in server.js's handleSpotifyAdd), then resolves+queues each track to
+// YouTube one at a time via resolveAndQueueSpotifyTracks, reusing queueAndMaybePlay as the
+// per-track "add it, start it if the queue was idle" step. The interaction was already deferred
+// by execute() before this ran, since a 100-track resolve is not a sub-3s operation.
+async function handleSpotifyBulkPlay(interaction, { type, id }, voiceChannel) {
+  try {
+    const tracks = type === 'playlist'
+      ? await getPlaylistTracks(id, 100)
+      : (await getAlbumTracks(id)).slice(0, 100);
+
+    if (tracks.length === 0) {
+      return await interaction.editReply({
+        content: '❌ Deze Spotify-playlist/album bevat geen beschikbare tracks.'
+      });
+    }
+
+    const queueTrack = async (song) => {
+      await queueAndMaybePlay(interaction, voiceChannel, {
+        ...song,
+        requestedBy: interaction.member.displayName,
+        requestedById: interaction.user.id,
+        source: 'youtube'
+      });
+      logCommandAction(interaction.user, 'play', song.title);
+      return { success: true };
+    };
+
+    const { added, failed, total } = await resolveAndQueueSpotifyTracks(tracks, queueTrack, ytDlpExec);
+
+    const message = failed > 0
+      ? `${added} van ${total} toegevoegd; ${failed} niet gevonden`
+      : `${added} van ${total} toegevoegd`;
+    await interaction.editReply({ content: `✅ ${message}` });
+  } catch (error) {
+    console.error('Error playing Spotify playlist/album:', error);
+
+    // A 403 on a Spotify-owned editorial playlist/album (client-credentials tokens can't read
+    // those) gets the same friendly wording server.js's handleSpotifyAdd uses for the web
+    // dashboard's equivalent flow, rather than the generic API-down message below.
+    const status = spotifyErrorStatus(error);
+    if (status === 403) {
+      const message = type === 'album'
+        ? 'Dit Spotify-album is niet op te vragen — probeer het later opnieuw.'
+        : 'Deze Spotify-playlist is door Spotify zelf beheerd en niet op te vragen — gebruik een playlist van een gebruiker.';
+      try {
+        await interaction.editReply({ content: `❌ ${message}` });
+      } catch {
+        // Interaction already expired
+      }
+      return;
+    }
+
+    try {
+      await interaction.editReply({ content: '❌ Kon de Spotify-gegevens niet ophalen. Probeer het later opnieuw.' });
+    } catch {
+      // Interaction already expired
+    }
+  }
 }
 
 export default {
@@ -134,29 +239,35 @@ export default {
 
     await interaction.deferReply();
 
+    // Spotify URLs (track/playlist/album) are detected before anything else. A track resolves
+    // to a single YouTube video and joins the normal single-song flow below (reply shows the
+    // Spotify title/artist); a playlist/album is a bulk operation handled separately since it
+    // has no single `song` to hand to the shared queue-and-reply code and can take a while.
+    const spotifyRef = parseSpotifyUrl(songUrl);
+
+    if (spotifyRef && (spotifyRef.type === 'playlist' || spotifyRef.type === 'album')) {
+      return await handleSpotifyBulkPlay(interaction, spotifyRef, voiceChannel);
+    }
+
     try {
       let song;
-      
-      // Check if it's a Spotify URL
-      if (isSpotifyUrl(songUrl)) {
-        // Get track info from Spotify
-        const spotifyTrack = await getPreview(songUrl);
-        const searchQuery = `${spotifyTrack.artist} - ${spotifyTrack.title}`;
-        
-        // Search YouTube for the song
-        const ytResult = await searchYouTube(searchQuery);
-        
-        if (!ytResult) {
+
+      if (spotifyRef?.type === 'track') {
+        const track = await getTrack(spotifyRef.id);
+        const resolved = await resolveToYouTube(track, ytDlpExec);
+
+        if (!resolved?.url) {
           return await interaction.editReply({
-            content: `❌ Could not find "${searchQuery}" on YouTube.`
+            content: `❌ Could not find "${track.artist} – ${track.title}" on YouTube.`
           });
         }
-        
+
         song = {
-          title: `${spotifyTrack.artist} - ${spotifyTrack.title}`,
-          url: ytResult.url,
-          duration: Math.floor(spotifyTrack.duration / 1000) || 0,
-          thumbnail: spotifyTrack.image,
+          title: `${track.artist} – ${track.title}`,
+          artist: track.artist,
+          url: resolved.url,
+          duration: track.durationSec,
+          thumbnail: track.thumbnail,
           requestedBy: interaction.member.displayName,
           requestedById: interaction.user.id,
           source: 'spotify'
@@ -210,39 +321,14 @@ export default {
         };
       }
 
-      // Get or create queue
-      let queue = getQueue(interaction.guildId);
-      
-      if (!queue) {
-        // Get guild info for the web dashboard
-        const guildInfo = {
-          name: interaction.guild.name,
-          icon: interaction.guild.iconURL({ size: 128 })
-        };
-        queue = createQueue(interaction.guildId, guildInfo);
-      }
+      const { queue, outcome } = await queueAndMaybePlay(interaction, voiceChannel, song);
 
-      // A queue can exist without being in a channel: a restart restores the queue but stays
-      // out of an empty channel (see musicQueue's restoreQueueState). /play is what puts the
-      // bot there, whether the queue is new or was waiting.
-      if (!queue.connection) {
-        await queue.join(voiceChannel);
-        queue.addSong(song);
-        const outcome = await queue.play();
-
+      if (outcome) {
         await interaction.editReply({ content: describeStart(outcome, song) });
       } else {
-        queue.addSong(song);
-
-        // If not currently playing, start playback
-        if (!queue.isPlaying) {
-          const outcome = await queue.play();
-          await interaction.editReply({ content: describeStart(outcome, song) });
-        } else {
-          await interaction.editReply({
-            content: `➕ Added to queue: **${song.title}**${song.source === 'spotify' ? ' 🎧' : ''}\nPosition: ${queue.songs.length}`
-          });
-        }
+        await interaction.editReply({
+          content: `➕ Added to queue: **${song.title}**${song.source === 'spotify' ? ' 🎧' : ''}\nPosition: ${queue.songs.length}`
+        });
       }
 
       console.log(`\n[${new Date().toISOString()}] Music played by ${interaction.user.tag}:`);
