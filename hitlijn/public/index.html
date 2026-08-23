@@ -1080,12 +1080,16 @@
     }
   }
 
-  // PKCE-login: verifier in sessionStorage, S256-challenge naar Spotify's authorize-endpoint.
+  // PKCE-login: verifier + state in sessionStorage, S256-challenge naar Spotify's
+  // authorize-endpoint. PKCE zelf blunt al login-CSRF, maar `state` is de RFC-voorgeschreven
+  // extra grendel en kost hier maar een paar regels.
   $('btnSpotify').addEventListener('click', async () => {
     if (!spotifyClientId) return;
     try {
       const verifier = genereerSpotifyVerifier();
       sessionStorage.setItem('hlSpotifyVerifier', verifier);
+      const state = genereerSpotifyVerifier().slice(0, 32);
+      sessionStorage.setItem('hlSpotifyState', state);
       const challenge = await genereerSpotifyChallenge(verifier);
       const params = new URLSearchParams({
         client_id: spotifyClientId,
@@ -1094,6 +1098,7 @@
         scope: SPOTIFY_SCOPES,
         code_challenge_method: 'S256',
         code_challenge: challenge,
+        state,
       });
       location.href = `${SPOTIFY_ACCOUNTS}/authorize?${params.toString()}`;
     } catch { toonFout('Kon Spotify-login niet starten'); }
@@ -1110,8 +1115,11 @@
     try {
       if (err) { toonFout('Spotify-login geweigerd'); return; }
       if (!code) return;
+      const verwachteState = sessionStorage.getItem('hlSpotifyState');
+      sessionStorage.removeItem('hlSpotifyState');
       const verifier = sessionStorage.getItem('hlSpotifyVerifier');
       sessionStorage.removeItem('hlSpotifyVerifier');
+      if (!verwachteState || params.get('state') !== verwachteState) { toonFout('Spotify-login afgebroken'); return; }
       if (!verifier || !spotifyClientId) { toonFout('Spotify-login verlopen — probeer opnieuw'); return; }
       const body = new URLSearchParams({
         grant_type: 'authorization_code', code,
