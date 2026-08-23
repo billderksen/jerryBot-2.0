@@ -7,7 +7,9 @@ import '../../src/loadEnv.js';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { dedupeSongs, themeFor, songKey, beoordeelDeezerHit, beoordeelSpotifyHit } from '../game.mjs';
+import {
+  dedupeSongs, themeFor, songKey, beoordeelDeezerHit, beoordeelSpotifyHit, moetOpnieuwZoeken,
+} from '../game.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, '../..');
@@ -20,12 +22,17 @@ function laadBronnen() {
   const basis = JSON.parse(readFileSync(join(REPO, 'data/hitsterSongs.json'), 'utf8')).songs
     .map((s) => ({ artist: s.artist, title: s.title, year: s.year, bron: 'basis' }));
   const decks = ['hitster-original-nl', 'hitster-guilty-pleasures-nl', 'hitster-summer-party-nl'];
+  // Op de RUWE Guilty-Pleasures-lijst bijhouden, niet na dedupeSongs: een GP-song die ook in
+  // het Original-deck zit verliest van dedupe (dat wint eerst), maar hoort toch in feest-fout.
+  const gpKeys = new Set();
   const uitDecks = decks.flatMap((naam) => {
     const pad = join(__dirname, 'decks', `${naam}.json`);
     if (!existsSync(pad)) { console.log(`(deck ontbreekt: ${naam})`); return []; }
-    return JSON.parse(readFileSync(pad, 'utf8')).songs.map((s) => ({ ...s, bron: naam }));
+    const songs = JSON.parse(readFileSync(pad, 'utf8')).songs.map((s) => ({ ...s, bron: naam }));
+    if (naam === 'hitster-guilty-pleasures-nl') songs.forEach((s) => gpKeys.add(songKey(s)));
+    return songs;
   });
-  return dedupeSongs([...uitDecks, ...basis]); // decks eerst: hun (kaart)jaar wint bij dubbelen
+  return { songs: dedupeSongs([...uitDecks, ...basis]), gpKeys }; // decks eerst: hun (kaart)jaar wint bij dubbelen
 }
 
 async function spotifyToken() {
@@ -40,28 +47,43 @@ async function spotifyToken() {
   return (await res.json()).access_token;
 }
 
+// Beide zoekers geven drie uitkomsten: { previewUrl/spotifyId } bij een geslaagde hit,
+// false bij een definitieve no-match (API antwoordde ok, niets voldeed), null bij een fout
+// (netwerk/status) — alleen bij null mag een latere run het opnieuw proberen. Bij een fout
+// alleen songKey + status/foutmelding loggen, nooit de response-body.
+
 async function zoekDeezer(song) {
   const q = encodeURIComponent(`artist:"${song.artist}" track:"${song.title}"`);
-  const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=5`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  const hit = (data.data ?? []).find((h) => beoordeelDeezerHit(h, song) && h.preview);
-  return hit ? { previewUrl: hit.preview } : null;
+  try {
+    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=5`);
+    if (!res.ok) { console.log(`Deezer-fout (${res.status}) voor ${songKey(song)}`); return null; }
+    const data = await res.json();
+    const hit = (data.data ?? []).find((h) => beoordeelDeezerHit(h, song) && h.preview);
+    return hit ? { previewUrl: hit.preview } : false;
+  } catch (err) {
+    console.log(`Deezer-fout (${err.message}) voor ${songKey(song)}`);
+    return null;
+  }
 }
 
 async function zoekSpotify(song, token) {
   if (!token) return null;
   const q = encodeURIComponent(`artist:${song.artist} track:${song.title}`);
-  const res = await fetch(`https://api.spotify.com/v1/search?type=track&limit=5&q=${q}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  const hit = (data.tracks?.items ?? []).find((i) => beoordeelSpotifyHit(i, song));
-  return hit ? { spotifyId: hit.id } : null;
+  try {
+    const res = await fetch(`https://api.spotify.com/v1/search?type=track&limit=5&q=${q}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { console.log(`Spotify-fout (${res.status}) voor ${songKey(song)}`); return null; }
+    const data = await res.json();
+    const hit = (data.tracks?.items ?? []).find((i) => beoordeelSpotifyHit(i, song));
+    return hit ? { spotifyId: hit.id } : false;
+  } catch (err) {
+    console.log(`Spotify-fout (${err.message}) voor ${songKey(song)}`);
+    return null;
+  }
 }
 
-const songs = laadBronnen();
+const { songs, gpKeys } = laadBronnen();
 console.log(`${songs.length} unieke songs uit alle bronnen`);
 const state = existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : {};
 const token = await spotifyToken();
@@ -74,14 +96,27 @@ for (const song of songs) {
     n++;
     const deezer = await zoekDeezer(song); await sleep(1000);
     const spotify = await zoekSpotify(song, token); if (token) await sleep(300);
-    state[key] = { ...song, id: key, previewUrl: deezer?.previewUrl ?? null, spotifyId: spotify?.spotifyId ?? null };
+    state[key] = {
+      ...song, id: key,
+      previewUrl: deezer?.previewUrl ?? null, deezerDefinitief: deezer !== null,
+      spotifyId: spotify?.spotifyId ?? null, spotifyDefinitief: spotify !== null,
+    };
     writeFileSync(STATE_FILE, JSON.stringify(state));
     if (n % 25 === 0) console.log(`${n} songs geresolved…`);
-  } else if (token && state[key].spotifyId == null) {
-    // tweede run mét creds: alleen ontbrekende spotifyIds bijvullen
+  } else if (moetOpnieuwZoeken({ waarde: state[key].previewUrl, definitief: state[key].deezerDefinitief })) {
+    // eerdere poging was een fout (geen definitieve no-match): Deezer opnieuw proberen
+    n++;
+    const deezer = await zoekDeezer(song); await sleep(1000);
+    state[key].previewUrl = deezer?.previewUrl ?? null;
+    state[key].deezerDefinitief = deezer !== null;
+    writeFileSync(STATE_FILE, JSON.stringify(state));
+  } else if (token && moetOpnieuwZoeken({ waarde: state[key].spotifyId, definitief: state[key].spotifyDefinitief })) {
+    // tweede run mét creds, of een eerdere Spotify-fout: opnieuw proberen
     n++;
     const spotify = await zoekSpotify(song, token); await sleep(300);
-    if (spotify) { state[key].spotifyId = spotify.spotifyId; writeFileSync(STATE_FILE, JSON.stringify(state)); }
+    state[key].spotifyId = spotify?.spotifyId ?? null;
+    state[key].spotifyDefinitief = spotify !== null;
+    writeFileSync(STATE_FILE, JSON.stringify(state));
   }
 }
 
@@ -96,7 +131,7 @@ const pools = [
 for (const s of bruikbaar) {
   const kaal = { id: s.id, artist: s.artist, title: s.title, year: s.year, previewUrl: s.previewUrl, spotifyId: s.spotifyId };
   pools.find((p) => p.id === themeFor(s)).songs.push(kaal);
-  if (s.bron === 'hitster-guilty-pleasures-nl') pools.find((p) => p.id === 'feest-fout').songs.push(kaal);
+  if (gpKeys.has(s.id)) pools.find((p) => p.id === 'feest-fout').songs.push(kaal);
 }
 mkdirSync(dirname(OUT_FILE), { recursive: true });
 writeFileSync(OUT_FILE + '.tmp', JSON.stringify({ pools }, null, 1));

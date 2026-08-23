@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SHOUT, makeRoomCode, validateName, dedupeSongs, themeFor, pickSong, audioSourceFor,
-  beoordeelDeezerHit, beoordeelSpotifyHit,
+  beoordeelDeezerHit, beoordeelSpotifyHit, moetOpnieuwZoeken,
 } from '../hitlijn/game.mjs';
 
 test('SHOUT is de hernoembare roep-constante', () => {
@@ -72,4 +72,10 @@ test('beoordeelSpotifyHit: eerste artiest, fuzzy beide velden', () => {
   assert.equal(beoordeelSpotifyHit({ name: 'Bohemian Rhapsody - Remastered 2011', artists: [{ name: 'Queen' }] }, song), true);
   assert.equal(beoordeelSpotifyHit({ name: 'Bohemian Rhapsody', artists: [{ name: 'Panic! At The Disco' }] }, song), false);
   assert.equal(beoordeelSpotifyHit(undefined, song), false);
+});
+
+test('moetOpnieuwZoeken: retry tenzij definitief', () => {
+  assert.equal(moetOpnieuwZoeken({ waarde: null, definitief: false }), true);
+  assert.equal(moetOpnieuwZoeken({ waarde: null, definitief: true }), false);
+  assert.equal(moetOpnieuwZoeken({ waarde: 'x', definitief: true }), false);
 });

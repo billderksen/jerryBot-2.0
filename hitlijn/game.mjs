@@ -82,3 +82,10 @@ export function beoordeelSpotifyHit(item, song) {
   return similarity(normalizeField(item.artists[0].name), normalizeField(song.artist)) >= MATCH
     && titelMatch(item.name, song.title);
 }
+
+// Retry-beslissing voor resolve-pools.mjs: een ontbrekende waarde die nog niet definitief
+// is vastgesteld (een API-fout, geen definitieve no-match) mag opnieuw geprobeerd worden;
+// een definitieve no-match niet, om diezelfde miss niet elke hervatting te herhalen.
+export function moetOpnieuwZoeken({ waarde, definitief }) {
+  return waarde == null && !definitief;
+}
