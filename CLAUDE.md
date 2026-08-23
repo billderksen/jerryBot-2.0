@@ -252,6 +252,42 @@ Leaderboard persists in `data/plaatjeLeaderboard.json` as `{ players: { id: { di
 
 Implementation: `src/utils/plaatjeGame.js` (room state machine, round rules, leaderboard), `src/utils/plaatjeAudio.js` (song pool, gated clip download, VC playback), `src/utils/plaatjeText.js` (fuzzy guess matching, import title parsing), `src/web/public/plaatje.html` (lobby + game UI), Hitster routes/WS handlers in `src/web/server.js`, `src/commands/hitster.js` (`/hitster` slash command — creates a table and posts the join link, via `createPlaatjeRoomFromDiscord()` exported from `server.js`). Full design spec: `docs/superpowers/specs/2026-08-22-plaatje-game-design.md` (local, gitignored).
 
+## HITLIJN (publieke versie)
+
+A public, mobile-first spinoff of Hitster: strangers join with just a display name and a room
+code, no Discord account or login required. Live at `hitlijn.godcord.nl` (moving to `hitlijn.nl`
+once the owner's DNS A-records point at this VPS — see below). Audio is Spotify-per-player when a
+player logs in (their own account plays the round), falling back per-player to a bundled Deezer
+preview clip otherwise.
+
+**Architecture**: its own tiny app under `hitlijn/`, run as a separate pm2 process (`hitlijn`,
+`hitlijn/server.mjs`, port `HITLIJN_PORT`/3002) — not a route on the main bot's web server. It
+shares the pure room state machine from `src/utils/plaatjeGame.js` (`PlaatjeRoom`,
+`canHostSkipTurn`, `shouldDeleteRoom`) and matching-text helpers from `src/utils/plaatjeText.js`,
+but everything specific to this app (`hitlijn/game.mjs`, WS message types, API routes) uses the
+`hl:*` naming rather than `plaatje*`, since here that's the only name it's ever had.
+
+**Song pool**: `hitlijn/tools/resolve-pools.mjs` builds `hitlijn/data/pools.json` from
+`data/hitsterSongs.json` plus the deck source files under `hitlijn/tools/decks/`. Both the deck
+sources and the resolved `hitlijn/data/` output are deliberately untracked — deck-derived song
+selections don't belong in the public repo, same principle as the bot's own `data/*` gitignore.
+Production gets `pools.json` by deployment copy, not via git; the file must exist on disk (run
+the script) for the app to serve anything. Re-run the script to rebuild it; it's resumable via
+`hitlijn/tools/resolve-state.json` (also untracked). Each song's stored `previewUrl` is only a
+best-effort fallback — the durable source is `deezerId`, and the server fetches a fresh preview
+link from Deezer's API per round (`versePreview()` in `server.mjs`), falling back to the stored
+URL only if that live fetch fails. The stored URLs carry short-lived signed tokens and go stale
+within hours, so a fresh Deezer fetch is expected on essentially every round.
+
+**Spotify app registration**: client id/secret live in `.env` as `SPOTIFY_CLIENT_ID` /
+`SPOTIFY_CLIENT_SECRET` (shared with the main bot's `.env`, read directly by `hitlijn/server.mjs`
+via its own `loadEnv.js` import). Registered in the Spotify Developer Dashboard with the
+PKCE redirect URIs for each origin HITLIJN is served from. The app is still in Spotify's
+**development mode**, which caps it to an allowlist of ~25 authorized users — move it to
+extended/production mode before opening HITLIJN up beyond a small group.
+
+Full design spec: `docs/superpowers/specs/2026-08-23-hitlijn-design.md` (local, gitignored).
+
 ## Trivia Game
 
 Discord trivia game using The Trivia API (the-trivia-api.com, 12k+ vetted questions, no API key needed). Two modes: **buttons** (everyone picks, all correct score) and **race** (first correct answer wins). Leaderboard persists in `data/triviaLeaderboard.json`.

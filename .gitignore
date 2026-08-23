@@ -53,3 +53,6 @@ hitlijn/tools/decks/
 hitlijn/tools/resolve-state.json
 hitlijn/tools/zonder-audio.txt
 !hitlijn/tools/resolve-pools.mjs
+
+# HITLIJN resolved pool data: productiedata, deck-afgeleid — blijft buiten de publieke repo; deploy kopieert.
+hitlijn/data/

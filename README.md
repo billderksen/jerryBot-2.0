@@ -22,6 +22,7 @@ A feature-rich Discord bot with a web dashboard, music player, multiplayer games
 - **Pictionary** - Drawing and guessing game with multiple brush tools and colors
 
 ### Other Features
+- **HITLIJN** - Public mobile music-guessing party game at hitlijn.godcord.nl, its own app under `hitlijn/` (separate pm2 process, port 3002), name + room code, Spotify-per-player playback with a Deezer-preview fallback
 - **AI Chat** - `/chat` command powered by OpenRouter API
 - **Discord OAuth2** - Secure login with Discord, shows server nicknames
 - **Real-time Updates** - WebSocket-based live updates across all connected clients
