@@ -13,5 +13,6 @@ module.exports = {
     script: 'hitlijn/server.mjs',
     cwd: __dirname,
     max_memory_restart: '250M',
+    env: { NODE_ENV: 'production' },
   }],
 };
