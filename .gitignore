@@ -45,3 +45,11 @@ docs/superpowers/
 # Voice stack: binaries/models/venv fetched by scripts/setup-voice.sh
 tools/
 *.onnx
+
+# HITLIJN pool-resolve tooling lives under the otherwise-ignored tools/ dir;
+# track the script itself, not the deck source data or its resumable state/output.
+!hitlijn/tools/
+hitlijn/tools/decks/
+hitlijn/tools/resolve-state.json
+hitlijn/tools/zonder-audio.txt
+!hitlijn/tools/resolve-pools.mjs

@@ -1,5 +1,5 @@
 // hitlijn/game.mjs — pure logica voor HITLIJN. Geen IO.
-import { normalizeField } from '../src/utils/plaatjeText.js';
+import { normalizeField, similarity } from '../src/utils/plaatjeText.js';
 
 // De steelroep. Eén plek; hernoemen van de kreet = deze regel + UI-copy die hem toont.
 export const SHOUT = 'HITLIJN!';
@@ -53,4 +53,18 @@ export function audioSourceFor({ mode, spotifyOk, previewUrl }) {
   if (mode === 'spotify' && spotifyOk) return 'spotify';
   if (previewUrl) return 'preview';
   return 'skip';
+}
+
+const MATCH = 0.7;
+
+export function beoordeelDeezerHit(hit, song) {
+  if (!hit?.artist?.name || !hit?.title) return false;
+  return similarity(normalizeField(hit.artist.name), normalizeField(song.artist)) >= MATCH
+    && similarity(normalizeField(hit.title), normalizeField(song.title)) >= MATCH;
+}
+
+export function beoordeelSpotifyHit(item, song) {
+  if (!item?.name || !item?.artists?.[0]?.name) return false;
+  return similarity(normalizeField(item.artists[0].name), normalizeField(song.artist)) >= MATCH
+    && similarity(normalizeField(item.name), normalizeField(song.title)) >= MATCH;
 }
