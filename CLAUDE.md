@@ -35,6 +35,7 @@ setAddSongHandler(fn)           // Web dashboard adds songs to queue
 
 ### Key Modules
 - `src/utils/musicQueue.js` - Audio playback engine (queue, seek, loop, 24/7 mode, server-side radio auto-play — runs in the queue itself, no browser tab needed). All YouTube search/playback goes through the system `yt-dlp` binary (play-dl was removed)
+- `src/utils/spotifyResolve.js` - Spotify as a search/metadata source for the music player: client-credentials token cache, a URL parser (track/playlist/album, including `intl-xx`-prefixed links), catalog calls, and YouTube matching (`ytsearch3` + fuzzy title/artist scoring with a duration bonus). Audio always plays through the same YouTube/yt-dlp pipeline as everything else — Spotify's terms forbid serving its own audio — so a resolved Spotify song is just a normal queue entry with a YouTube URL and a Spotify-sourced thumbnail/artist. Wired into the dashboard's search-source toggle (`YT ⇄ Spotify`, persisted in localStorage) and pasted-URL auto-detect (single tracks, and playlist/album bulk-add capped at 100 tracks behind a confirm), and into `/play`. Lyrics lookups pass the resolved `artist` along when known, for a better match than title-only. Reuses the `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` already in `.env` for HITLIJN. The older `/api/spotify/track` endpoint (`spotify-url-info` package) stays in `server.js` — it's a separate, unrelated consumer on the `/playlists` page (pasting a Spotify URL while building a Discord playlist) still depends on it
 - `src/utils/queueState.js` - Queue snapshot file IO + the pure restore arithmetic (staleness, position clamp, join/hold decision). See [Queue Persistence](#queue-persistence-surviving-a-restart)
 - `src/utils/voiceRecorder.js` - Streams a target user's voice channel audio to disk (`.wav`), 30-minute hard cap
 - `src/utils/pictionaryGame.js` - Drawing game with room management
@@ -103,6 +104,7 @@ Copy `.env.example` to `.env`. Required:
 Optional:
 - `OPENROUTER_API_KEY` - AI chat feature (model/prompt/tokens are configured separately in `data/aiSettings.json` via the admin panel, not env vars)
 - `YOUTUBE_COOKIES` / `YOUTUBE_COOKIES_BROWSER` - Improves radio variety with authenticated YouTube access
+- `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` - Spotify search/URL metadata in the music player (client-credentials only, see `src/utils/spotifyResolve.js`); without them Spotify search/URL-detect degrade off and YouTube keeps working. Shared with HITLIJN's separate PKCE login (see [HITLIJN](#hitlijn-publieke-versie))
 - `TS6_API_KEY`, `TS6_STATUS_CHANNEL_ID` - TeamSpeak status voice channel (currently unset/disabled on this host)
 - `GENERAL_CHANNEL_ID`, `ACTIVITY_LOG_CHANNEL_ID`, `DJ_ROLE_ID`, `BOT_ADMIN_USER_ID` - Overrides for IDs that otherwise fall back to in-code literals (level-up/anti-offline announcements, activity log channel, streamer/recap DJ role gate, OSRS tracker admin gate)
 - `GROQ_API_KEY` - Speech-to-text for "Hey Jerry". Without it the whole voice assistant is skipped at startup
