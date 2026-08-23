@@ -51,6 +51,10 @@ async function spotifyToken() {
 // false bij een definitieve no-match (API antwoordde ok, niets voldeed), null bij een fout
 // (netwerk/status) — alleen bij null mag een latere run het opnieuw proberen. Bij een fout
 // alleen songKey + status/foutmelding loggen, nooit de response-body.
+//
+// deezerId (het track-id) wordt naast previewUrl bewaard: de dzcdn-previewUrl is een
+// hmac/exp-signed link die binnen dagen verloopt, dus de gameserver haalt 'm per ronde
+// vers op via GET /track/{id}. previewUrl blijft staan als build-time fallback.
 
 async function zoekDeezer(song) {
   const q = encodeURIComponent(`artist:"${song.artist}" track:"${song.title}"`);
@@ -59,7 +63,7 @@ async function zoekDeezer(song) {
     if (!res.ok) { console.log(`Deezer-fout (${res.status}) voor ${songKey(song)}`); return null; }
     const data = await res.json();
     const hit = (data.data ?? []).find((h) => beoordeelDeezerHit(h, song) && h.preview);
-    return hit ? { previewUrl: hit.preview } : false;
+    return hit ? { previewUrl: hit.preview, deezerId: hit.id } : false;
   } catch (err) {
     console.log(`Deezer-fout (${err.message}) voor ${songKey(song)}`);
     return null;
@@ -98,7 +102,7 @@ for (const song of songs) {
     const spotify = await zoekSpotify(song, token); if (token) await sleep(300);
     state[key] = {
       ...song, id: key,
-      previewUrl: deezer?.previewUrl ?? null, deezerDefinitief: deezer !== null,
+      previewUrl: deezer?.previewUrl ?? null, deezerId: deezer?.deezerId ?? null, deezerDefinitief: deezer !== null,
       spotifyId: spotify?.spotifyId ?? null, spotifyDefinitief: spotify !== null,
     };
     writeFileSync(STATE_FILE, JSON.stringify(state));
@@ -108,6 +112,7 @@ for (const song of songs) {
     n++;
     const deezer = await zoekDeezer(song); await sleep(1000);
     state[key].previewUrl = deezer?.previewUrl ?? null;
+    state[key].deezerId = deezer?.deezerId ?? null;
     state[key].deezerDefinitief = deezer !== null;
     writeFileSync(STATE_FILE, JSON.stringify(state));
   } else if (token && moetOpnieuwZoeken({ waarde: state[key].spotifyId, definitief: state[key].spotifyDefinitief })) {
@@ -129,7 +134,10 @@ const pools = [
   { id: 'feest-fout', name: 'Feest & Fout', songs: [] },
 ];
 for (const s of bruikbaar) {
-  const kaal = { id: s.id, artist: s.artist, title: s.title, year: s.year, previewUrl: s.previewUrl, spotifyId: s.spotifyId };
+  const kaal = {
+    id: s.id, artist: s.artist, title: s.title, year: s.year,
+    previewUrl: s.previewUrl, deezerId: s.deezerId, spotifyId: s.spotifyId,
+  };
   pools.find((p) => p.id === themeFor(s)).songs.push(kaal);
   if (gpKeys.has(s.id)) pools.find((p) => p.id === 'feest-fout').songs.push(kaal);
 }
