@@ -278,7 +278,11 @@
     background:linear-gradient(180deg, transparent, rgba(10,3,12,.85) 55%); }
   .mysterie-kaart .speelt::before { content:'▶ '; color:var(--teal); }
   .mysterie-kaart.weg { opacity:.22; box-shadow:none; cursor:default; }
-  .knop-leg { width:100%; margin-top:10px; height:56px; border-radius:14px; border:none; cursor:pointer;
+  /* vaste hoogte: uitlegtekst en groene knop wisselen elkaar af zonder dat de
+     onderbalk (en daarmee de hele pagina erboven) van hoogte verandert */
+  .duim-actie { height:64px; margin-top:8px; display:flex; align-items:center; justify-content:center; }
+  .duim-actie .duim-uitleg { margin-top:0; }
+  .knop-leg { width:100%; height:56px; border-radius:14px; border:none; cursor:pointer;
     font-family:'Anton'; font-size:1.2rem; letter-spacing:2px; color:#04331c;
     background:linear-gradient(180deg,#5ff08e,#22c55e 55%, #15803d);
     box-shadow:0 6px 0 #0b4f26, 0 10px 22px rgba(34,197,94,.4); }
@@ -790,11 +794,11 @@
             </div>`}
           </div>
         </div>
-        ${kanKiezen && gekozenSlot != null
+        <div class="duim-actie">${kanKiezen && gekozenSlot != null
           ? '<button class="knop-leg" id="btnLeg">✔ LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>'
           : `<div class="duim-uitleg">${kanKiezen
               ? 'dit is de plaat die je nu hoort — sleep hem je tijdlijn in, of tik een plek'
-              : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}`;
+              : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}</div>`;
       if ($('gokArtiest')) { $('gokArtiest').value = artiestNu; $('gokTitel').value = titelNu; }
       return;
     }
