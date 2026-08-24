@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <path id="H" d="M146 116h78v88h64v-88h78v280h-78v-120h-64v120h-78z"></path>
+    <radialGradient id="glowTop" cx="0.5" cy="-0.12" r="0.9">
+      <stop offset="0" stop-color="#ff9d3c" stop-opacity="0.6"></stop>
+      <stop offset="0.55" stop-color="#ff9d3c" stop-opacity="0.12"></stop>
+      <stop offset="1" stop-color="#ff9d3c" stop-opacity="0"></stop>
+    </radialGradient>
+    <radialGradient id="glowPink" cx="-0.08" cy="0.78" r="0.65">
+      <stop offset="0" stop-color="#ff2e88" stop-opacity="0.38"></stop>
+      <stop offset="1" stop-color="#ff2e88" stop-opacity="0"></stop>
+    </radialGradient>
+    <radialGradient id="glowTeal" cx="1.08" cy="0.72" r="0.65">
+      <stop offset="0" stop-color="#22e0c0" stop-opacity="0.32"></stop>
+      <stop offset="1" stop-color="#22e0c0" stop-opacity="0"></stop>
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14"></feGaussianBlur>
+    </filter>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" stitchTiles="stitch"></feTurbulence>
+      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0"></feColorMatrix>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="#17091c"></rect>
+  <rect width="512" height="512" fill="url(#glowPink)"></rect>
+  <rect width="512" height="512" fill="url(#glowTeal)"></rect>
+  <rect width="512" height="512" fill="url(#glowTop)"></rect>
+
+  <g fill="none" stroke="#f2e8d5" transform="rotate(-1.5 256 256)">
+    <circle cx="256" cy="256" r="148" stroke-opacity="0.06" stroke-width="3"></circle>
+    <circle cx="256" cy="256" r="176" stroke-opacity="0.07" stroke-width="3"></circle>
+    <circle cx="256" cy="256" r="204" stroke-opacity="0.06" stroke-width="3"></circle>
+    <circle cx="256" cy="256" r="232" stroke-opacity="0.05" stroke-width="3"></circle>
+    <circle cx="256" cy="256" r="260" stroke-opacity="0.04" stroke-width="3"></circle>
+  </g>
+  <g transform="rotate(-1.5 256 256)">
+    <use href="#H" fill="#000000" opacity="0.5" transform="translate(26 30)" filter="url(#soft)"></use>
+    <use href="#H" fill="#ff2e88" transform="translate(18 18)"></use>
+    <use href="#H" fill="#f2e8d5"></use>
+  </g>
+  <rect width="512" height="512" filter="url(#grain)"></rect>
+</svg>
