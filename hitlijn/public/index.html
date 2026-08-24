@@ -1142,7 +1142,7 @@
     if (knop) knop.hidden = true;
     $('btnSpeelOverlay').hidden = true;
     spotifyPlayingThisRound = false;
-    if (payload.spotifyId && heeftSpotifyToken()) {
+    if (payload.spotifyId && heeftSpotifyToken() && !spotifyAfspelenGeweigerd) {
       setAudioIndicator('spotify');
       speelSpotify(payload.spotifyId, token, payload.previewUrl); // Taak 6 — valt zelf terug op speelPreview() bij elke fout
       return;
@@ -1651,7 +1651,8 @@
     } catch { return null; }
   }
   let spotifyElderGemeld = false; // 'speelt op je laptop'-hint, één keer per kamer
-  async function speelSpotify(spotifyId, token, previewUrlTerugval) {
+  let spotifyAfspelenGeweigerd = false; // 403 gehad (meestal: geen Premium) — niet elke ronde opnieuw proberen
+  async function speelSpotify(spotifyId, token, previewUrlTerugval, herkansing = false) {
     try {
       // mini-crossfade: het nog spelende nummer even uitfaden (SDK-volume werkt ook op
       // iOS, in tegenstelling tot <audio>.volume) voordat de nieuwe plaat inzet
@@ -1674,11 +1675,30 @@
       });
       if (audioToken !== token) return; // alweer een nieuwe ronde — niets meer te melden
       if (!res.ok) {
+        meldAudioDebug('spotify-play-fout', res.status);
+        if (res.status === 403) {
+          // afspelen geweigerd op dit account (vrijwel altijd: geen Premium, of niet op
+          // de allowlist van de dev-mode-app) — één nette melding en verder met previews,
+          // in plaats van elke ronde opnieuw een 403 incasseren
+          let reden = '';
+          try { reden = (await res.json())?.error?.reason ?? ''; } catch { /* body optioneel */ }
+          spotifyAfspelenGeweigerd = true;
+          toonMelding(reden === 'PREMIUM_REQUIRED'
+            ? 'Volledige nummers vereisen Spotify Premium — je speelt verder met previews'
+            : 'Spotify staat afspelen op dit account niet toe — je speelt verder met previews');
+        }
+        if (res.status === 404 && spotifyPlayer && !herkansing) {
+          // de webspeler is weggevallen (iOS legt hem soms stil) — één keer wakker maken
+          meldAudioDebug('webspeler-herstart');
+          spotifyDeviceId = null;
+          try { await spotifyPlayer.connect(); } catch { /* dan de gewone terugval */ }
+          await new Promise((rs) => setTimeout(rs, 1300));
+          if (audioToken === token && spotifyDeviceId) return speelSpotify(spotifyId, token, previewUrlTerugval, true);
+        }
         if (res.status === 404 && !spotifyDeviceId && !spotifyGeenDeviceGemeld) {
           spotifyGeenDeviceGemeld = true;
           toonFout('Open je Spotify-app even en speel 1 seconde iets af');
         }
-        meldAudioDebug('spotify-play-fout', res.status);
         throw new Error('spotify-play mislukt: ' + res.status);
       }
       spotifyPlayingThisRound = true;
