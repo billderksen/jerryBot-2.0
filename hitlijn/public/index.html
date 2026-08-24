@@ -433,7 +433,7 @@
     <span class="audio-ind" id="audioInd"><span class="dot-pv"></span> preview</span>
   </div>
 
-  <div class="band">
+  <div class="band" id="bandWrap">
     <div class="band-kop" id="bandKop"></div>
     <div class="band-lijn" id="bandLijn"></div>
     <div class="countdown" id="countdownWrap" hidden><i id="countdownBar"></i></div>
@@ -907,8 +907,9 @@
 
     const solo = Boolean(room.settings?.solo);
     $('topbarDeelChip').hidden = solo;
-    $('bandKop').hidden = solo;
-    $('bandLijn').hidden = solo; // jouw tijdlijn staat al onderin — geen dubbele band in solo
+    // hele band-wrapper weg in solo (je tijdlijn staat al onderin) — losse kinderen
+    // verbergen liet de lege container met opvulling staan
+    $('bandWrap').hidden = solo;
     $('kamercodeLabel').hidden = solo; // niemand kan joinen — een code tonen wekt alleen verwarring
     $('kamercodeLabel').innerHTML = `<span class="kamercode-eyebrow-inline">kamer</span> ${esc(room.roomId)}`;
     bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => IKOON.vink);
