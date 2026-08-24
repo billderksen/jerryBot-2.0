@@ -1050,6 +1050,9 @@
   }
   let audioOntgrendeld = false;
   function ontgrendelAudio() {
+    // Spotify's webspeler moet op mobiel vanuit een tikgebaar geactiveerd worden,
+    // anders 'speelt' hij geluidloos (Spotify toont afspelen, je hoort niets)
+    try { spotifyPlayer?.activateElement?.(); } catch { /* best effort */ }
     if (audioOntgrendeld) return;
     const audio = $('rondeAudio');
     audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
@@ -1059,7 +1062,7 @@
       // intussen al gestart zijn en die mag deze late callback niet stilzetten
       if (audio.currentSrc.startsWith('data:')) audio.pause();
       meldAudioDebug('ontgrendeld', 'ok');
-    }).catch((e) => meldAudioDebug('ontgrendel-fout', e?.name ?? e));
+    }).catch((e) => { if (e?.name !== 'AbortError') meldAudioDebug('ontgrendel-fout', e?.name ?? e); });
   }
 
   // ── audio: Spotify (indien verbonden) met terugval op preview ──────────────
@@ -1108,6 +1111,7 @@
     }
   }
   $('btnSpeelOverlay').addEventListener('click', () => {
+    try { spotifyPlayer?.activateElement?.(); } catch { /* best effort */ }
     const audio = $('rondeAudio');
     audio.play().then(() => { $('btnSpeelOverlay').hidden = true; audioOntgrendeld = true; meldAudioDebug('overlay-start', 'ok'); })
       .catch((e) => meldAudioDebug('overlay-fout', e?.name ?? e));
@@ -1568,10 +1572,11 @@
         const j = await r.json().catch(() => null);
         const apparaat = j?.device?.name;
         if (apparaat && audioToken === token) {
+          const isEigenWebspeler = apparaat === 'HITLIJN'; // de SDK-speler van déze pagina
           const el = $('audioInd');
-          if (el) el.innerHTML = '<span class="dot-sp"></span> Spotify · ' + esc(apparaat);
+          if (el) el.innerHTML = '<span class="dot-sp"></span> Spotify · ' + (isEigenWebspeler ? 'hier' : esc(apparaat));
           meldAudioDebug('spotify-speelt-op', `${apparaat} (${j?.device?.type ?? '?'})`);
-          if (j?.device?.type && j.device.type !== 'Smartphone' && !spotifyElderGemeld) {
+          if (!isEigenWebspeler && j?.device?.type && j.device.type !== 'Smartphone' && !spotifyElderGemeld) {
             spotifyElderGemeld = true;
             toonMelding(`Spotify speelt op "${apparaat}" — kies in je Spotify-app je telefoon om hier te luisteren`);
           }
