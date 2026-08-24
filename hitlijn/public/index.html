@@ -703,10 +703,11 @@
         startRondeAudio(data); // Taak 5
         break;
       case 'hl:reveal':
-        stopRondeAudio(); // Taak 5
+        // muziek loopt bewust door de onthulling heen — pas de volgende ronde neemt het over
         toonAlbumHoes(data);
         break;
       case 'hl:game:over':
+        stopRondeAudio();
         renderState(data.room);
         break;
       case 'hl:notice':
@@ -719,6 +720,7 @@
           const gefaaldeCode = kamer; // ook de niet-deel-link herverbinding profiteert van de prefill
           kamer = null;
           localStorage.removeItem('hitlijnKamer');
+          stopRondeAudio();
           showEntry();
           if (gefaaldeCode) $('veldCode').value = gefaaldeCode;
         }
@@ -1627,6 +1629,17 @@
   let spotifyElderGemeld = false; // 'speelt op je laptop'-hint, één keer per kamer
   async function speelSpotify(spotifyId, token, previewUrlTerugval) {
     try {
+      // mini-crossfade: het nog spelende nummer even uitfaden (SDK-volume werkt ook op
+      // iOS, in tegenstelling tot <audio>.volume) voordat de nieuwe plaat inzet
+      if (spotifyPlayingThisRound && spotifyPlayer) {
+        try {
+          for (const v of [0.65, 0.4, 0.2, 0.08]) {
+            await spotifyPlayer.setVolume(v);
+            await new Promise((rs) => setTimeout(rs, 140));
+          }
+        } catch { /* fade is decoratie */ }
+        if (audioToken !== token) return; // alweer ingehaald tijdens de fade
+      }
       let doelDevice = spotifyDeviceId;
       if (!doelDevice) doelDevice = await zoekTelefoonDevice();
       const pad = doelDevice ? `/me/player/play?device_id=${encodeURIComponent(doelDevice)}` : '/me/player/play';
@@ -1645,6 +1658,7 @@
         throw new Error('spotify-play mislukt: ' + res.status);
       }
       spotifyPlayingThisRound = true;
+      try { await spotifyPlayer?.setVolume?.(1); } catch { /* volume terug is best effort */ }
       // laat zien wáár hij speelt — Connect pakt soms een ander apparaat (laptop!)
       spotifyFetch('/me/player').then(async (r) => {
         if (!r.ok) return;
