@@ -614,6 +614,7 @@
         break;
       case 'hl:room:joined':
         rejoining = false;
+        spotifyGeenDeviceGemeld = false; // hint mag in elke nieuwe kamer opnieuw klinken
         me = data.you;
         kamer = data.room.roomId;
         localStorage.setItem('hitlijnKamer', kamer);
@@ -674,6 +675,7 @@
     let cards = Number($('veldCards').value);
     if (!Number.isFinite(cards)) cards = 10;
     cards = Math.min(15, Math.max(5, Math.round(cards)));
+    ontgrendelAudio();
     stuur('hl:room:create', { cardsToWin: cards });
   });
   $('btnSolo').addEventListener('click', () => {
@@ -683,6 +685,7 @@
     let cards = Number($('veldCards').value);
     if (!Number.isFinite(cards)) cards = 10;
     cards = Math.min(15, Math.max(5, Math.round(cards)));
+    ontgrendelAudio();
     stuur('hl:room:create', { cardsToWin: cards, solo: true });
   });
   $('btnJoin').addEventListener('click', () => {
@@ -691,6 +694,7 @@
     if (!code) { toonFout('Vul een kamercode in'); return; }
     naam = v; localStorage.setItem('hitlijnNaam', naam);
     bootstrap();
+    ontgrendelAudio();
     stuur('hl:room:join', { code });
   });
 
@@ -956,6 +960,17 @@
 
   const beperkteBeweging = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // iOS staat audio.play() alleen toe vanuit een tikgebaar. De rondeclip arriveert
+  // pas ná de tik (via de WebSocket), dus we ontgrendelen het element alvast mét een
+  // onhoorbaar stil fragment binnen het gebaar zelf — daarna mag elke ronde autoplayen.
+  let audioOntgrendeld = false;
+  function ontgrendelAudio() {
+    if (audioOntgrendeld) return;
+    const audio = $('rondeAudio');
+    audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+    audio.play().then(() => { audioOntgrendeld = true; audio.pause(); }).catch(() => { /* ▶-knop blijft het vangnet */ });
+  }
+
   // ── audio: Spotify (indien verbonden) met terugval op preview ──────────────
   function startRondeAudio(payload) {
     const token = ++audioToken;
@@ -971,7 +986,7 @@
   }
   function speelPreview(payload, token) {
     setAudioIndicator('preview');
-    if (!payload.previewUrl) return; // geen preview deze ronde — stil, net als de besloten versie bij een gefaalde meting
+    if (!payload.previewUrl) { toonMelding('Deze plaat heeft geen geluidsfragment — gok op je gevoel'); return; }
     const audio = $('rondeAudio');
     audio.src = payload.previewUrl;
     const speelt = audio.play();
@@ -1238,7 +1253,7 @@
       const start = ev.target.closest('#btnStart');
       if (!start || start.disabled) return;
       const poolId = $('poolSelect')?.value;
-      if (poolId) stuur('hl:game:start', { poolId });
+      if (poolId) { ontgrendelAudio(); stuur('hl:game:start', { poolId }); }
     });
   }
 
