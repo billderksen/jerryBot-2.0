@@ -382,7 +382,11 @@ function afhandelen(ws, data) {
     }
     case 'hl:turn:guess': {
       const k = rooms.get(ws.roomCode); if (!k) break;
-      const r = k.room.recordGuess(ws.playerId, data.artist, data.title);
+      const artist = String(data.artist ?? '').trim();
+      const title = String(data.title ?? '').trim();
+      // een lege gok zou hasGuess verbruiken zonder kans op het fiche
+      if (!artist || !title) return fout(ws, 'Vul artiest én titel in');
+      const r = k.room.recordGuess(ws.playerId, artist, title);
       if (!r.ok) return fout(ws, 'Gokken kan nu niet');
       broadcastState(ws.roomCode);
       break;

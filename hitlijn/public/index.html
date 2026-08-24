@@ -265,6 +265,12 @@
   .roep-knop small { display:block; font-family:'Bricolage Grotesque'; font-size:.55rem; letter-spacing:1px; opacity:.85; }
   .roep-knop:disabled { opacity:.5; cursor:default; }
   .duim-uitleg { font-size:.6rem; color:#a87; text-align:center; margin-top:7px; line-height:1.4; }
+  .verlaat-knop { width:32px; height:32px; border-radius:9px; border:1px solid rgba(255,255,255,.22);
+    background:rgba(0,0,0,.3); color:#e9dcc8; font-size:.85rem; cursor:pointer; flex-shrink:0; }
+  .verlaat-knop.zeker { width:auto; padding:0 10px; background:#a3122c; border-color:#ff5560;
+    color:#fff; font-size:.68rem; font-weight:700; }
+  .verlaat-knop-lobby { width:auto; height:auto; padding:6px 10px; font-size:.72rem; margin-top:4px; }
+  .verlaat-knop-lobby.zeker { text-decoration:none; }
 
   /* jij aan zet: mysteriekaart + gok */
   .mysterie-rij { display:flex; gap:10px; align-items:center; }
@@ -375,12 +381,14 @@
     <div class="lobby-lijst" id="lobbySpelers"></div>
     <div id="lobbyPools" style="width:100%"></div>
     <div id="lobbyActie" style="width:100%"></div>
+    <button type="button" class="replay verlaat-knop-lobby" id="btnLobbyVerlaat">✕ kamer verlaten</button>
   </div>
 </div>
 
 <!-- ══ SPELSCHERM ══ -->
 <div id="spelView" hidden>
   <div class="topbar">
+    <button type="button" class="verlaat-knop" id="btnVerlaat" title="Kamer verlaten">✕</button>
     <div class="wordmark">HIT<span>LIJN</span></div>
     <span class="kamercode" id="kamercodeLabel" role="button" tabindex="0"></span>
     <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren">🔗</button>
@@ -491,6 +499,14 @@
       <span class="jaar">${card.year}</span>
       <span class="titel"><b>${esc(schoonTitel(card.title))}</b><em>${esc(card.artist)}</em></span>
     </div>`;
+  }
+
+  // Herbouw een container alleen als de inhoud echt veranderde. Elke state-broadcast
+  // hertekende voorheen álles, waardoor een knop tussen aanraken en loslaten vervangen
+  // werd (tik ging verloren — "knoppen moeten 2x") en een toetsenbord-focus wegviel.
+  function zetHtml(el, html) {
+    if (!el) return;
+    if (el.__laatsteHtml !== html) { el.innerHTML = html; el.__laatsteHtml = html; }
   }
 
   // ── foutmelding / mededeling ──────────────────────────────────────────────
@@ -694,20 +710,16 @@
     `).join('');
     const benIkHost = me && me.id === room.hostId;
     if (benIkHost) {
-      $('lobbyPools').innerHTML = pools.length
+      zetHtml($('lobbyPools'), pools.length
         ? `<select class="veld" id="poolSelect">${pools.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} (${p.count})</option>`).join('')}</select>`
-        : '<div class="spotify-uitleg">Nog geen songpools beschikbaar.</div>';
+        : '<div class="spotify-uitleg">Nog geen songpools beschikbaar.</div>');
       const solo = room.settings?.solo;
       const magStarten = (solo || room.players.length >= 2) && pools.length > 0;
       $('lobbyDeelChip').hidden = Boolean(solo);
-      $('lobbyActie').innerHTML = `<button class="knop-groot knop-maak" id="btnStart" ${magStarten ? '' : 'disabled style="opacity:.5"'}>START!<small>${solo ? 'solo-potje' : `${room.players.length} speler(s)`}</small></button>`;
-      $('btnStart')?.addEventListener('click', () => {
-        const poolId = $('poolSelect')?.value;
-        if (poolId) stuur('hl:game:start', { poolId });
-      });
+      zetHtml($('lobbyActie'), `<button class="knop-groot knop-maak" id="btnStart" ${magStarten ? '' : 'disabled style="opacity:.5"'}>START!<small>${solo ? 'solo-potje' : `${room.players.length} speler(s)`}</small></button>`);
     } else {
-      $('lobbyPools').innerHTML = '';
-      $('lobbyActie').innerHTML = `<div class="spotify-uitleg">Wachten tot de host start… (${room.players.length} speler(s))</div>`;
+      zetHtml($('lobbyPools'), '');
+      zetHtml($('lobbyActie'), `<div class="spotify-uitleg">Wachten tot de host start… (${room.players.length} speler(s))</div>`);
     }
   }
 
@@ -775,12 +787,12 @@
           : `<div class="vak${kanKiezen ? ' kies' : ''}" data-mijn-slot="${slot}"><span class="plus">+</span></div>`);
         if (slot < ik.timeline.length) delen.push(kaartHtml(ik.timeline[slot], 'sz-m2'));
       }
-      $('mijnLijn').innerHTML = delen.join('');
+      zetHtml($('mijnLijn'), delen.join(''));
       $('mijnHint').textContent = kanKiezen
         ? 'sleep je plaat hierheen of tik een plek — de groene knop bevestigt'
         : '← swipe voor meer →';
     } else {
-      $('mijnLijn').innerHTML = ik.timeline.map((c) => kaartHtml(c, 'sz-m2')).join('');
+      zetHtml($('mijnLijn'), ik.timeline.map((c) => kaartHtml(c, 'sz-m2')).join(''));
       $('mijnHint').textContent = '';
     }
   }
@@ -795,7 +807,7 @@
       const titelNu = $('gokTitel')?.value ?? '';
       const kanKiezen = room.phase === 'listening' && room.round?.placedSlot == null;
       const kaartWeg = !kanKiezen || gekozenSlot != null;
-      zone.innerHTML = `
+      zetHtml(zone, `
         <div class="mysterie-rij">
           <div class="mysterie-kaart${kaartWeg ? ' weg' : ''}" id="mysterieKaart"><span class="speelt">SPEELT NU</span></div>
           <div class="gok-kolom">
@@ -812,35 +824,35 @@
           ? '<button class="knop-leg" id="btnLeg">✔ LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>'
           : `<div class="duim-uitleg">${kanKiezen
               ? 'dit is de plaat die je nu hoort — sleep hem je tijdlijn in, of tik een plek'
-              : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}</div>`;
+              : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}</div>`);
       if ($('gokArtiest')) { $('gokArtiest').value = artiestNu; $('gokTitel').value = titelNu; }
       return;
     }
     if (['listening', 'challenge'].includes(room.phase)) {
       if (!ik) {
-        zone.innerHTML = '<div class="duim-uitleg">je kijkt mee — geen fiches, geen HITLIJN-roep</div>';
+        zetHtml(zone, '<div class="duim-uitleg">je kijkt mee — geen fiches, geen HITLIJN-roep</div>');
         return;
       }
       const alGeroepen = (room.round?.challengers ?? []).includes(me.id);
       if (alGeroepen) {
-        zone.innerHTML = '<div class="duim-uitleg">geroepen — je fiche ligt in de pot, nu maar hopen…</div>';
+        zetHtml(zone, '<div class="duim-uitleg">geroepen — je fiche ligt in de pot, nu maar hopen…</div>');
         return;
       }
       if (shoutArmed) {
         if (daagSlot != null) {
-          zone.innerHTML = `<div class="daag-rij">
+          zetHtml(zone, `<div class="daag-rij">
             <button class="knop-leg" id="btnDaag">✔ DAAG UIT<small>kost 1 fiche — dit wordt jouw plek</small></button>
-            <button class="knop-annuleer" id="btnDaagAnnuleer">annuleer</button></div>`;
+            <button class="knop-annuleer" id="btnDaagAnnuleer">annuleer</button></div>`);
           return;
         }
-        zone.innerHTML = `<button class="roep-knop" id="btnRoep">WIJS EEN PLEK AAN ↑<small>tik een vak in de tijdlijn hierboven — of tik hier om te annuleren</small></button>`;
+        zetHtml(zone, `<button class="roep-knop" id="btnRoep">WIJS EEN PLEK AAN ↑<small>tik een vak in de tijdlijn hierboven — of tik hier om te annuleren</small></button>`);
         return;
       }
       const kan = ik.tokens >= 1;
-      zone.innerHTML = `<button class="roep-knop" id="btnRoep" ${kan ? '' : 'disabled'}>${esc(SHOUT)}<small>denk je dat het fout ligt? · kost 1 fiche</small></button>`;
+      zetHtml(zone, `<button class="roep-knop" id="btnRoep" ${kan ? '' : 'disabled'}>${esc(SHOUT)}<small>denk je dat het fout ligt? · kost 1 fiche</small></button>`);
       return;
     }
-    zone.innerHTML = '';
+    zetHtml(zone, '');
   }
 
   function renderSpel(room) {
@@ -862,14 +874,14 @@
       <span class="aanzet-mini">AAN ZET</span>${avaHtml(actief, 26)}<span class="band-naam">${esc(actief.displayName)}</span>
       <div class="mini-plaat"></div>` : '';
     $('bandStatus').innerHTML = actief ? statusHtml(room, actief, isMijnBeurt) : '';
-    $('bandLijn').innerHTML = actief ? bandLijnHtml(actief, room) : '';
+    zetHtml($('bandLijn'), actief ? bandLijnHtml(actief, room) : '');
     $('countdownWrap').hidden = room.phase !== 'challenge' || Boolean(room.settings?.solo);
 
     $('stempelWrap').innerHTML = (room.lastReveal && ['reveal', 'finished'].includes(room.phase))
       ? stempelHtml(room.lastReveal, room) : '';
 
     const andereSpelers = room.players.filter((p) => p.id !== room.activeUserId && (!me || p.id !== me.id));
-    $('spelersRij').innerHTML = andereSpelers.map(spelerChipHtml).join('');
+    zetHtml($('spelersRij'), andereSpelers.map(spelerChipHtml).join(''));
     $('spelersHint').hidden = andereSpelers.length === 0;
 
     renderMijn(room, ik, isMijnBeurt);
@@ -1066,7 +1078,7 @@
   function startSleep(ev) {
     if (!magSlepen() || sleepSessie) return;
     ev.preventDefault();
-    if (ev.currentTarget.id === 'mijnSpook') { gekozenSlot = null; renderState(currentRoom); }
+    if (ev.target.closest('#mijnSpook')) { gekozenSlot = null; renderState(currentRoom); }
     const kloon = document.createElement('div');
     kloon.id = 'sleepKloon';
     kloon.innerHTML = '<div class="mysterie-kaart"><span class="speelt">SPEELT NU</span></div>';
@@ -1135,6 +1147,101 @@
     chipTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ''; }, 5000);
   }
 
+  function isMijnBeurtNu() { return Boolean(me && currentRoom && currentRoom.activeUserId === me.id); }
+
+  function verlaatKamer() {
+    stuur('hl:room:leave');
+    try { stopRondeAudio(); } catch { /* audio-laag mag verlaten nooit blokkeren */ }
+    kamer = null;
+    localStorage.removeItem('hitlijnKamer');
+    currentRoom = null;
+    gekozenSlot = null; shoutArmed = false; daagSlot = null;
+    removeWinOverlay();
+    showEntry();
+  }
+
+  // Eén keer gebonden, op stabiele containers: overleeft elke re-render. De tweede tik
+  // binnen 2.5s bevestigt het verlaten (mis-tik-bescherming).
+  function wapenVerlaatKnop(knop) {
+    if (knop.dataset.zeker) { verlaatKamer(); return; }
+    knop.dataset.zeker = '1';
+    knop.classList.add('zeker');
+    const origineel = knop.textContent;
+    knop.textContent = 'zeker? tik nogmaals';
+    setTimeout(() => { delete knop.dataset.zeker; knop.classList.remove('zeker'); knop.textContent = origineel; }, 2500);
+  }
+
+  function bindVasteInteractie() {
+    $('btnVerlaat').addEventListener('click', () => wapenVerlaatKnop($('btnVerlaat')));
+    $('btnLobbyVerlaat').addEventListener('click', () => wapenVerlaatKnop($('btnLobbyVerlaat')));
+
+    $('mijnLijn').addEventListener('click', (ev) => {
+      const vak = ev.target.closest('[data-mijn-slot]');
+      if (vak && currentRoom) tikMijnVak(Number(vak.dataset.mijnSlot), currentRoom, isMijnBeurtNu());
+    });
+    $('mijnLijn').addEventListener('pointerdown', (ev) => {
+      if (ev.target.closest('#mijnSpook')) startSleep(ev);
+    });
+    $('duimzone').addEventListener('pointerdown', (ev) => {
+      const kaart = ev.target.closest('#mysterieKaart');
+      if (kaart && !kaart.classList.contains('weg')) startSleep(ev);
+    });
+    $('duimzone').addEventListener('click', (ev) => {
+      const knop = ev.target.closest('button');
+      if (!knop || knop.disabled) return;
+      switch (knop.id) {
+        case 'btnLeg':
+          if (gekozenSlot == null) return;
+          knop.disabled = true; // dubbele tik = dubbele place voorkomen
+          stuur('hl:turn:place', { slot: gekozenSlot });
+          gekozenSlot = null;
+          break;
+        case 'btnGok': {
+          const artiest = $('gokArtiest')?.value.trim() ?? '';
+          const titel = $('gokTitel')?.value.trim() ?? '';
+          if (!artiest || !titel) { toonFout('Vul artiest én titel in — een gok telt alleen compleet'); return; }
+          stuur('hl:turn:guess', { artist: artiest, title: titel });
+          break;
+        }
+        case 'btnWissel': stuur('hl:turn:swap'); break;
+        case 'btnRoep':
+          shoutArmed = !shoutArmed;
+          if (!shoutArmed) daagSlot = null;
+          renderState(currentRoom); // hertekent duimzone + band-vakken met/zonder .kies
+          break;
+        case 'btnDaag':
+          if (daagSlot == null) return;
+          knop.disabled = true;
+          stuur('hl:challenge', { slot: daagSlot });
+          shoutArmed = false;
+          daagSlot = null;
+          break;
+        case 'btnDaagAnnuleer':
+          shoutArmed = false;
+          daagSlot = null;
+          renderState(currentRoom);
+          break;
+        default: break;
+      }
+    });
+    $('bandLijn').addEventListener('click', (ev) => {
+      const vak = ev.target.closest('[data-band-slot]');
+      if (!vak || !shoutArmed) return;
+      daagSlot = Number(vak.dataset.bandSlot); // schim daar, groene knop bevestigt
+      renderState(currentRoom);
+    });
+    $('spelersRij').addEventListener('click', (ev) => {
+      const chip = ev.target.closest('[data-speler]');
+      if (chip && currentRoom) tikSpelerChip(chip.dataset.speler, currentRoom);
+    });
+    $('lobbyActie').addEventListener('click', (ev) => {
+      const start = ev.target.closest('#btnStart');
+      if (!start || start.disabled) return;
+      const poolId = $('poolSelect')?.value;
+      if (poolId) stuur('hl:game:start', { poolId });
+    });
+  }
+
   function bindInteractie(room, isMijnBeurt, ik) {
     updateCountdown(room);
 
@@ -1142,57 +1249,10 @@
     // interactiestate met zich mee — anders overleeft een vergeten keuze/wapening de volgende ronde
     if (!['listening', 'challenge'].includes(room.phase)) { shoutArmed = false; daagSlot = null; }
 
-    // plaatsing: tik een vak of sleep de plaat/schim
+    // plaatsing-state: keuze vervalt zodra de keuzefase voorbij is
     if (!(isMijnBeurt && room.phase === 'listening') || room.round?.placedSlot != null) gekozenSlot = null;
-    for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) {
-      vak.addEventListener('click', () => tikMijnVak(Number(vak.dataset.mijnSlot), room, isMijnBeurt));
-    }
-    if (magSlepen()) {
-      $('mysterieKaart')?.addEventListener('pointerdown', startSleep);
-      $('mijnSpook')?.addEventListener('pointerdown', startSleep);
-    }
-    $('btnLeg')?.addEventListener('click', (ev) => {
-      ev.currentTarget.disabled = true; // dubbele tik = dubbele place voorkomen
-      stuur('hl:turn:place', { slot: gekozenSlot });
-      gekozenSlot = null;
-    });
-
-    // gok + wissel
-    $('btnGok')?.addEventListener('click', () => {
-      stuur('hl:turn:guess', { artist: $('gokArtiest')?.value ?? '', title: $('gokTitel')?.value ?? '' });
-    });
-    $('btnWissel')?.addEventListener('click', () => stuur('hl:turn:swap'));
-
-    // HITLIJN-roep: wapenen/ontwapenen + band-vakken kiezen (shoutArmed wordt hierboven al
-    // ontwapend zodra de ronde het listening/challenge-venster verlaat)
-    $('btnRoep')?.addEventListener('click', () => {
-      shoutArmed = !shoutArmed;
-      if (!shoutArmed) daagSlot = null;
-      renderState(currentRoom); // hertekent duimzone + band-vakken met/zonder .kies
-    });
-    for (const vak of document.querySelectorAll('#bandLijn [data-band-slot]')) {
-      vak.addEventListener('click', () => {
-        if (!shoutArmed) return;
-        daagSlot = Number(vak.dataset.bandSlot); // schim daar, groene knop bevestigt
-        renderState(currentRoom);
-      });
-    }
-    $('btnDaag')?.addEventListener('click', (ev) => {
-      ev.currentTarget.disabled = true;
-      stuur('hl:challenge', { slot: daagSlot });
-      shoutArmed = false;
-      daagSlot = null;
-    });
-    $('btnDaagAnnuleer')?.addEventListener('click', () => {
-      shoutArmed = false;
-      daagSlot = null;
-      renderState(currentRoom);
-    });
-
-    // spelerchip-tik
-    for (const chip of document.querySelectorAll('#spelersRij [data-speler]')) {
-      chip.addEventListener('click', () => tikSpelerChip(chip.dataset.speler, room));
-    }
+    // alle knop/vak-listeners zijn eenmalig gedelegeerd in bindVasteInteractie() —
+    // per-render binden verloor taps zodra een broadcast de knoop verving
 
     // reveal-confetti: alleen op de overgang ín de reveal-fase, nooit bij een herhaalde render
     try {
@@ -1454,6 +1514,7 @@
     $('deelHint').hidden = false;
   }
   laadSpotifyTokens();
+  bindVasteInteractie();
   (async () => {
     await initConfig();               // spotifyClientId + SHOUT
     await verwerkSpotifyCallback();   // ruilt ?code in als we net van Spotify terugkomen
