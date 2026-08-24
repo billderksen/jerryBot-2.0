@@ -26,8 +26,13 @@
   input, textarea { -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
   [hidden] { display:none !important; } /* wint anders van elk display:flex op hetzelfde element (id > attr) */
   html, body { height:100%; }
+  /* het document zelf scrolt nooit (stopt ook het iOS-stuiteren); de twee views zijn
+     eigen scrollgebieden die alleen scrollen als de inhoud écht niet past (kleine
+     schermen, open toetsenbord) — past alles, dan staat de pagina muurvast */
+  html { overscroll-behavior:none; }
+  body { overflow:hidden; height:100dvh; }
   body { font-family:'Bricolage Grotesque', system-ui, sans-serif; color:#f6eee2;
-    min-height:100dvh; max-width:520px; margin:0 auto; position:relative; overflow-x:hidden;
+    max-width:520px; margin:0 auto; position:relative; overflow-x:hidden;
     background:
       radial-gradient(ellipse 90% 30% at 50% 12%, rgba(255,157,60,.16), transparent 65%),
       radial-gradient(ellipse 60% 25% at 8% 60%, rgba(255,46,136,.10), transparent 70%),
@@ -79,7 +84,7 @@
     align-items:center; justify-content:center; font-weight:800; flex-shrink:0; }
 
   /* ══ instap + lobby ══ */
-  #instapView { display:flex; flex-direction:column; min-height:100dvh; position:relative; z-index:2; overflow:hidden; }
+  #instapView { display:flex; flex-direction:column; height:100dvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:none; position:relative; z-index:2; }
   .instap { flex:1; display:flex; flex-direction:column; align-items:center;
     padding:calc(54px + env(safe-area-inset-top)) 26px 30px; gap:16px; position:relative; z-index:2; }
   .instap .wordmark { font-size:2.6rem; margin-bottom:2px; }
@@ -137,7 +142,7 @@
   .deel-chip .deel-chip-icon { font-size:.95rem; }
 
   /* ══ spelscherm ══ */
-  #spelView { display:flex; flex-direction:column; min-height:100dvh; position:relative; z-index:2; }
+  #spelView { display:flex; flex-direction:column; height:100dvh; overflow-y:auto; overscroll-behavior:none; position:relative; z-index:2; }
   .topbar { display:flex; align-items:center; gap:9px; padding:calc(14px + env(safe-area-inset-top)) 14px 8px; position:relative; z-index:2; }
   .topbar .wordmark { font-size:1.05rem; }
   .kamercode { font-family:'Anton'; letter-spacing:2.5px; font-size:.72rem; color:var(--stagelight);
