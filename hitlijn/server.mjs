@@ -16,11 +16,19 @@ const ORIGINS = (process.env.HITLIJN_ORIGIN ?? `http://localhost:${PORT}`).split
 const POOLS_FILE = join(__dirname, 'data/pools.json');
 
 const app = express();
-app.use(express.static(join(__dirname, 'public')));
+// HTML altijd laten hervalideren (ETag/304): zonder dit toonde mobiele Safari na een
+// deploy nog dagenlang de oude pagina uit z'n heuristische cache. Assets (iconen, svg)
+// mogen wél gewoon cachen — die veranderen zelden en heten hetzelfde.
+app.use(express.static(join(__dirname, 'public'), {
+  setHeaders: (res, pad) => { if (pad.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); },
+}));
 app.get('/gezondheid', (req, res) => res.json({ ok: true }));
 app.get('/api/config', (req, res) => res.json({ spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? null, shout: SHOUT, soloBeschikbaar: true }));
 // Spotify PKCE-redirect landt op de pagina zelf
-app.get('/callback', (req, res) => res.sendFile(join(__dirname, 'public/index.html')));
+app.get('/callback', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(join(__dirname, 'public/index.html'));
+});
 
 function laadPools() {
   if (!existsSync(POOLS_FILE)) return [];
