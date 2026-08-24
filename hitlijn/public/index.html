@@ -1112,6 +1112,16 @@
     $('grotePlaat').hidden = false;
     const eq = document.querySelector('.stage-mobiel .eq'); if (eq) eq.hidden = false;
   }
+  // De vorige (Spotify-)track expliciet stilzetten. Sinds muziek door de onthulling
+  // heen speelt, MOET elk overdrachtspad dit doen zodra de nieuwe ronde niet via
+  // Spotify verdergaat — anders speelt op dat toestel minutenlang het oude nummer
+  // terwijl de rest van de kamer al bij de volgende plaat is.
+  function pauzeerSpotifyAlsSpeelt(reden) {
+    if (!spotifyPlayingThisRound) return;
+    spotifyPlayingThisRound = false;
+    if (reden) meldAudioDebug('oude-track-gepauzeerd', reden);
+    spotifyFetch('/me/player/pause', { method: 'PUT' }).catch(() => {});
+  }
   function startRondeAudio(payload) {
     verbergAlbumHoes(); // volgende plaat draait — hoes weg, plaat terug
     const token = ++audioToken;
@@ -1124,6 +1134,7 @@
       speelSpotify(payload.spotifyId, token, payload.previewUrl); // Taak 6 — valt zelf terug op speelPreview() bij elke fout
       return;
     }
+    pauzeerSpotifyAlsSpeelt('ronde zonder spotify-versie');
     speelPreview(payload, token);
   }
   function speelPreview(payload, token) {
@@ -1152,10 +1163,7 @@
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
     $('btnSpeelOverlay').hidden = true;
-    if (spotifyPlayingThisRound) {
-      spotifyPlayingThisRound = false;
-      spotifyFetch('/me/player/pause', { method: 'PUT' }).catch(() => {}); // best effort, Taak 6
-    }
+    pauzeerSpotifyAlsSpeelt();
   }
   $('btnSpeelOverlay').addEventListener('click', () => {
     try { spotifyPlayer?.activateElement?.(); } catch { /* best effort */ }
@@ -1388,6 +1396,7 @@
       if (kaart && !kaart.classList.contains('weg')) startSleep(ev);
     });
     $('duimzone').addEventListener('click', (ev) => {
+      ontgrendelAudio(); // elke tik is een gebaar — herstelt een gemiste ontgrendeling vanzelf
       const knop = ev.target.closest('button');
       if (!knop || knop.disabled) return;
       switch (knop.id) {
@@ -1678,6 +1687,7 @@
     } catch (e) {
       if (audioToken !== token) return;
       meldAudioDebug('spotify-terugval', e?.message ?? e);
+      pauzeerSpotifyAlsSpeelt('handoff mislukt');
       setAudioIndicator('preview');
       speelPreview({ previewUrl: previewUrlTerugval }, token);
     }
