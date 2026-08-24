@@ -1042,13 +1042,19 @@
 
   function laadSpotifyTokens() {
     try {
-      const raw = sessionStorage.getItem('hlSpotifyTokens');
+      // localStorage, zodat de login een gesloten tab overleeft (mobiel gooit tabs continu
+      // weg); het refresh-token blijft maanden geldig en de 401-refresh in spotifyFetch
+      // haalt er stilletjes een vers access-token bij. Eenmalige migratie vanuit de oude
+      // sessionStorage-plek zodat al-ingelogde spelers niet één keer extra hoeven in te loggen.
+      const raw = localStorage.getItem('hlSpotifyTokens') || sessionStorage.getItem('hlSpotifyTokens');
       spotifyTokens = raw ? JSON.parse(raw) : null;
+      if (spotifyTokens && !localStorage.getItem('hlSpotifyTokens')) bewaarSpotifyTokens();
+      sessionStorage.removeItem('hlSpotifyTokens');
     } catch { spotifyTokens = null; }
   }
   function bewaarSpotifyTokens() {
-    if (spotifyTokens) sessionStorage.setItem('hlSpotifyTokens', JSON.stringify(spotifyTokens));
-    else sessionStorage.removeItem('hlSpotifyTokens');
+    if (spotifyTokens) localStorage.setItem('hlSpotifyTokens', JSON.stringify(spotifyTokens));
+    else localStorage.removeItem('hlSpotifyTokens');
   }
   function heeftSpotifyToken() { return Boolean(spotifyTokens && spotifyTokens.access); }
 
