@@ -89,3 +89,13 @@ export function beoordeelSpotifyHit(item, song) {
 export function moetOpnieuwZoeken({ waarde, definitief }) {
   return waarde == null && !definitief;
 }
+
+// Beslist of de server de beurt van een weggevallen actieve speler mag overslaan.
+// Alleen in de luisterfase: dat is de enige fase die op een menselijke actie (kaart
+// leggen) wacht — challenge/reveal lopen op eigen timers door en halen zichzelf in.
+export function magBeurtOverslaan(room, playerId) {
+  const p = room.players.get(playerId);
+  return Boolean(p) && !p.connected
+    && room.activeUserId === playerId
+    && room.phase === 'listening';
+}

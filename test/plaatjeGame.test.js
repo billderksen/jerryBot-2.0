@@ -237,3 +237,51 @@ test('guard: beginRound() on finished room returns { ok: false }, state intact',
   assert.equal(room.round, null); // no round created
   deletePlaatjeRoom('r1');
 });
+
+test('room: nextTurn slaat disconnected spelers over en pakt ze weer mee na reconnect', () => {
+  const room = createPlaatjeRoom('r1', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 10 });
+  room.addPlayer({ id: 'u2', displayName: 'Koen', avatar: null });
+  room.addPlayer({ id: 'u3', displayName: 'Sam', avatar: null });
+  const songs = [
+    { title: 'A', artist: 'AA', year: 1978, youtubeId: 'aaaaaaaaaaa' },
+    { title: 'B', artist: 'BB', year: 1994, youtubeId: 'bbbbbbbbbbb' },
+    { title: 'C', artist: 'CC', year: 2004, youtubeId: 'ccccccccccc' },
+  ];
+  let i = 0;
+  room.start(() => songs[i++]);
+  assert.equal(room.activeUserId, 'u1');
+  room.markDisconnected('u2', Date.now());
+  room.nextTurn();
+  assert.equal(room.activeUserId, 'u3'); // u2 overgeslagen
+  room.markReconnected('u2');
+  room.nextTurn();
+  assert.equal(room.activeUserId, 'u1');
+  room.nextTurn();
+  assert.equal(room.activeUserId, 'u2'); // terug in de rotatie
+  deletePlaatjeRoom('r1');
+});
+
+test('room: nextTurn met iedereen weg blijft niet hangen', () => {
+  const room = maakKamer();
+  room.markDisconnected('u1', 1000);
+  room.markDisconnected('u2', 1000);
+  room.nextTurn();
+  assert.ok(['u1', 'u2'].includes(room.activeUserId));
+  assert.equal(room.phase, 'loading');
+  deletePlaatjeRoom('r1');
+});
+
+test('room: host migreert mid-game naar een verbonden speler, niet in de lobby', () => {
+  const lobby = createPlaatjeRoom('r1', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 10 });
+  lobby.addPlayer({ id: 'u2', displayName: 'Koen', avatar: null });
+  lobby.markDisconnected('u1', Date.now());
+  assert.equal(lobby.hostId, 'u1'); // lobby-refresh mag het hostschap niet verplaatsen
+  deletePlaatjeRoom('r1');
+
+  const room = maakKamer(); // host u1 + u2, phase loading
+  room.markDisconnected('u1', Date.now());
+  assert.equal(room.hostId, 'u2'); // mid-game wél migreren: kamer nooit stuurloos
+  room.markReconnected('u1');
+  assert.equal(room.hostId, 'u2'); // terugkeer geeft het hostschap niet automatisch terug
+  deletePlaatjeRoom('r1');
+});

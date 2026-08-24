@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { PlaatjeRoom, canHostSkipTurn, shouldDeleteRoom } from '../src/utils/plaatjeGame.js';
-import { SHOUT, makeRoomCode, validateName, pickSong, audioSourceFor } from './game.mjs';
+import { SHOUT, makeRoomCode, validateName, pickSong, audioSourceFor, magBeurtOverslaan } from './game.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.HITLIJN_PORT ?? 3002);
@@ -32,6 +32,7 @@ const rooms = new Map();       // code -> { room: PlaatjeRoom, poolId, usedIds:S
 const clients = new Map();     // code -> Set<ws>
 const timers = new Map();      // code -> Timeout (fase-timer)
 const emptyTimers = new Map(); // code -> Timeout
+const skipTimers = new Map();  // code -> Timeout (auto-skip van een weggevallen actieve speler)
 const rondeLatch = new Set();  // code -> startRonde in-flight (voorkomt dubbele Deezer-fetch)
 
 // simpele sliding-window rate limiter per IP
@@ -58,8 +59,40 @@ function setTimer(code, ms, fn) { clearTimer(code); timers.set(code, setTimeout(
 function destroyRoom(code) {
   broadcast(code, 'hl:error', { message: 'Deze tafel is gesloten.' });
   clearTimer(code);
+  clearAutoSkip(code);
   const t = emptyTimers.get(code); if (t) { clearTimeout(t); emptyTimers.delete(code); }
   rooms.delete(code);
+}
+
+// ── auto-skip: een weggevallen actieve speler houdt het spel niet gijzeld ──
+// De luisterfase wacht op een menselijke actie (kaart leggen); valt die speler weg, dan
+// slaat de server zijn beurt na een respijt zelf over. Alle checks gebeuren pas op het
+// moment van vuren — terugkomen, alsnog leggen of een doorgedraaide beurt maken de timer
+// vanzelf een no-op. Eén timer per kamer volstaat: er is maar één actieve speler.
+function clearAutoSkip(code) { const t = skipTimers.get(code); if (t) { clearTimeout(t); skipTimers.delete(code); } }
+function armAutoSkip(code, playerId, wachtMs) {
+  clearAutoSkip(code);
+  skipTimers.set(code, setTimeout(() => probeerAutoSkip(code, playerId), wachtMs));
+}
+function probeerAutoSkip(code, playerId) {
+  skipTimers.delete(code);
+  const k = rooms.get(code); if (!k) return;
+  if (k.room.phase === 'loading') {
+    // startRonde is nog bezig (Deezer-fetch); zo dadelijk is het 'listening' — even opnieuw kijken
+    skipTimers.set(code, setTimeout(() => probeerAutoSkip(code, playerId), 5000));
+    return;
+  }
+  if (!magBeurtOverslaan(k.room, playerId)) return;
+  const naam = k.room.players.get(playerId)?.displayName ?? '?';
+  clearTimer(code);
+  k.room.round = null;
+  k.spotifyIdVoorRonde = null;
+  k.previewVoorRonde = null;
+  k.room.nextTurn();
+  // reden weglaten: de eerdere melding (verlaten / verbinding verloren) zei al waarom
+  broadcast(code, 'hl:notice', { message: `Beurt van ${naam} overgeslagen` });
+  broadcastState(code);
+  startRonde(code);
 }
 
 function armEmptyTimer(code) {
@@ -204,7 +237,16 @@ wss.on('connection', (ws, req) => {
     if (set) { set.delete(ws); if (!set.size) clients.delete(code); }
     const k = rooms.get(code); if (!k) return;
     const nogEen = set && [...set].some((c) => c.playerId === ws.playerId && c.readyState === 1);
-    if (!nogEen) { k.room.markDisconnected(ws.playerId, Date.now()); broadcastState(code); armEmptyTimer(code); }
+    if (!nogEen) {
+      k.room.markDisconnected(ws.playerId, Date.now());
+      const speler = k.room.players.get(ws.playerId);
+      if (speler && k.room.phase !== 'lobby' && k.room.phase !== 'finished') {
+        broadcast(code, 'hl:notice', { message: `${speler.displayName} is de verbinding verloren` });
+        if (k.room.activeUserId === ws.playerId) armAutoSkip(code, ws.playerId, 60_000);
+      }
+      broadcastState(code);
+      armEmptyTimer(code);
+    }
   });
 });
 
@@ -245,7 +287,9 @@ function afhandelen(ws, data) {
       const code = String(data.code ?? '').toUpperCase().trim();
       const k = rooms.get(code);
       if (!k) return fout(ws, 'Kamer niet gevonden — check de code');
+      const wasWeg = k.room.players.get(ws.playerId)?.connected === false;
       const { isSpectator } = k.room.addPlayer({ id: ws.playerId, displayName: ws.naam, avatar: null });
+      if (wasWeg && k.room.phase !== 'lobby') broadcast(code, 'hl:notice', { message: `${ws.naam} is terug!` });
       ws.roomCode = code;
       if (!clients.has(code)) clients.set(code, new Set());
       clients.get(code).add(ws);
@@ -268,9 +312,18 @@ function afhandelen(ws, data) {
       const code = ws.roomCode; ws.roomCode = null;
       const k = rooms.get(code); if (!k) break;
       clients.get(code)?.delete(ws);
+      const wasSpeler = k.room.players.has(ws.playerId);
       k.room.removePlayer(ws.playerId);
       if (k.room.phase === 'lobby' && !k.room.players.size) destroyRoom(code);
-      else { broadcastState(code); armEmptyTimer(code); }
+      else {
+        if (wasSpeler && k.room.phase !== 'lobby' && k.room.phase !== 'finished') {
+          broadcast(code, 'hl:notice', { message: `${ws.naam ?? '?'} heeft de tafel verlaten` });
+          // bewust vertrokken: korter respijt dan de 60s voor een verbroken verbinding
+          if (k.room.activeUserId === ws.playerId) armAutoSkip(code, ws.playerId, 10_000);
+        }
+        broadcastState(code);
+        armEmptyTimer(code);
+      }
       break;
     }
     case 'hl:game:start': {

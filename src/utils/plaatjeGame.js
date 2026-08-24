@@ -98,6 +98,13 @@ export class PlaatjeRoom {
     const p = this.players.get(userId);
     if (p) { p.connected = false; p.disconnectedAt = nowMs; }
     this.spectators.delete(userId);
+    // Mid-game migreert het hostschap naar een verbonden speler, anders is de kamer
+    // stuurloos zodra de host wegvalt (niemand anders mag host-acties doen). In de
+    // lobby juist niet: een host die even ververst moet zijn kamer terugkrijgen.
+    if (this.phase !== 'lobby' && userId === this.hostId) {
+      const vervanger = [...this.players.values()].find((x) => x.connected);
+      if (vervanger) this.hostId = vervanger.id;
+    }
     if (![...this.players.values()].some((x) => x.connected) && this.spectators.size === 0) {
       this.emptySince = nowMs;
     }
@@ -222,6 +229,19 @@ export class PlaatjeRoom {
 
   nextTurn() {
     if (this.phase === 'finished' || this.round != null) return;
+    // Disconnected spelers blijven in het spel staan (rejoin met tijdlijn intact) maar
+    // krijgen geen beurt — anders wacht de ronde eeuwig op een kaart die nooit gelegd
+    // wordt. Zodra iemand terug is, draait hij vanzelf weer mee.
+    const ids = [...this.players.keys()];
+    for (let stap = 1; stap <= ids.length; stap++) {
+      const idx = (this.activeIdx + stap) % ids.length;
+      if (this.players.get(ids[idx]).connected) {
+        this.activeIdx = idx;
+        this.phase = 'loading';
+        return;
+      }
+    }
+    // iedereen weg: gewoon één plek opschuiven; de empty-timer ruimt de kamer op
     this.activeIdx = (this.activeIdx + 1) % this.players.size;
     this.phase = 'loading';
   }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SHOUT, makeRoomCode, validateName, dedupeSongs, themeFor, pickSong, audioSourceFor,
-  beoordeelDeezerHit, beoordeelSpotifyHit, moetOpnieuwZoeken,
+  beoordeelDeezerHit, beoordeelSpotifyHit, moetOpnieuwZoeken, magBeurtOverslaan,
 } from '../hitlijn/game.mjs';
 
 test('SHOUT is de hernoembare roep-constante', () => {
@@ -78,4 +78,21 @@ test('moetOpnieuwZoeken: retry tenzij definitief', () => {
   assert.equal(moetOpnieuwZoeken({ waarde: null, definitief: false }), true);
   assert.equal(moetOpnieuwZoeken({ waarde: null, definitief: true }), false);
   assert.equal(moetOpnieuwZoeken({ waarde: 'x', definitief: true }), false);
+});
+
+test('magBeurtOverslaan: alleen in luisterfase, bij een weggevallen actieve speler', () => {
+  const maak = (over) => ({
+    players: new Map([
+      ['u1', { id: 'u1', connected: false, ...over?.u1 }],
+      ['u2', { id: 'u2', connected: true, ...over?.u2 }],
+    ]),
+    activeUserId: over?.activeUserId ?? 'u1',
+    phase: over?.phase ?? 'listening',
+  });
+  assert.equal(magBeurtOverslaan(maak(), 'u1'), true);
+  assert.equal(magBeurtOverslaan(maak({ u1: { connected: true } }), 'u1'), false); // terug
+  assert.equal(magBeurtOverslaan(maak({ activeUserId: 'u2' }), 'u1'), false);      // niet meer aan de beurt
+  assert.equal(magBeurtOverslaan(maak({ phase: 'challenge' }), 'u1'), false);      // fase loopt op timers door
+  assert.equal(magBeurtOverslaan(maak({ phase: 'reveal' }), 'u1'), false);
+  assert.equal(magBeurtOverslaan(maak(), 'onbekend'), false);                      // geen speler
 });

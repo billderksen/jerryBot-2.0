@@ -275,6 +275,9 @@
   #foutBalk { position:fixed; left:50%; top:calc(14px + env(safe-area-inset-top)); transform:translateX(-50%); z-index:100;
     background:#a3122c; color:#fff; padding:9px 16px; border-radius:9px; font-size:.78rem;
     box-shadow:0 8px 20px rgba(0,0,0,.5); max-width:88vw; text-align:center; }
+  #foutBalk.melding { background:#1f2a44; } /* neutrale mededeling (speler weg/terug), geen fout */
+  .speler-weg { opacity:.45; }
+  .weg-tag { font-size:.6rem; background:#3a2530; color:#ffb3c1; border-radius:5px; padding:1px 5px; margin-left:4px; vertical-align:middle; }
 
   /* toegankelijkheid: wie liever geen beweging heeft, krijgt rust */
   @media (prefers-reduced-motion: reduce) {
@@ -430,14 +433,16 @@
     </div>`;
   }
 
-  // ── foutmelding ───────────────────────────────────────────────────────────
+  // ── foutmelding / mededeling ──────────────────────────────────────────────
   let foutTimer = null;
-  function toonFout(msg) {
+  function toonFout(msg, neutraal = false) {
     const el = $('foutBalk');
+    el.classList.toggle('melding', neutraal);
     el.textContent = msg; el.hidden = false;
     clearTimeout(foutTimer);
     foutTimer = setTimeout(() => { el.hidden = true; }, 3500);
   }
+  function toonMelding(msg) { toonFout(msg, true); }
 
   // ── tik-om-te-kopiëren (deel-link + kamercode) ──────────────────────────
   async function kopieerNaarKlembord(tekst) {
@@ -550,6 +555,9 @@
       case 'hl:game:over':
         renderState(data.room);
         break;
+      case 'hl:notice':
+        toonMelding(data.message);
+        break;
       case 'hl:error':
         toonFout(data.message);
         if (rejoining) {
@@ -612,7 +620,7 @@
     bindTikKopieer($('lobbyDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '',
       () => '<span class="deel-chip-icon">🔗</span><span class="deel-chip-tekst">✔ Gekopieerd!</span>');
     $('lobbySpelers').innerHTML = room.players.map((p) => `
-      <div class="lobby-rij">${avaHtml(p, 26)}<span>${esc(p.displayName)}</span>${p.id === room.hostId ? '<span class="host-tag">HOST</span>' : ''}</div>
+      <div class="lobby-rij${p.connected === false ? ' speler-weg' : ''}">${avaHtml(p, 26)}<span>${esc(p.displayName)}</span>${p.connected === false ? '<span class="weg-tag">weg</span>' : ''}${p.id === room.hostId ? '<span class="host-tag">HOST</span>' : ''}</div>
     `).join('');
     const benIkHost = me && me.id === room.hostId;
     if (benIkHost) {
@@ -637,6 +645,7 @@
     if (room.phase === 'reveal' || room.phase === 'finished') return 'onthulling!';
     if (room.phase === 'challenge') return `<b>${esc(actief.displayName)}</b> heeft gelegd — laatste kans om <b>${esc(SHOUT)}</b> te roepen!`;
     if (isMijnBeurt) return 'jij luistert — <b>tik de kaart, tik de plek</b>';
+    if (actief.connected === false) return `<b>${esc(actief.displayName)}</b> is de verbinding verloren — de beurt wordt zo overgeslagen…`;
     return `<b>${esc(actief.displayName)}</b> luistert en kiest een plek…`;
   }
 
@@ -653,7 +662,8 @@
   }
 
   function spelerChipHtml(p) {
-    return `<span class="sp-chip" data-speler="${esc(p.id)}">${avaHtml(p, 22)} ${esc(p.displayName)} · <b>${p.timeline.length}</b> ${chipsHtml(p.tokens)}</span>`;
+    const weg = p.connected === false;
+    return `<span class="sp-chip${weg ? ' speler-weg' : ''}" data-speler="${esc(p.id)}">${avaHtml(p, 22)} ${esc(p.displayName)}${weg ? '<span class="weg-tag">weg</span>' : ''} · <b>${p.timeline.length}</b> ${chipsHtml(p.tokens)}</span>`;
   }
 
   function stempelHtml(reveal, room) {
