@@ -1129,8 +1129,7 @@
   // heen speelt, MOET elk overdrachtspad dit doen zodra de nieuwe ronde niet via
   // Spotify verdergaat — anders speelt op dat toestel minutenlang het oude nummer
   // terwijl de rest van de kamer al bij de volgende plaat is.
-  function pauzeerSpotifyAlsSpeelt(reden) {
-    if (!spotifyPlayingThisRound) return;
+  function pauzeerSpotify(reden) {
     spotifyPlayingThisRound = false;
     if (reden) meldAudioDebug('oude-track-gepauzeerd', reden);
     spotifyFetch('/me/player/pause', { method: 'PUT' }).catch(() => {});
@@ -1141,13 +1140,16 @@
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
     $('btnSpeelOverlay').hidden = true;
+    // eerst de oude stand vangen, dán pas resetten — de reset vóór de check maakte
+    // het pauzeerpad onbereikbaar en liet de oude volle track doorspelen
+    const speeldeSpotify = spotifyPlayingThisRound;
     spotifyPlayingThisRound = false;
     if (payload.spotifyId && heeftSpotifyToken() && !spotifyAfspelenGeweigerd) {
       setAudioIndicator('spotify');
-      speelSpotify(payload.spotifyId, token, payload.previewUrl); // Taak 6 — valt zelf terug op speelPreview() bij elke fout
+      speelSpotify(payload.spotifyId, token, payload.previewUrl, false, speeldeSpotify);
       return;
     }
-    pauzeerSpotifyAlsSpeelt('ronde zonder spotify-versie');
+    if (speeldeSpotify) pauzeerSpotify('ronde zonder spotify-versie');
     speelPreview(payload, token);
   }
   function speelPreview(payload, token) {
@@ -1176,7 +1178,7 @@
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
     $('btnSpeelOverlay').hidden = true;
-    pauzeerSpotifyAlsSpeelt();
+    if (spotifyPlayingThisRound) pauzeerSpotify();
   }
   $('btnSpeelOverlay').addEventListener('click', () => {
     try { spotifyPlayer?.activateElement?.(); } catch { /* best effort */ }
@@ -1652,11 +1654,11 @@
   }
   let spotifyElderGemeld = false; // 'speelt op je laptop'-hint, één keer per kamer
   let spotifyAfspelenGeweigerd = false; // 403 gehad (meestal: geen Premium) — niet elke ronde opnieuw proberen
-  async function speelSpotify(spotifyId, token, previewUrlTerugval, herkansing = false) {
+  async function speelSpotify(spotifyId, token, previewUrlTerugval, herkansing = false, speeldeSpotify = false) {
     try {
       // mini-crossfade: het nog spelende nummer even uitfaden (SDK-volume werkt ook op
       // iOS, in tegenstelling tot <audio>.volume) voordat de nieuwe plaat inzet
-      if (spotifyPlayingThisRound && spotifyPlayer) {
+      if (speeldeSpotify && !herkansing && spotifyPlayer) {
         try {
           for (const v of [0.65, 0.4, 0.2, 0.08]) {
             await spotifyPlayer.setVolume(v);
@@ -1694,7 +1696,7 @@
           spotifyDeviceId = null;
           try { await spotifyPlayer.connect(); } catch { /* dan de gewone terugval */ }
           await new Promise((rs) => setTimeout(rs, 1300));
-          if (audioToken === token && spotifyDeviceId) return speelSpotify(spotifyId, token, previewUrlTerugval, true);
+          if (audioToken === token && spotifyDeviceId) return speelSpotify(spotifyId, token, previewUrlTerugval, true, speeldeSpotify);
         }
         if (res.status === 404 && !spotifyDeviceId && !spotifyGeenDeviceGemeld) {
           spotifyGeenDeviceGemeld = true;
@@ -1723,7 +1725,7 @@
     } catch (e) {
       if (audioToken !== token) return;
       meldAudioDebug('spotify-terugval', e?.message ?? e);
-      pauzeerSpotifyAlsSpeelt('handoff mislukt');
+      if (speeldeSpotify) pauzeerSpotify('handoff mislukt');
       setAudioIndicator('preview');
       speelPreview({ previewUrl: previewUrlTerugval }, token);
     }
