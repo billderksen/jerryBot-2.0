@@ -90,6 +90,9 @@ async function zoekSpotify(song, token) {
 const { songs, gpKeys } = laadBronnen();
 console.log(`${songs.length} unieke songs uit alle bronnen`);
 const state = existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : {};
+// instelbaar tempo: de Spotify-app deelt zijn quotum met de muziekspeler van de bot —
+// een rustiger herkansing (bv. RESOLVE_SLEEP_MS=650) voorkomt de 429-golf van de eerste run
+const SPOTIFY_SLEEP_MS = Number(process.env.RESOLVE_SLEEP_MS ?? 300);
 const token = await spotifyToken();
 let n = 0, zonder = [];
 
@@ -99,7 +102,7 @@ for (const song of songs) {
   if (!state[key]) {
     n++;
     const deezer = await zoekDeezer(song); await sleep(1000);
-    const spotify = await zoekSpotify(song, token); if (token) await sleep(300);
+    const spotify = await zoekSpotify(song, token); if (token) await sleep(SPOTIFY_SLEEP_MS);
     state[key] = {
       ...song, id: key,
       previewUrl: deezer?.previewUrl ?? null, deezerId: deezer?.deezerId ?? null, deezerDefinitief: deezer !== null,
@@ -118,7 +121,7 @@ for (const song of songs) {
   } else if (token && moetOpnieuwZoeken({ waarde: state[key].spotifyId, definitief: state[key].spotifyDefinitief })) {
     // tweede run mét creds, of een eerdere Spotify-fout: opnieuw proberen
     n++;
-    const spotify = await zoekSpotify(song, token); await sleep(300);
+    const spotify = await zoekSpotify(song, token); await sleep(SPOTIFY_SLEEP_MS);
     state[key].spotifyId = spotify?.spotifyId ?? null;
     state[key].spotifyDefinitief = spotify !== null;
     writeFileSync(STATE_FILE, JSON.stringify(state));
