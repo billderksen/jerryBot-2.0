@@ -265,6 +265,25 @@
   .roep-knop small { display:block; font-family:'Bricolage Grotesque'; font-size:.55rem; letter-spacing:1px; opacity:.85; }
   .roep-knop:disabled { opacity:.5; cursor:default; }
   .duim-uitleg { font-size:.6rem; color:#a87; text-align:center; margin-top:7px; line-height:1.4; }
+  /* grote ±fiche die vanuit het midden omhoog zweeft zodra je saldo verandert */
+  .fiche-zweef { position:fixed; left:50%; top:46%; transform:translate(-50%,-50%); z-index:95;
+    font-family:'Anton'; font-size:2.6rem; letter-spacing:1px; pointer-events:none;
+    display:flex; align-items:center; gap:12px; text-shadow:0 4px 14px rgba(0,0,0,.65);
+    animation:ficheZweef 1.7s ease-out forwards; }
+  .fiche-zweef .chip { width:36px; height:36px; border-width:3px; }
+  .fiche-zweef.plus { color:#ffd76e; }
+  .fiche-zweef.min { color:#ff5560; }
+  @keyframes ficheZweef {
+    0% { opacity:0; transform:translate(-50%,-30%) scale(.7); }
+    15% { opacity:1; transform:translate(-50%,-50%) scale(1.12); }
+    30% { transform:translate(-50%,-50%) scale(1); }
+    100% { opacity:0; transform:translate(-50%,-170%) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fiche-zweef { animation:ficheVervaag 1.2s ease-out forwards; }
+    @keyframes ficheVervaag { 0%, 55% { opacity:1; } 100% { opacity:0; } }
+  }
+
   .verlaat-knop { width:32px; height:32px; border-radius:9px; border:1px solid rgba(255,255,255,.22);
     background:rgba(0,0,0,.3); color:#e9dcc8; font-size:.85rem; cursor:pointer; flex-shrink:0; }
   .verlaat-knop.zeker { width:auto; padding:0 10px; background:#a3122c; border-color:#ff5560;
@@ -820,7 +839,7 @@
             <input class="veld" id="gokTitel" placeholder="Titel" autocomplete="off">
             <div class="gok-rij">
               <button class="knop-gok" id="btnGok">GOK · +1 🪙</button>
-              ${magWisselen ? '<button class="knop-wissel" id="btnWissel">⏭ wisselen<br>kost 1 fiche</button>' : ''}
+              ${magWisselen ? '<button class="knop-wissel" id="btnWissel">⏭ nieuw nummer<br>−1 🪙</button>' : ''}
             </div>`}
           </div>
         </div>
@@ -897,8 +916,30 @@
     bindInteractie(room, isMijnBeurt, ik); // Taak 5
   }
 
+  // ±fiche-animatie: gedreven door het saldo zelf, niet door losse acties — dan klopt hij
+  // automatisch bij álles wat fiches beweegt (wissel, uitdaging, goede gok, toekomstige regels)
+  let ficheStand = null; // { roomId, tokens }
+  function toonFicheZweef(delta) {
+    try {
+      const el = document.createElement('div');
+      el.className = 'fiche-zweef ' + (delta > 0 ? 'plus' : 'min');
+      el.innerHTML = `<span>${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span><span class="chip"></span>`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1800);
+    } catch { /* decoratie mag het spel nooit breken */ }
+  }
   function renderState(room) {
     currentRoom = room;
+    const ikNu = me ? room.players.find((p) => p.id === me.id) : null;
+    if (ikNu) {
+      if (ficheStand && ficheStand.roomId === room.roomId && room.phase !== 'lobby'
+          && ikNu.tokens !== ficheStand.tokens) {
+        toonFicheZweef(ikNu.tokens - ficheStand.tokens);
+      }
+      ficheStand = { roomId: room.roomId, tokens: ikNu.tokens };
+    } else {
+      ficheStand = null;
+    }
     if (room.phase === 'lobby') { renderLobby(room); return; }
     renderSpel(room);
   }
