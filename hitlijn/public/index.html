@@ -332,6 +332,8 @@
     box-shadow:0 6px 0 #0b4f26, 0 10px 22px rgba(34,197,94,.4); }
   .knop-leg small { display:block; font-family:'Bricolage Grotesque'; font-size:.55rem; letter-spacing:1px; opacity:.85; color:#0a4425; }
   .knop-leg:active { transform:translateY(3px); box-shadow:0 3px 0 #0b4f26; }
+  /* wachtstand: knop is er al (geen layout-sprong én geen lege zone), licht op zodra de kaart ligt */
+  .knop-leg.wacht { opacity:.35; filter:saturate(.4); box-shadow:0 6px 0 rgba(11,79,38,.4); cursor:default; }
   .daag-rij { display:flex; gap:8px; margin-top:0; }
   .daag-rij .knop-leg { margin-top:0; flex:1; }
   .knop-annuleer { border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.3); color:#e9dcc8;
@@ -866,9 +868,11 @@
             </div>`}
           </div>
         </div>
-        <div class="duim-actie">${kanKiezen && gekozenSlot != null
-          ? `<button class="knop-leg" id="btnLeg">${IKOON.vink} LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>`
-          : (kanKiezen ? '' : '<div class="duim-uitleg">je kaart ligt — laatste kans voor de anderen om te roepen</div>')}</div>`);
+        <div class="duim-actie">${kanKiezen
+          ? (gekozenSlot != null
+            ? `<button class="knop-leg" id="btnLeg">${IKOON.vink} LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>`
+            : `<button class="knop-leg wacht" disabled>${IKOON.vink} LEG HIER<small>sleep of tik eerst een plek in je tijdlijn</small></button>`)
+          : '<div class="duim-uitleg">je kaart ligt — laatste kans voor de anderen om te roepen</div>'}</div>`);
       if ($('gokArtiest')) { $('gokArtiest').value = artiestNu; $('gokTitel').value = titelNu; }
       return;
     }
