@@ -341,7 +341,9 @@
     <div class="wordmark">HIT<span>LIJN</span></div>
     <div class="tagline">het muziek-tijdlijnspel — raad wanneer, steel de kaart, win de avond</div>
     <div class="deel-hint" id="deelHint" hidden>👋 vul je naam in en je zit erbij</div>
-    <input class="veld" id="veldNaam" placeholder="Je naam" maxlength="20" autocomplete="off">
+    <!-- autocomplete aan: in verse contexten (in-app-browsers, eerste keer als beginscherm-app)
+         is localStorage leeg en is de autofill van de browser zelf het enige vangnet -->
+    <input class="veld" id="veldNaam" placeholder="Je naam" maxlength="20" autocomplete="nickname">
     <button class="knop-groot knop-maak" id="btnMaak">KAMER MAKEN</button>
     <div class="cards-rij">
       <label for="veldCards">kaarten om te winnen</label>
