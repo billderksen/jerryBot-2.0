@@ -20,6 +20,10 @@
     --cardboard:#f2e8d5; --ink:#241a10; --felt:#4a1330;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
+  /* geen tekstselectie/vergrootglas bij ingedrukt houden — dat vecht met slepen en tikken;
+     alleen invoervelden blijven selecteerbaar (gok corrigeren moet kunnen) */
+  html { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
+  input, textarea { -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
   [hidden] { display:none !important; } /* wint anders van elk display:flex op hetzelfde element (id > attr) */
   html, body { height:100%; }
   body { font-family:'Bricolage Grotesque', system-ui, sans-serif; color:#f6eee2;
