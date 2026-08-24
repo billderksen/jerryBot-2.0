@@ -42,14 +42,16 @@
     display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; }
   .kaart .jaar { font-family:'Anton'; line-height:1; position:relative; z-index:2; }
   .kaart .titel { line-height:1.25; font-weight:600; opacity:.85; position:relative; z-index:2; }
-  .sz-s { width:82px; height:70px; padding:6px 8px; }
-  .sz-s .jaar { font-size:.95rem; }
-  .sz-s .titel { font-size:.48rem; }
+  .sz-s { width:82px; height:70px; padding:5px 7px; }
+  .sz-s .jaar { font-size:.92rem; }
+  .sz-s .titel { font-size:.56rem; }
   .sz-s .titel, .sz-m2 .titel { display:flex; flex-direction:column; }
-  .sz-s .titel em, .sz-m2 .titel em { font-style:normal; opacity:.7; font-size:.9em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .sz-s .titel b, .sz-m2 .titel b { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .sz-m2 { width:96px; height:88px; padding:8px 9px; }
-  .sz-m2 .jaar { font-size:1.3rem; } .sz-m2 .titel { font-size:.52rem; }
+  .sz-s .titel em, .sz-m2 .titel em { font-style:normal; opacity:.75; font-size:.88em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* titel wrapt over max 2 regels in plaats van afkappen — leesbaarheid boven compactheid */
+  .sz-s .titel b, .sz-m2 .titel b { font-weight:700; white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .sz-s .titel b { -webkit-line-clamp:1; }
+  .sz-m2 { width:96px; height:88px; padding:7px 8px; }
+  .sz-m2 .jaar { font-size:1.25rem; } .sz-m2 .titel { font-size:.64rem; }
   .k70 { background:linear-gradient(160deg,#e8c26a,#d18b2f); }
   .kaart.k70::after { content:''; position:absolute; left:0; right:0; bottom:38%; height:6px;
     background:repeating-linear-gradient(90deg,#8a4b18 0 7px, #c8742a 7px 14px, #e8a83e 14px 21px); opacity:.85; }
@@ -166,9 +168,16 @@
   .band-lijn { display:flex; gap:7px; overflow-x:auto; margin-top:9px; padding-bottom:3px; align-items:center; }
   .band-lijn::-webkit-scrollbar, .mijn-lijn::-webkit-scrollbar, .spelers-rij::-webkit-scrollbar { display:none; }
   .band-lijn, .mijn-lijn, .spelers-rij { scrollbar-width:none; }
-  .spook { width:34px; height:56px; border-radius:7px; border:2px dashed var(--stagelight); flex-shrink:0;
-    background:rgba(255,157,60,.12); display:flex; align-items:center; justify-content:center;
-    font-family:'Anton'; color:var(--stagelight); animation:knipper 1.1s infinite; }
+  /* de voorlopig/definitief gelegde kaart: de kaartrug met het logo, gestreepte rand
+     + gloed als teken dat de plek nog niet vaststaat (tot de reveal hem omdraait) */
+  .spook { width:96px; height:88px; border-radius:8px; flex-shrink:0; position:relative; overflow:hidden;
+    background:url('/icon.svg') center/cover #17091c;
+    outline:2px dashed var(--stagelight); outline-offset:-2px;
+    box-shadow:0 0 18px rgba(255,157,60,.45); touch-action:none;
+    animation:spookGloed 1.3s ease-in-out infinite; }
+  @keyframes spookGloed { 50% { box-shadow:0 0 26px rgba(255,157,60,.7); } }
+  .band-lijn .spook { width:82px; height:70px; }
+  .spook.daag { outline-color:var(--teal); box-shadow:0 0 18px rgba(34,224,192,.5); }
   @keyframes knipper { 50% { opacity:.4; } }
   .band-lijn .vak { width:28px; height:70px; } /* mini-formaat, past bij sz-s kaarten in de band */
   .countdown { height:5px; border-radius:3px; background:rgba(255,255,255,.15); overflow:hidden; margin-top:9px; }
@@ -234,9 +243,14 @@
   .vak { width:34px; height:88px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .vak .plus { width:24px; height:24px; border-radius:50%; border:2px dashed rgba(255,255,255,.28); color:rgba(255,255,255,.42);
     display:flex; align-items:center; justify-content:center; font-size:.8rem; }
-  .vak.kies .plus { border-color:var(--teal); color:var(--teal); cursor:pointer; }
-  .vak.hot .plus { border-color:var(--teal); color:var(--teal); background:rgba(34,224,192,.15); transform:scale(1.25); }
-  .mijn-lijn .spook { width:34px; height:88px; } /* zelfde ghost als de band, maar op mijn-lijn-formaat */
+  .vak { transition:width .15s; }
+  .vak .plus { transition:transform .12s, background .12s; }
+  .vak.kies .plus { border-color:var(--teal); color:var(--teal); cursor:pointer; animation:vakPuls 1.2s ease-in-out infinite; }
+  .vak.hot { width:56px; }
+  .band-lijn .vak.hot { width:48px; }
+  .vak.hot .plus { border-color:var(--teal); color:var(--teal); background:rgba(34,224,192,.25); transform:scale(1.4); animation:none; }
+  @keyframes vakPuls { 50% { transform:scale(1.12); } }
+  @media (prefers-reduced-motion: reduce) { .vak.kies .plus, .spook { animation:none; } }
 
   /* onderbalk: duimzone */
   .duimzone { padding:10px 14px calc(18px + env(safe-area-inset-bottom)); position:relative; z-index:2; }
@@ -250,12 +264,29 @@
 
   /* jij aan zet: mysteriekaart + gok */
   .mysterie-rij { display:flex; gap:10px; align-items:center; }
-  .mysterie-kaart { width:86px; height:86px; border-radius:10px; border:2.5px dashed var(--stagelight); flex-shrink:0;
-    background:rgba(255,157,60,.1); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-    color:var(--stagelight); box-shadow:0 0 22px rgba(255,157,60,.35); cursor:pointer; }
-  .mysterie-kaart .q { font-family:'Anton'; font-size:1.7rem; }
-  .mysterie-kaart small { font-size:.5rem; letter-spacing:1px; }
-  .mysterie-kaart.gekozen { border-style:solid; border-color:var(--teal); box-shadow:0 0 22px rgba(34,224,192,.5); color:var(--teal); }
+  /* de kaartrug: het HITLIJN-logo — dit ís het kaartje van de plaat die nu speelt */
+  .mysterie-kaart { width:96px; height:88px; border-radius:8px; flex-shrink:0; position:relative; overflow:hidden;
+    background:url('/icon.svg') center/cover #17091c;
+    box-shadow:0 5px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.16);
+    cursor:grab; touch-action:none; -webkit-user-select:none; user-select:none; }
+  .mysterie-kaart .speelt { position:absolute; left:0; right:0; bottom:0; padding:8px 0 3px; text-align:center;
+    font-size:.48rem; letter-spacing:1.5px; font-weight:700; color:#ffd9b0;
+    background:linear-gradient(180deg, transparent, rgba(10,3,12,.85) 55%); }
+  .mysterie-kaart .speelt::before { content:'▶ '; color:var(--teal); }
+  .mysterie-kaart.weg { opacity:.22; box-shadow:none; cursor:default; }
+  .knop-leg { width:100%; margin-top:10px; height:56px; border-radius:14px; border:none; cursor:pointer;
+    font-family:'Anton'; font-size:1.2rem; letter-spacing:2px; color:#04331c;
+    background:linear-gradient(180deg,#5ff08e,#22c55e 55%, #15803d);
+    box-shadow:0 6px 0 #0b4f26, 0 10px 22px rgba(34,197,94,.4); }
+  .knop-leg small { display:block; font-family:'Bricolage Grotesque'; font-size:.55rem; letter-spacing:1px; opacity:.85; color:#0a4425; }
+  .knop-leg:active { transform:translateY(3px); box-shadow:0 3px 0 #0b4f26; }
+  .daag-rij { display:flex; gap:8px; margin-top:0; }
+  .daag-rij .knop-leg { margin-top:0; flex:1; }
+  .knop-annuleer { border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.3); color:#e9dcc8;
+    border-radius:14px; padding:0 14px; font-size:.68rem; cursor:pointer; }
+  #sleepKloon { position:fixed; z-index:50; pointer-events:none; transform:translate(-50%,-60%) rotate(-3deg) scale(1.08);
+    filter:drop-shadow(0 14px 22px rgba(0,0,0,.6)); }
+  #sleepKloon .mysterie-kaart { cursor:grabbing; }
   .gok-kolom { flex:1; display:flex; flex-direction:column; gap:6px; }
   /* 16px: kleiner laat iOS-Safari automatisch inzoomen zodra het veld focus krijgt */
   .gok-kolom .veld { padding:8px 12px; font-size:16px; border-radius:9px; }
@@ -662,7 +693,8 @@
     const kiesbaar = shoutArmed;
     const delen = [];
     for (let slot = 0; slot <= actief.timeline.length; slot++) {
-      if (gelegd === slot) delen.push('<div class="spook">?</div>');
+      if (gelegd === slot) delen.push('<div class="spook"></div>');
+      else if (kiesbaar && daagSlot === slot) delen.push(`<div class="spook daag" data-band-slot="${slot}"></div>`);
       else delen.push(`<div class="vak${kiesbaar ? ' kies' : ''}" data-band-slot="${slot}"><span class="plus">+</span></div>`);
       if (slot < actief.timeline.length) delen.push(kaartHtml(actief.timeline[slot], 'sz-s'));
     }
@@ -697,14 +729,20 @@
       <span class="mijn-score"><b>${ik.timeline.length}</b>/${room.settings.cardsToWin}</span>`;
     const legFase = isMijnBeurt && ['listening', 'challenge'].includes(room.phase);
     if (legFase) {
-      const gelegd = room.round?.placedSlot;
+      // vóór bevestigen toont de schim de lokale keuze; na hl:turn:place de server-plek
+      const kanKiezen = room.phase === 'listening' && room.round?.placedSlot == null;
+      const gelegd = room.round?.placedSlot ?? (kanKiezen ? gekozenSlot : null);
       const delen = [];
       for (let slot = 0; slot <= ik.timeline.length; slot++) {
-        delen.push(gelegd === slot ? '<div class="spook">?</div>' : `<div class="vak" data-mijn-slot="${slot}"><span class="plus">+</span></div>`);
+        delen.push(gelegd === slot
+          ? `<div class="spook" id="mijnSpook"></div>`
+          : `<div class="vak${kanKiezen ? ' kies' : ''}" data-mijn-slot="${slot}"><span class="plus">+</span></div>`);
         if (slot < ik.timeline.length) delen.push(kaartHtml(ik.timeline[slot], 'sz-m2'));
       }
       $('mijnLijn').innerHTML = delen.join('');
-      $('mijnHint').textContent = '← swipe voor meer → · tik de mysteriekaart, dan een plek';
+      $('mijnHint').textContent = kanKiezen
+        ? 'sleep je plaat hierheen of tik een plek — de groene knop bevestigt'
+        : '← swipe voor meer →';
     } else {
       $('mijnLijn').innerHTML = ik.timeline.map((c) => kaartHtml(c, 'sz-m2')).join('');
       $('mijnHint').textContent = '';
@@ -716,9 +754,14 @@
     if (isMijnBeurt && ['listening', 'challenge'].includes(room.phase)) {
       const gokGedaan = room.round?.hasGuess;
       const magWisselen = room.phase === 'listening' && ik && ik.tokens >= 1;
+      // getypte gok overleeft elke re-render (state-broadcasts komen ook midden in het typen binnen)
+      const artiestNu = $('gokArtiest')?.value ?? '';
+      const titelNu = $('gokTitel')?.value ?? '';
+      const kanKiezen = room.phase === 'listening' && room.round?.placedSlot == null;
+      const kaartWeg = !kanKiezen || gekozenSlot != null;
       zone.innerHTML = `
         <div class="mysterie-rij">
-          <div class="mysterie-kaart" id="mysterieKaart"><span class="q">?</span><small>MYSTERIE</small></div>
+          <div class="mysterie-kaart${kaartWeg ? ' weg' : ''}" id="mysterieKaart"><span class="speelt">SPEELT NU</span></div>
           <div class="gok-kolom">
             ${gokGedaan ? '<div class="spotify-uitleg">gok geplaatst — je hoort het bij de onthulling</div>' : `
             <input class="veld" id="gokArtiest" placeholder="Artiest" autocomplete="off">
@@ -729,7 +772,12 @@
             </div>`}
           </div>
         </div>
-        <div class="duim-uitleg">tik de mysteriekaart, dan een plek in je tijdlijn — nog een tik bevestigt</div>`;
+        ${kanKiezen && gekozenSlot != null
+          ? '<button class="knop-leg" id="btnLeg">✔ LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>'
+          : `<div class="duim-uitleg">${kanKiezen
+              ? 'dit is de plaat die je nu hoort — sleep hem je tijdlijn in, of tik een plek'
+              : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}`;
+      if ($('gokArtiest')) { $('gokArtiest').value = artiestNu; $('gokTitel').value = titelNu; }
       return;
     }
     if (['listening', 'challenge'].includes(room.phase)) {
@@ -743,6 +791,12 @@
         return;
       }
       if (shoutArmed) {
+        if (daagSlot != null) {
+          zone.innerHTML = `<div class="daag-rij">
+            <button class="knop-leg" id="btnDaag">✔ DAAG UIT<small>kost 1 fiche — dit wordt jouw plek</small></button>
+            <button class="knop-annuleer" id="btnDaagAnnuleer">annuleer</button></div>`;
+          return;
+        }
         zone.innerHTML = `<button class="roep-knop" id="btnRoep">WIJS EEN PLEK AAN ↑<small>tik een vak in de tijdlijn hierboven — of tik hier om te annuleren</small></button>`;
         return;
       }
@@ -836,8 +890,10 @@
   // desondanks ronde-overgangen verankeren aan de FASE (prevPhase) en gebruikt voor audio een
   // eigen lokale teller (audioToken) — bewust, voor FX-anchoring op het moment dat déze client de
   // fase ziet veranderen, niet op wanneer het servernonce-bericht arriveert.
-  let gekozenSlot = null;      // mijn-lijn-slot dat "hot" staat, wacht op de bevestigende tweede tik
+  let gekozenSlot = null;      // voorlopig gekozen mijn-lijn-slot (schim ligt er, groene knop bevestigt)
   let shoutArmed = false;      // staat de HITLIJN-roep op dit moment gewapend?
+  let daagSlot = null;         // voorlopig gekozen band-slot voor de uitdaging (groene knop bevestigt)
+  let sleepSessie = null;      // actieve sleepsessie { kloon, px, py, raf, bewogen }
   let audioToken = 0;          // lokale, altijd-oplopende teller — onafhankelijk van de servernonce
   let challengeStartedAt = null; // wall-clock ms waarop DEZE client de huidige challenge-fase voor het eerst zag
   let paniekActief = false;
@@ -954,18 +1010,76 @@
     } catch { /* decoratie mag het spel nooit breken */ }
   }
 
-  // ── tik-tik plaatsing (eigen tijdlijn) ────────────────────────────────────
-  function syncGekozenUI() {
-    for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) {
-      vak.classList.toggle('hot', Number(vak.dataset.mijnSlot) === gekozenSlot);
-    }
-    document.getElementById('mysterieKaart')?.classList.toggle('gekozen', gekozenSlot != null);
-  }
+  // ── plaatsing op de eigen tijdlijn: tik of sleep → schim → groene knop ────
   function tikMijnVak(slot, room, isMijnBeurt) {
-    if (!isMijnBeurt || room.phase !== 'listening') return; // niet aan zet of al gelegd — tik doet niets
-    if (gekozenSlot === slot) { gekozenSlot = null; stuur('hl:turn:place', { slot }); }
-    else gekozenSlot = slot;
-    syncGekozenUI();
+    if (!isMijnBeurt || room.phase !== 'listening' || room.round?.placedSlot != null) return;
+    gekozenSlot = slot;
+    renderState(currentRoom);
+  }
+
+  // ── sleep-engine: de plaat van de duimzone (of de schim) naar een vak slepen ──
+  function magSlepen() {
+    return me && currentRoom && currentRoom.activeUserId === me.id
+      && currentRoom.phase === 'listening' && currentRoom.round?.placedSlot == null;
+  }
+  function startSleep(ev) {
+    if (!magSlepen() || sleepSessie) return;
+    ev.preventDefault();
+    if (ev.currentTarget.id === 'mijnSpook') { gekozenSlot = null; renderState(currentRoom); }
+    const kloon = document.createElement('div');
+    kloon.id = 'sleepKloon';
+    kloon.innerHTML = '<div class="mysterie-kaart"><span class="speelt">SPEELT NU</span></div>';
+    document.body.appendChild(kloon);
+    sleepSessie = { kloon, px: ev.clientX, py: ev.clientY, raf: null, bewogen: false };
+    plaatsSleepKloon();
+    window.addEventListener('pointermove', sleepBeweeg);
+    window.addEventListener('pointerup', sleepLos, { once: true });
+    window.addEventListener('pointercancel', sleepLos, { once: true });
+    sleepScrollLus();
+  }
+  function plaatsSleepKloon() { sleepSessie.kloon.style.left = sleepSessie.px + 'px'; sleepSessie.kloon.style.top = sleepSessie.py + 'px'; }
+  function sleepBeweeg(ev) {
+    if (!sleepSessie) return;
+    sleepSessie.px = ev.clientX; sleepSessie.py = ev.clientY; sleepSessie.bewogen = true;
+    plaatsSleepKloon();
+    markeerDichtstbij();
+  }
+  function dichtstbijVak() {
+    let beste = null, besteAfstand = 1e9;
+    for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) {
+      const r = vak.getBoundingClientRect();
+      const d = Math.hypot(sleepSessie.px - (r.left + r.width / 2), sleepSessie.py - (r.top + r.height / 2));
+      if (d < besteAfstand) { besteAfstand = d; beste = vak; }
+    }
+    return besteAfstand < 120 ? beste : null; // ruim vangnet: mikken hoeft niet precies
+  }
+  function markeerDichtstbij() {
+    const doel = dichtstbijVak();
+    for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) vak.classList.toggle('hot', vak === doel);
+  }
+  function sleepScrollLus() {
+    if (!sleepSessie) return;
+    const lijn = $('mijnLijn');
+    if (lijn) {
+      const r = lijn.getBoundingClientRect();
+      if (sleepSessie.py > r.top - 40 && sleepSessie.py < r.bottom + 40) {
+        if (sleepSessie.px < 64) lijn.scrollLeft -= 9;
+        else if (sleepSessie.px > window.innerWidth - 64) lijn.scrollLeft += 9;
+        markeerDichtstbij();
+      }
+    }
+    sleepSessie.raf = requestAnimationFrame(sleepScrollLus);
+  }
+  function sleepLos() {
+    if (!sleepSessie) return;
+    window.removeEventListener('pointermove', sleepBeweeg);
+    cancelAnimationFrame(sleepSessie.raf);
+    const doel = sleepSessie.bewogen && magSlepen() ? dichtstbijVak() : null;
+    sleepSessie.kloon.remove();
+    const bewogen = sleepSessie.bewogen;
+    sleepSessie = null;
+    if (doel) { gekozenSlot = Number(doel.dataset.mijnSlot); renderState(currentRoom); }
+    else if (bewogen) renderState(currentRoom); // kaart terug naar de duimzone
   }
 
   // ── spelerchip-tik: tijdlijn-peek ─────────────────────────────────────────
@@ -985,14 +1099,22 @@
 
     // een ronde die het listening/challenge-venster verlaat neemt lokale, per-ronde
     // interactiestate met zich mee — anders overleeft een vergeten keuze/wapening de volgende ronde
-    if (!['listening', 'challenge'].includes(room.phase)) shoutArmed = false;
+    if (!['listening', 'challenge'].includes(room.phase)) { shoutArmed = false; daagSlot = null; }
 
-    // tik-tik plaatsing
-    if (!(isMijnBeurt && room.phase === 'listening')) gekozenSlot = null;
+    // plaatsing: tik een vak of sleep de plaat/schim
+    if (!(isMijnBeurt && room.phase === 'listening') || room.round?.placedSlot != null) gekozenSlot = null;
     for (const vak of document.querySelectorAll('#mijnLijn [data-mijn-slot]')) {
       vak.addEventListener('click', () => tikMijnVak(Number(vak.dataset.mijnSlot), room, isMijnBeurt));
     }
-    syncGekozenUI();
+    if (magSlepen()) {
+      $('mysterieKaart')?.addEventListener('pointerdown', startSleep);
+      $('mijnSpook')?.addEventListener('pointerdown', startSleep);
+    }
+    $('btnLeg')?.addEventListener('click', (ev) => {
+      ev.currentTarget.disabled = true; // dubbele tik = dubbele place voorkomen
+      stuur('hl:turn:place', { slot: gekozenSlot });
+      gekozenSlot = null;
+    });
 
     // gok + wissel
     $('btnGok')?.addEventListener('click', () => {
@@ -1004,15 +1126,27 @@
     // ontwapend zodra de ronde het listening/challenge-venster verlaat)
     $('btnRoep')?.addEventListener('click', () => {
       shoutArmed = !shoutArmed;
+      if (!shoutArmed) daagSlot = null;
       renderState(currentRoom); // hertekent duimzone + band-vakken met/zonder .kies
     });
     for (const vak of document.querySelectorAll('#bandLijn [data-band-slot]')) {
       vak.addEventListener('click', () => {
         if (!shoutArmed) return;
-        shoutArmed = false;
-        stuur('hl:challenge', { slot: Number(vak.dataset.bandSlot) });
+        daagSlot = Number(vak.dataset.bandSlot); // schim daar, groene knop bevestigt
+        renderState(currentRoom);
       });
     }
+    $('btnDaag')?.addEventListener('click', (ev) => {
+      ev.currentTarget.disabled = true;
+      stuur('hl:challenge', { slot: daagSlot });
+      shoutArmed = false;
+      daagSlot = null;
+    });
+    $('btnDaagAnnuleer')?.addEventListener('click', () => {
+      shoutArmed = false;
+      daagSlot = null;
+      renderState(currentRoom);
+    });
 
     // spelerchip-tik
     for (const chip of document.querySelectorAll('#spelersRij [data-speler]')) {
