@@ -682,6 +682,7 @@
   function renderLobby(room) {
     currentRoom = room;
     showInstap('lobby');
+    $('lobbyCode').hidden = Boolean(room.settings?.solo);
     $('lobbyCode').innerHTML = `<span class="kamercode-eyebrow">kamercode</span><span>${esc(room.roomId)}</span>`;
     bindTikKopieer($('lobbyCode'), () => currentRoom?.roomId,
       () => '<span class="kamercode-eyebrow">kamercode</span><span>✔</span>');
@@ -852,6 +853,7 @@
     $('topbarDeelChip').hidden = solo;
     $('bandKop').hidden = solo;
     $('bandLijn').hidden = solo; // jouw tijdlijn staat al onderin — geen dubbele band in solo
+    $('kamercodeLabel').hidden = solo; // niemand kan joinen — een code tonen wekt alleen verwarring
     $('kamercodeLabel').innerHTML = `<span class="kamercode-eyebrow-inline">kamer</span> ${esc(room.roomId)}`;
     bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => '✔');
     bindTikKopieer($('topbarDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '', () => '✔');
