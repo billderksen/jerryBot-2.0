@@ -10,7 +10,42 @@ export function normalizeField(s) {
     .replace(/[^a-z0-9 ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^the /, '');
+    .replace(/^(the|de|het|een) /, '');
+}
+
+// Als normalizeField, maar de ínhoud van haakjes blijft staan — wie "(I Like It)"
+// meegokt mag niet slechter af zijn dan wie het weglaat.
+function normalizeMetHaakjesInhoud(s) {
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(the|de|het|een) /, '');
+}
+
+// Titelvarianten: mét en zonder catalogus-achtervoegsel (" - 2004 Remaster") — de
+// beste match telt, dus een variant erbij kan nooit een goede gok afkeuren.
+export function titelVarianten(raw) {
+  const s = String(raw ?? '');
+  const varianten = [s];
+  const kaal = s.split(/\s+[-–—]\s+/)[0].trim();
+  if (kaal && kaal !== s) varianten.push(kaal);
+  return varianten;
+}
+
+// Artiestvarianten: de volledige naam plus elke afzonderlijke artiest — hoofdartiest
+// (of een van de feat-artiesten) raden is goed, zoals in het officiële spel.
+// Splitsers vereisen omliggende spaties, anders zou 'ft' binnen een woord splitsen.
+export function artiestVarianten(raw) {
+  const s = String(raw ?? '');
+  const varianten = [s];
+  for (const deel of s.split(/\s+(?:feat\.?|ft\.?|featuring|met|x)\s+|\s*[,&+]\s*/i)) {
+    const d = deel.trim();
+    if (d && d !== s) varianten.push(d);
+  }
+  return varianten;
 }
 
 export function levenshtein(a, b) {
@@ -36,9 +71,26 @@ export function similarity(a, b) {
 
 const MATCH_THRESHOLD = 0.8;
 
+// Eén veld beoordelen tegen alle varianten, elk in beide normalisaties. Naast de
+// procentuele drempel geldt een absolute coulance: één letterfout is altijd goed —
+// de drempel is voor korte titels anders onhaalbaar streng (1 fout op 4 letters = 25%).
+function veldMatch(gok, doelVarianten) {
+  for (const norm of [normalizeField, normalizeMetHaakjesInhoud]) {
+    const g = norm(gok);
+    if (!g) continue;
+    for (const variant of doelVarianten) {
+      const d = norm(variant);
+      if (!d) continue;
+      if (similarity(g, d) >= MATCH_THRESHOLD) return true;
+      if (g.length >= 3 && levenshtein(g, d) <= 1) return true;
+    }
+  }
+  return false;
+}
+
 export function matchGuess({ artist, title }, song) {
-  return similarity(normalizeField(artist), normalizeField(song.artist)) >= MATCH_THRESHOLD
-    && similarity(normalizeField(title), normalizeField(song.title)) >= MATCH_THRESHOLD;
+  return veldMatch(artist, artiestVarianten(song.artist))
+    && veldMatch(title, titelVarianten(song.title));
 }
 
 export function parseVideoTitle(raw) {
