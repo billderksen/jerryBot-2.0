@@ -147,6 +147,8 @@
   .deel-chip-compact:active { background:rgba(0,0,0,.5); }
   .audio-ind { margin-left:auto; font-size:.62rem; color:#9c8; display:flex; align-items:center; gap:5px; }
   .dot-sp { width:8px; height:8px; border-radius:50%; background:#1db954; box-shadow:0 0 7px #1db954; }
+  .dot-pv { width:8px; height:8px; border-radius:50%; background:var(--stagelight); box-shadow:0 0 7px rgba(255,157,60,.7); display:inline-block; }
+  .chip-knop { width:12px; height:12px; vertical-align:-2px; margin-left:2px; }
 
   .band { margin:6px 12px 0; border-radius:14px; padding:11px 14px; position:relative; z-index:2; overflow:hidden;
     background:linear-gradient(180deg, rgba(255,157,60,.10), rgba(0,0,0,.3));
@@ -224,7 +226,7 @@
   .uitklap .band-lijn { margin-top:0; }
 
   /* jij-aan-zet: de draaitafel als middenpodium vult de vrije ruimte */
-  .stage-mobiel { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  .stage-mobiel { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; position:relative;
     position:relative; z-index:2; padding:10px 0; }
   .grote-plaat { width:128px; height:128px; border-radius:50%; position:relative;
     background:repeating-radial-gradient(circle, #0d0d0d 0 1.6px, #1f1f1f 1.6px 3.4px);
@@ -233,6 +235,16 @@
     background:radial-gradient(circle at 35% 30%, var(--hotpink), #a00f52);
     display:flex; align-items:center; justify-content:center; font-family:'Anton'; font-size:1.4rem; color:#ffd; }
   .stage-mobiel .eq { height:22px; } .stage-mobiel .eq i { width:5px; }
+  /* blijvend afspeel-vangnet bovenop de plaat: autoplay geweigerd → dit is dé knop */
+  .speel-overlay { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:5;
+    width:112px; height:112px; border-radius:50%; border:3px solid var(--stagelight); cursor:pointer;
+    background:rgba(23,9,28,.82); color:var(--stagelight); font-size:2rem;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    box-shadow:0 0 34px rgba(255,157,60,.5); animation:overlayPuls 1.4s ease-in-out infinite; }
+  .speel-overlay small { font-family:'Bricolage Grotesque'; font-size:.52rem; letter-spacing:1px; max-width:90px; line-height:1.3; }
+  .speel-overlay[hidden] { display:none; }
+  @keyframes overlayPuls { 50% { box-shadow:0 0 48px rgba(255,157,60,.8); } }
+  @media (prefers-reduced-motion: reduce) { .speel-overlay { animation:none; } }
   .replay { background:none; border:none; color:#b9a; font-size:.72rem; text-decoration:underline dotted; cursor:pointer; }
 
   /* jouw tijdlijn = hoofdvlak */
@@ -301,7 +313,10 @@
   .mysterie-kaart .speelt { position:absolute; left:0; right:0; bottom:0; padding:8px 0 3px; text-align:center;
     font-size:.48rem; letter-spacing:1.5px; font-weight:700; color:#ffd9b0;
     background:linear-gradient(180deg, transparent, rgba(10,3,12,.85) 55%); }
-  .mysterie-kaart .speelt::before { content:'▶ '; color:var(--teal); }
+  /* CSS-driehoekje i.p.v. ▶-glyph (rendert op iOS als emoji) */
+  .mysterie-kaart .speelt::before { content:''; display:inline-block; width:0; height:0; margin-right:5px;
+    border-left:7px solid var(--teal); border-top:4.5px solid transparent; border-bottom:4.5px solid transparent;
+    vertical-align:middle; }
   .mysterie-kaart.weg { opacity:.22; box-shadow:none; cursor:default; }
   /* vaste hoogte: uitlegtekst en groene knop wisselen elkaar af zonder dat de
      onderbalk (en daarmee de hele pagina erboven) van hoogte verandert */
@@ -369,7 +384,7 @@
   <div class="instap" id="instapForm">
     <div class="wordmark">HIT<span>LIJN</span></div>
     <div class="tagline">het muziek-tijdlijnspel — raad wanneer, steel de kaart, win de avond</div>
-    <div class="deel-hint" id="deelHint" hidden>👋 vul je naam in en je zit erbij</div>
+    <div class="deel-hint" id="deelHint" hidden>vul je naam in en je zit erbij</div>
     <!-- autocomplete aan: in verse contexten (in-app-browsers, eerste keer als beginscherm-app)
          is localStorage leeg en is de autofill van de browser zelf het enige vangnet -->
     <input class="veld" id="veldNaam" placeholder="Je naam" maxlength="20" autocomplete="nickname">
@@ -387,10 +402,10 @@
       <button class="knop-spotify" id="btnSpotify" hidden>◉ Verbind Spotify <span style="font-weight:400;font-size:.75rem">(optioneel)</span></button>
       <div class="spotify-uitleg" id="spotifyUitleg">Met Spotify Premium hoor je volledige nummers via je eigen account.<br>
         Zonder Spotify speel je gewoon mee met 30-seconden-previews — niets nodig.</div>
-      <div class="spotify-uitleg" id="spotifyVerbonden" hidden>✔ Verbonden met Spotify — je hoort straks volledige nummers</div>
+      <div class="spotify-uitleg" id="spotifyVerbonden" hidden>Verbonden met Spotify — je hoort straks volledige nummers</div>
     </div>
-    <button class="knop-solo" id="btnSolo" hidden>🎧 SOLO SPELEN<small>oefen je tijdlijn in je eentje — geen kamercode nodig</small></button>
-    <div class="instap-voet">Geen account nodig · we bewaren niets over jou<br>huisregel: niet op je Spotify-app spieken 😉</div>
+    <button class="knop-solo" id="btnSolo" hidden>SOLO SPELEN<small>oefen je tijdlijn in je eentje — geen kamercode nodig</small></button>
+    <div class="instap-voet">Geen account nodig · we bewaren niets over jou<br>huisregel: niet op je Spotify-app spieken</div>
   </div>
 
   <div class="instap" id="instapLobby" hidden>
@@ -410,8 +425,8 @@
     <button type="button" class="verlaat-knop" id="btnVerlaat" title="Kamer verlaten">✕</button>
     <div class="wordmark">HIT<span>LIJN</span></div>
     <span class="kamercode" id="kamercodeLabel" role="button" tabindex="0"></span>
-    <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren">🔗</button>
-    <span class="audio-ind" id="audioInd">🎧 preview</span>
+    <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.12em"><path d="M10 14a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07l-1.42 1.41"/><path d="M14 10a5 5 0 0 0-7.07 0l-2.12 2.12a5 5 0 1 0 7.07 7.07l1.42-1.41"/></svg></button>
+    <span class="audio-ind" id="audioInd"><span class="dot-pv"></span> preview</span>
   </div>
 
   <div class="band">
@@ -429,8 +444,9 @@
 
   <div class="stage-mobiel">
     <div class="grote-plaat"></div>
+    <button type="button" class="speel-overlay" id="btnSpeelOverlay" hidden><svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><small>tik om de plaat te starten</small></button>
     <div class="eq"><i></i><i></i><i></i><i></i></div>
-    <button class="replay" id="btnReplay" hidden>▶ opnieuw afspelen</button>
+    <button class="replay" id="btnReplay" hidden><svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" style="vertical-align:-0.12em"><path d="M8 5v14l11-7z"/></svg> opnieuw afspelen</button>
   </div>
 
   <div class="mijn">
@@ -633,7 +649,8 @@
         break;
       case 'hl:room:joined':
         rejoining = false;
-        spotifyGeenDeviceGemeld = false; // hint mag in elke nieuwe kamer opnieuw klinken
+        spotifyGeenDeviceGemeld = false; // hints mogen in elke nieuwe kamer opnieuw klinken
+        spotifyElderGemeld = false;
         me = data.you;
         kamer = data.room.roomId;
         localStorage.setItem('hitlijnKamer', kamer);
@@ -724,10 +741,10 @@
     $('lobbyCode').hidden = Boolean(room.settings?.solo);
     $('lobbyCode').innerHTML = `<span class="kamercode-eyebrow">kamercode</span><span>${esc(room.roomId)}</span>`;
     bindTikKopieer($('lobbyCode'), () => currentRoom?.roomId,
-      () => '<span class="kamercode-eyebrow">kamercode</span><span>✔</span>');
-    $('lobbyDeelChip').innerHTML = '<span class="deel-chip-icon">🔗</span><span class="deel-chip-tekst">Deel-link — tik om te kopiëren</span>';
+      () => `<span class="kamercode-eyebrow">kamercode</span><span>${IKOON.vink}</span>`);
+    $('lobbyDeelChip').innerHTML = `<span class="deel-chip-icon">${IKOON.link}</span><span class="deel-chip-tekst">Deel-link — tik om te kopiëren</span>`;
     bindTikKopieer($('lobbyDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '',
-      () => '<span class="deel-chip-icon">🔗</span><span class="deel-chip-tekst">✔ Gekopieerd!</span>');
+      () => `<span class="deel-chip-icon">${IKOON.vink}</span><span class="deel-chip-tekst">Gekopieerd!</span>`);
     $('lobbySpelers').innerHTML = room.players.map((p) => `
       <div class="lobby-rij${p.connected === false ? ' speler-weg' : ''}">${avaHtml(p, 26)}<span>${esc(p.displayName)}</span>${p.connected === false ? '<span class="weg-tag">weg</span>' : ''}${p.id === room.hostId ? '<span class="host-tag">HOST</span>' : ''}</div>
     `).join('');
@@ -779,7 +796,7 @@
 
   function stempelHtml(reveal, room) {
     const naamActief = esc(room.players.find((p) => p.id === reveal.activeId)?.displayName ?? '?');
-    const kop = reveal.activeCorrect ? '✔ GOED GELEGD' : '✘ FOUT GELEGD';
+    const kop = reveal.activeCorrect ? `${IKOON.vink} GOED GELEGD` : `${IKOON.kruis} FOUT GELEGD`;
     const stal = reveal.stolenBy
       ? `<br><b>${esc(room.players.find((p) => p.id === reveal.stolenBy)?.displayName ?? '?')}</b> steelt de kaart!` : '';
     const gok = reveal.guessCorrect ? `<br>${naamActief} raadde artiest + titel: +1 fiche` : '';
@@ -822,6 +839,21 @@
 
   function renderDuimzone(room, ik, isMijnBeurt) {
     const zone = $('duimzone');
+    // tijdens het laden van de volgende plaat (wissel, rondestart) behoudt de zone
+    // exact dezelfde opbouw — anders klapt de onderbalk kort leeg en verspringt alles
+    if (isMijnBeurt && room.phase === 'loading') {
+      zetHtml(zone, `
+        <div class="mysterie-rij">
+          <div class="mysterie-kaart weg" id="mysterieKaart"><span class="speelt">SPEELT NU</span></div>
+          <div class="gok-kolom">
+            <input class="veld" placeholder="Artiest" disabled>
+            <input class="veld" placeholder="Titel" disabled>
+            <div class="gok-rij"><button class="knop-gok" disabled style="opacity:.5">GOK · +1 <span class="chip chip-knop"></span></button></div>
+          </div>
+        </div>
+        <div class="duim-actie"><div class="duim-uitleg">de volgende plaat wordt opgezocht…</div></div>`);
+      return;
+    }
     if (isMijnBeurt && ['listening', 'challenge'].includes(room.phase)) {
       const gokGedaan = room.round?.hasGuess;
       const magWisselen = room.phase === 'listening' && ik && ik.tokens >= 1;
@@ -838,13 +870,13 @@
             <input class="veld" id="gokArtiest" placeholder="Artiest" autocomplete="off">
             <input class="veld" id="gokTitel" placeholder="Titel" autocomplete="off">
             <div class="gok-rij">
-              <button class="knop-gok" id="btnGok">GOK · +1 🪙</button>
-              ${magWisselen ? '<button class="knop-wissel" id="btnWissel">⏭ nieuw nummer<br>−1 🪙</button>' : ''}
+              <button class="knop-gok" id="btnGok">GOK · +1 <span class="chip chip-knop"></span></button>
+              ${magWisselen ? '<button class="knop-wissel" id="btnWissel">nieuw nummer<br>−1 <span class="chip chip-knop"></span></button>' : ''}
             </div>`}
           </div>
         </div>
         <div class="duim-actie">${kanKiezen && gekozenSlot != null
-          ? '<button class="knop-leg" id="btnLeg">✔ LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>'
+          ? `<button class="knop-leg" id="btnLeg">${IKOON.vink} LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>`
           : `<div class="duim-uitleg">${kanKiezen
               ? 'dit is de plaat die je nu hoort — sleep hem je tijdlijn in, of tik een plek'
               : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}</div>`);
@@ -864,7 +896,7 @@
       if (shoutArmed) {
         if (daagSlot != null) {
           zetHtml(zone, `<div class="daag-rij">
-            <button class="knop-leg" id="btnDaag">✔ DAAG UIT<small>kost 1 fiche — dit wordt jouw plek</small></button>
+            <button class="knop-leg" id="btnDaag">${IKOON.vink} DAAG UIT<small>kost 1 fiche — dit wordt jouw plek</small></button>
             <button class="knop-annuleer" id="btnDaagAnnuleer">annuleer</button></div>`);
           return;
         }
@@ -890,8 +922,8 @@
     $('bandLijn').hidden = solo; // jouw tijdlijn staat al onderin — geen dubbele band in solo
     $('kamercodeLabel').hidden = solo; // niemand kan joinen — een code tonen wekt alleen verwarring
     $('kamercodeLabel').innerHTML = `<span class="kamercode-eyebrow-inline">kamer</span> ${esc(room.roomId)}`;
-    bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => '✔');
-    bindTikKopieer($('topbarDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '', () => '✔');
+    bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => IKOON.vink);
+    bindTikKopieer($('topbarDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '', () => IKOON.vink);
 
     $('bandKop').innerHTML = actief ? `
       <span class="aanzet-mini">AAN ZET</span>${avaHtml(actief, 26)}<span class="band-naam">${esc(actief.displayName)}</span>
@@ -955,7 +987,7 @@
     const el = document.createElement('div');
     el.className = 'win-overlay';
     el.innerHTML = `
-      <div class="win-titel">${esc(winnaar.displayName)} WINT! 🏆</div>
+      <div class="win-titel">${esc(winnaar.displayName)} WINT!</div>
       ${winKaart ? `<div class="win-kaart">${winKaart}</div>` : ''}
       <div class="win-sub">${room.players.map((p) => `${esc(p.displayName)}: ${p.timeline.length} kaarten`).join(' · ')}</div>
       <button class="knop-groot knop-maak" id="btnTerug">Terug naar start</button>`;
@@ -1004,12 +1036,30 @@
   // iOS staat audio.play() alleen toe vanuit een tikgebaar. De rondeclip arriveert
   // pas ná de tik (via de WebSocket), dus we ontgrendelen het element alvast mét een
   // onhoorbaar stil fragment binnen het gebaar zelf — daarna mag elke ronde autoplayen.
+  // Iconen als inline SVG — de app gebruikt bewust geen emoji's (renderen per platform
+  // anders en vloeken met de vormgeving). 1em groot, kleurt mee via currentColor.
+  const IKOON = {
+    play: '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" style="vertical-align:-0.12em"><path d="M8 5v14l11-7z"/></svg>',
+    vink: '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.12em"><path d="M4 12.5l5 5L20 6.5"/></svg>',
+    kruis: '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-0.12em"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    link: '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.12em"><path d="M10 14a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07l-1.42 1.41"/><path d="M14 10a5 5 0 0 0-7.07 0l-2.12 2.12a5 5 0 1 0 7.07 7.07l1.42-1.41"/></svg>',
+  };
+
+  function meldAudioDebug(stap, detail = '') {
+    try { stuur('hl:audio:debug', { stap, detail: String(detail).slice(0, 200) }); } catch { /* diagnose mag nooit storen */ }
+  }
   let audioOntgrendeld = false;
   function ontgrendelAudio() {
     if (audioOntgrendeld) return;
     const audio = $('rondeAudio');
     audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-    audio.play().then(() => { audioOntgrendeld = true; audio.pause(); }).catch(() => { /* ▶-knop blijft het vangnet */ });
+    audio.play().then(() => {
+      audioOntgrendeld = true;
+      // alleen pauzeren als het nog het stille fragment is — de echte rondeclip kan
+      // intussen al gestart zijn en die mag deze late callback niet stilzetten
+      if (audio.currentSrc.startsWith('data:')) audio.pause();
+      meldAudioDebug('ontgrendeld', 'ok');
+    }).catch((e) => meldAudioDebug('ontgrendel-fout', e?.name ?? e));
   }
 
   // ── audio: Spotify (indien verbonden) met terugval op preview ──────────────
@@ -1017,6 +1067,7 @@
     const token = ++audioToken;
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
+    $('btnSpeelOverlay').hidden = true;
     spotifyPlayingThisRound = false;
     if (payload.spotifyId && heeftSpotifyToken()) {
       setAudioIndicator('spotify');
@@ -1027,16 +1078,19 @@
   }
   function speelPreview(payload, token) {
     setAudioIndicator('preview');
-    if (!payload.previewUrl) { toonMelding('Deze plaat heeft geen geluidsfragment — gok op je gevoel'); return; }
+    if (!payload.previewUrl) { toonMelding('Deze plaat heeft geen geluidsfragment — gok op je gevoel'); meldAudioDebug('geen-previewurl'); return; }
     const audio = $('rondeAudio');
     audio.src = payload.previewUrl;
     const speelt = audio.play();
     const knop = $('btnReplay');
     if (knop) knop.hidden = false; // altijd beschikbaar zodra er iets te herhalen valt, niet alleen bij een geblokkeerde autoplay
-    if (speelt && typeof speelt.catch === 'function') {
-      speelt.catch(() => {
+    if (speelt && typeof speelt.then === 'function') {
+      speelt.then(() => {
+        if (audioToken === token) { $('btnSpeelOverlay').hidden = true; meldAudioDebug('preview-speelt'); }
+      }).catch((e) => {
         if (audioToken !== token) return; // alweer een nieuwe ronde gestart — niets meer te melden
-        toonFout('Tik ▶ om de plaat te starten — browser blokkeerde autoplay');
+        meldAudioDebug('preview-geblokkeerd', e?.name ?? e);
+        $('btnSpeelOverlay').hidden = false; // blijvend vangnet óp de plaat, geen wegtikkende toast
       });
     }
   }
@@ -1047,11 +1101,17 @@
     audio.removeAttribute('src');
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
+    $('btnSpeelOverlay').hidden = true;
     if (spotifyPlayingThisRound) {
       spotifyPlayingThisRound = false;
       spotifyFetch('/me/player/pause', { method: 'PUT' }).catch(() => {}); // best effort, Taak 6
     }
   }
+  $('btnSpeelOverlay').addEventListener('click', () => {
+    const audio = $('rondeAudio');
+    audio.play().then(() => { $('btnSpeelOverlay').hidden = true; audioOntgrendeld = true; meldAudioDebug('overlay-start', 'ok'); })
+      .catch((e) => meldAudioDebug('overlay-fout', e?.name ?? e));
+  });
   $('btnReplay').addEventListener('click', () => {
     const audio = $('rondeAudio');
     audio.currentTime = 0;
@@ -1376,7 +1436,7 @@
   }
   function setAudioIndicator(modus) {
     const el = $('audioInd'); if (!el) return;
-    el.innerHTML = modus === 'spotify' ? '<span class="dot-sp"></span> Spotify' : '🎧 preview';
+    el.innerHTML = modus === 'spotify' ? '<span class="dot-sp"></span> Spotify' : '<span class="dot-pv"></span> preview';
   }
 
   // Volledige terugval: tokens weg, server op de hoogte, knop weer zichtbaar, korte uitleg.
@@ -1469,9 +1529,24 @@
   // Afspelen: met device_id (SDK, desktop) of zonder (Connect-API op het actieve device,
   // mobiel). Elke fout in deze keten valt terug op de preview uit dezelfde hl:round-payload —
   // nooit een kapotte ronde.
+  // Zonder actief Spotify-apparaat: pak expliciet de smartphone uit de apparatenlijst —
+  // dit is een mobiel spel, en /me/player/play zonder device_id geeft anders een 404.
+  async function zoekTelefoonDevice() {
+    try {
+      const r = await spotifyFetch('/me/player/devices');
+      if (!r.ok) return null;
+      const j = await r.json().catch(() => null);
+      const apparaten = j?.devices ?? [];
+      if (apparaten.some((d) => d.is_active)) return null; // er ís een actief apparaat — respecteren
+      return apparaten.find((d) => d.type === 'Smartphone')?.id ?? null;
+    } catch { return null; }
+  }
+  let spotifyElderGemeld = false; // 'speelt op je laptop'-hint, één keer per kamer
   async function speelSpotify(spotifyId, token, previewUrlTerugval) {
     try {
-      const pad = spotifyDeviceId ? `/me/player/play?device_id=${encodeURIComponent(spotifyDeviceId)}` : '/me/player/play';
+      let doelDevice = spotifyDeviceId;
+      if (!doelDevice) doelDevice = await zoekTelefoonDevice();
+      const pad = doelDevice ? `/me/player/play?device_id=${encodeURIComponent(doelDevice)}` : '/me/player/play';
       const res = await spotifyFetch(pad, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1483,11 +1558,28 @@
           spotifyGeenDeviceGemeld = true;
           toonFout('Open je Spotify-app even en speel 1 seconde iets af');
         }
+        meldAudioDebug('spotify-play-fout', res.status);
         throw new Error('spotify-play mislukt: ' + res.status);
       }
       spotifyPlayingThisRound = true;
-    } catch {
+      // laat zien wáár hij speelt — Connect pakt soms een ander apparaat (laptop!)
+      spotifyFetch('/me/player').then(async (r) => {
+        if (!r.ok) return;
+        const j = await r.json().catch(() => null);
+        const apparaat = j?.device?.name;
+        if (apparaat && audioToken === token) {
+          const el = $('audioInd');
+          if (el) el.innerHTML = '<span class="dot-sp"></span> Spotify · ' + esc(apparaat);
+          meldAudioDebug('spotify-speelt-op', `${apparaat} (${j?.device?.type ?? '?'})`);
+          if (j?.device?.type && j.device.type !== 'Smartphone' && !spotifyElderGemeld) {
+            spotifyElderGemeld = true;
+            toonMelding(`Spotify speelt op "${apparaat}" — kies in je Spotify-app je telefoon om hier te luisteren`);
+          }
+        }
+      }).catch(() => {});
+    } catch (e) {
       if (audioToken !== token) return;
+      meldAudioDebug('spotify-terugval', e?.message ?? e);
       setAudioIndicator('preview');
       speelPreview({ previewUrl: previewUrlTerugval }, token);
     }

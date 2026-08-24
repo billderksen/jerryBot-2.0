@@ -285,6 +285,12 @@ function afhandelen(ws, data) {
       stuur(ws, 'hl:hello:ok', { pools: laadPools().map((p) => ({ id: p.id, name: p.name, count: p.songs.length })) });
       break;
     }
+    case 'hl:audio:debug': {
+      // diagnose vanaf de telefoon van een speler — alleen loggen, nooit spelstate raken
+      if (!rateLimit(ws.ip, 'audiodebug', 30, 60_000)) break;
+      console.log(`[audio] ${ws.naam ?? '?'}@${ws.roomCode ?? '-'} ${String(data.stap ?? '').slice(0, 40)}${data.detail ? ': ' + String(data.detail).slice(0, 200) : ''}`);
+      break;
+    }
     case 'hl:audio:mode': {
       ws.audioMode = data.mode === 'spotify' ? 'spotify' : 'preview';
       break;
