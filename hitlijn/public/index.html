@@ -269,7 +269,18 @@
   .album-tekst b { font-size:.95rem; }
   .album-tekst span { font-size:.74rem; color:#d9b; }
   @keyframes hoesIn { 0% { transform:rotateY(88deg) scale(.9); opacity:0; } 100% { transform:none; opacity:1; } }
-  @media (prefers-reduced-motion: reduce) { .album-hoes { animation:none; } }
+  /* uitslag direct af te lezen aan de hoes: groene gloed bij goed, rode rand + schudden bij fout */
+  .album-hoes.goed img { box-shadow:0 16px 40px rgba(0,0,0,.65), 0 0 0 3px var(--teal), 0 0 36px rgba(34,224,192,.55); }
+  .album-hoes.fout img { box-shadow:0 16px 40px rgba(0,0,0,.65), 0 0 0 3px #ff5560, 0 0 36px rgba(214,31,62,.55); }
+  .album-hoes.fout { animation:hoesIn .5s ease-out, hoesSchud .55s ease-in-out .5s; }
+  @keyframes hoesSchud {
+    0%, 100% { transform:translateX(0); }
+    15% { transform:translateX(-9px) rotate(-1.2deg); }
+    35% { transform:translateX(8px) rotate(1deg); }
+    55% { transform:translateX(-6px) rotate(-0.7deg); }
+    75% { transform:translateX(4px) rotate(0.5deg); }
+  }
+  @media (prefers-reduced-motion: reduce) { .album-hoes, .album-hoes.fout { animation:none; } }
   /* blijvend afspeel-vangnet bovenop de plaat: autoplay geweigerd → dit is dé knop */
   .speel-overlay { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:5;
     width:112px; height:112px; border-radius:50%; border:3px solid var(--stagelight); cursor:pointer;
@@ -1100,6 +1111,8 @@
   function toonAlbumHoes(reveal) {
     try {
       if (!reveal?.cover) return; // geen hoes bekend — de plaat blijft gewoon staan
+      $('albumHoes').classList.toggle('goed', Boolean(reveal.activeCorrect));
+      $('albumHoes').classList.toggle('fout', !reveal.activeCorrect);
       $('albumHoesImg').src = reveal.cover;
       $('albumTekst').innerHTML = `<b>${esc(schoonTitel(reveal.title))}</b><br><span>${esc(reveal.artist)} · ${reveal.year}</span>`;
       $('albumHoes').hidden = false;
@@ -1255,10 +1268,12 @@
   function runRevealConfetti(reveal) {
     try {
       if (beperkteBeweging()) return;
-      const plaat = document.querySelector('.grote-plaat');
-      const r = plaat?.getBoundingClientRect();
-      const x = r ? r.left + r.width / 2 : window.innerWidth / 2;
-      const y = r ? r.top + r.height / 2 : window.innerHeight * 0.38;
+      // niet op .grote-plaat mikken: die is bij de reveal net verborgen (albumhoes) en
+      // een verborgen element meet (0,0) — de deeltjes spawnen dan buiten beeld
+      const stage = document.querySelector('.stage-mobiel');
+      const r = stage?.getBoundingClientRect();
+      const x = r && r.width ? r.left + r.width / 2 : window.innerWidth / 2;
+      const y = r && r.height ? r.top + r.height * 0.45 : window.innerHeight * 0.38;
       const kleuren = ['#ff2e88', '#ff9d3c', '#22e0c0', '#ffd76e', '#f2e8d5'];
       if (reveal?.activeCorrect) {
         spawnSalvo(x, y, { aantal: 26, minKracht: 90, maxKracht: 250, kleuren });
