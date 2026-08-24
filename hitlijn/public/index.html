@@ -53,7 +53,7 @@
   .sz-m2 { width:96px; height:88px; padding:7px 8px; }
   .sz-m2 .jaar { font-size:1.25rem; } .sz-m2 .titel { font-size:.64rem; }
   .k70 { background:linear-gradient(160deg,#e8c26a,#d18b2f); }
-  .kaart.k70::after { content:''; position:absolute; left:0; right:0; bottom:38%; height:6px;
+  .kaart.k70::after { content:''; position:absolute; left:0; right:0; bottom:46%; height:6px;
     background:repeating-linear-gradient(90deg,#8a4b18 0 7px, #c8742a 7px 14px, #e8a83e 14px 21px); opacity:.85; }
   .k70 .jaar { color:#4a2708; }
   .k80 { background:#141018; color:#fff; box-shadow:0 5px 12px rgba(0,0,0,.5), inset 0 0 0 2px var(--hotpink); }
@@ -476,10 +476,20 @@
     if (year < 2010) return 'k00';
     return 'k10';
   }
+  // Catalogus-ruis achter de echte titel weghalen voor weergave: Deezer/Spotify plakken
+  // er vaak ' - 2004 Remaster', ' - Radio Edit' of '(Remastered 2011)' achter. Alleen
+  // bekende achtervoegsels — een titel met een legitiem streepje blijft heel.
+  function schoonTitel(t) {
+    return String(t ?? '')
+      .replace(/\s*[-–]\s*((19|20)\d{2}\s*)?remaster(ed)?(\s*(19|20)\d{2})?\s*$/i, '')
+      .replace(/\s*[-–]\s*(single version|album version|radio edit|radio mix|original mix|mono|stereo|live|re-?recorded( version)?)\s*$/i, '')
+      .replace(/\s*\(\s*((19|20)\d{2}\s*)?remaster(ed)?(\s*(19|20)\d{2})?\s*\)\s*$/i, '')
+      .trim() || String(t ?? '');
+  }
   function kaartHtml(card, sizeClass) {
     return `<div class="kaart ${sizeClass} ${decadeClass(card.year)}">
       <span class="jaar">${card.year}</span>
-      <span class="titel"><b>${esc(card.title)}</b><em>${esc(card.artist)}</em></span>
+      <span class="titel"><b>${esc(schoonTitel(card.title))}</b><em>${esc(card.artist)}</em></span>
     </div>`;
   }
 
@@ -739,7 +749,7 @@
     const gok = reveal.guessCorrect ? `<br>${naamActief} raadde artiest + titel: +1 fiche` : '';
     return `<div class="stempel-mobiel">
       <div class="stempel-kop" style="${reveal.activeCorrect ? '' : 'color:#a3122c'}">${kop}</div>
-      <div class="stempel-wat">Het was <b>${reveal.year}</b> — ${esc(reveal.title)} · ${esc(reveal.artist)}${stal}${gok}</div>
+      <div class="stempel-wat">Het was <b>${reveal.year}</b> — ${esc(schoonTitel(reveal.title))} · ${esc(reveal.artist)}${stal}${gok}</div>
     </div>`;
   }
 
