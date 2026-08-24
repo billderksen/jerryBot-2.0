@@ -431,7 +431,6 @@
 
   <div class="band">
     <div class="band-kop" id="bandKop"></div>
-    <div class="band-status" id="bandStatus"></div>
     <div class="band-lijn" id="bandLijn"></div>
     <div class="countdown" id="countdownWrap" hidden><i id="countdownBar"></i></div>
   </div>
@@ -764,18 +763,6 @@
   }
 
   // ── render: spelscherm ───────────────────────────────────────────────────
-  function statusHtml(room, actief, isMijnBeurt) {
-    if (room.phase === 'loading') return 'de volgende plaat wordt opgezocht…';
-    if (room.phase === 'reveal' || room.phase === 'finished') return 'onthulling!';
-    if (room.phase === 'challenge') {
-      if (room.settings?.solo) return 'onthulling!';
-      return `<b>${esc(actief.displayName)}</b> heeft gelegd — laatste kans om <b>${esc(SHOUT)}</b> te roepen!`;
-    }
-    if (isMijnBeurt) return 'jij luistert — <b>tik de kaart, tik de plek</b>';
-    if (actief.connected === false) return `<b>${esc(actief.displayName)}</b> is de verbinding verloren — de beurt wordt zo overgeslagen…`;
-    return `<b>${esc(actief.displayName)}</b> luistert en kiest een plek…`;
-  }
-
   function bandLijnHtml(actief, room) {
     const gelegd = room.round?.placedSlot;
     const kiesbaar = shoutArmed;
@@ -877,9 +864,7 @@
         </div>
         <div class="duim-actie">${kanKiezen && gekozenSlot != null
           ? `<button class="knop-leg" id="btnLeg">${IKOON.vink} LEG HIER<small>tik om te bevestigen — verslepen mag nog</small></button>`
-          : `<div class="duim-uitleg">${kanKiezen
-              ? 'dit is de plaat die je nu hoort — sleep hem je tijdlijn in, of tik een plek'
-              : 'je kaart ligt — laatste kans voor de anderen om te roepen'}</div>`}</div>`);
+          : (kanKiezen ? '' : '<div class="duim-uitleg">je kaart ligt — laatste kans voor de anderen om te roepen</div>')}</div>`);
       if ($('gokArtiest')) { $('gokArtiest').value = artiestNu; $('gokTitel').value = titelNu; }
       return;
     }
@@ -928,7 +913,6 @@
     $('bandKop').innerHTML = actief ? `
       <span class="aanzet-mini">AAN ZET</span>${avaHtml(actief, 26)}<span class="band-naam">${esc(actief.displayName)}</span>
       <div class="mini-plaat"></div>` : '';
-    $('bandStatus').innerHTML = actief ? statusHtml(room, actief, isMijnBeurt) : '';
     zetHtml($('bandLijn'), actief ? bandLijnHtml(actief, room) : '');
     $('countdownWrap').hidden = room.phase !== 'challenge' || Boolean(room.settings?.solo);
 
