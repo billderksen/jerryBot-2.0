@@ -191,8 +191,7 @@ function scheduleReveal(code) {
   const k = rooms.get(code);
   if (!k || k.room.phase !== 'challenge') return;
   const nonce = k.room.round?.nonce;
-  // solo: niemand om uit te dagen, dus geen 7s-venster — korte adempauze en onthullen
-  setTimer(code, k.room.settings.solo ? 1500 : 7000, () => {
+  setTimer(code, 7000, () => {
     const kk = rooms.get(code);
     if (!kk || kk.room.phase !== 'challenge' || kk.room.round?.nonce !== nonce) return;
     doeReveal(code);
@@ -376,7 +375,9 @@ function afhandelen(ws, data) {
       const r = k.room.place(ws.playerId, data.slot);
       if (!r.ok) return fout(ws, 'Leggen kan nu niet');
       broadcastState(ws.roomCode);
-      scheduleReveal(ws.roomCode);
+      // solo: niemand om uit te dagen — meteen onthullen in plaats van het 7s-venster
+      if (k.room.settings.solo) doeReveal(ws.roomCode);
+      else scheduleReveal(ws.roomCode);
       break;
     }
     case 'hl:turn:guess': {

@@ -704,7 +704,10 @@
   function statusHtml(room, actief, isMijnBeurt) {
     if (room.phase === 'loading') return 'de volgende plaat wordt opgezocht…';
     if (room.phase === 'reveal' || room.phase === 'finished') return 'onthulling!';
-    if (room.phase === 'challenge') return `<b>${esc(actief.displayName)}</b> heeft gelegd — laatste kans om <b>${esc(SHOUT)}</b> te roepen!`;
+    if (room.phase === 'challenge') {
+      if (room.settings?.solo) return 'onthulling!';
+      return `<b>${esc(actief.displayName)}</b> heeft gelegd — laatste kans om <b>${esc(SHOUT)}</b> te roepen!`;
+    }
     if (isMijnBeurt) return 'jij luistert — <b>tik de kaart, tik de plek</b>';
     if (actief.connected === false) return `<b>${esc(actief.displayName)}</b> is de verbinding verloren — de beurt wordt zo overgeslagen…`;
     return `<b>${esc(actief.displayName)}</b> luistert en kiest een plek…`;
@@ -848,7 +851,7 @@
       <div class="mini-plaat"></div>` : '';
     $('bandStatus').innerHTML = actief ? statusHtml(room, actief, isMijnBeurt) : '';
     $('bandLijn').innerHTML = actief ? bandLijnHtml(actief, room) : '';
-    $('countdownWrap').hidden = room.phase !== 'challenge';
+    $('countdownWrap').hidden = room.phase !== 'challenge' || Boolean(room.settings?.solo);
 
     $('stempelWrap').innerHTML = (room.lastReveal && ['reveal', 'finished'].includes(room.phase))
       ? stempelHtml(room.lastReveal, room) : '';
