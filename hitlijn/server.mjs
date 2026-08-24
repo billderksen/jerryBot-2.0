@@ -183,9 +183,16 @@ async function startRonde(code) {
     const nonce = k.room.round.nonce;
     broadcastState(code);
     const set = clients.get(code) ?? new Set();
+    // Eerlijke rondes: Spotify alleen wanneer álle spelers (niet: toeschouwers) het
+    // kunnen — anders hoort de een het hele nummer en de ander een 30s-fragment.
+    // Bij een gemengde kamer krijgt iedereen dezelfde preview.
+    const spelerSockets = [...set].filter((c) => c.readyState === 1 && k.room.players.has(c.playerId));
+    const iedereenSpotify = spelerSockets.length > 0 && spelerSockets.every((c) => (c.audioMode ?? 'preview') === 'spotify');
+    k.spotifyRondeToegestaan = iedereenSpotify;
     for (const c of set) {
       if (c.readyState !== 1) continue;
-      const bron = audioSourceFor({ mode: c.audioMode ?? 'preview', spotifyOk: Boolean(song.spotifyId), previewUrl: song.previewUrl });
+      const modus = iedereenSpotify ? (c.audioMode ?? 'preview') : 'preview';
+      const bron = audioSourceFor({ mode: modus, spotifyOk: Boolean(song.spotifyId), previewUrl: song.previewUrl });
       const payload = { type: 'hl:round', nonce, previewUrl: song.previewUrl ?? null };
       if (bron === 'spotify') payload.spotifyId = song.spotifyId;
       c.send(JSON.stringify(payload));
@@ -309,7 +316,7 @@ function afhandelen(ws, data) {
       if (!rateLimit(ws.ip, 'create', 5, 60_000)) return fout(ws, 'Rustig aan — probeer het zo weer');
       const code = makeRoomCode(new Set(rooms.keys()));
       const room = new PlaatjeRoom(code, { id: ws.playerId, displayName: ws.naam, avatar: null }, { cardsToWin: data.cardsToWin, solo: data.solo === true });
-      rooms.set(code, { room, poolId: null, usedIds: new Set(), born: Date.now(), spotifyIdVoorRonde: null, previewVoorRonde: null, coverVoorRonde: null });
+      rooms.set(code, { room, poolId: null, usedIds: new Set(), born: Date.now(), spotifyIdVoorRonde: null, previewVoorRonde: null, coverVoorRonde: null, spotifyRondeToegestaan: false });
       ws.roomCode = code;
       if (!clients.has(code)) clients.set(code, new Set());
       clients.get(code).add(ws);
@@ -340,7 +347,8 @@ function afhandelen(ws, data) {
       // ws.audioMode staat hier al vast — de client stuurt hl:audio:mode vlak na hl:hello, vóór
       // hl:room:join (zie bootstrap() in public/index.html), dus dat bericht is al verwerkt.
       if ((k.room.phase === 'listening' || k.room.phase === 'challenge') && k.room.round) {
-        const bron = audioSourceFor({ mode: ws.audioMode ?? 'preview', spotifyOk: Boolean(k.spotifyIdVoorRonde), previewUrl: k.previewVoorRonde });
+        const modus = k.spotifyRondeToegestaan ? (ws.audioMode ?? 'preview') : 'preview';
+        const bron = audioSourceFor({ mode: modus, spotifyOk: Boolean(k.spotifyIdVoorRonde), previewUrl: k.previewVoorRonde });
         const payload = { type: 'hl:round', nonce: k.room.round.nonce, previewUrl: k.previewVoorRonde ?? null };
         if (bron === 'spotify') payload.spotifyId = k.spotifyIdVoorRonde;
         ws.send(JSON.stringify(payload));
