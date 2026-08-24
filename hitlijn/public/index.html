@@ -261,6 +261,15 @@
     background:radial-gradient(circle at 35% 30%, var(--hotpink), #a00f52);
     display:flex; align-items:center; justify-content:center; font-family:'Anton'; font-size:1.4rem; color:#ffd; }
   .stage-mobiel .eq { height:22px; } .stage-mobiel .eq i { width:5px; }
+  /* onthulde albumhoes op de plek van de plaat, tot de volgende ronde start */
+  .album-hoes { display:flex; flex-direction:column; align-items:center; gap:12px; animation:hoesIn .5s ease-out; }
+  .album-hoes img { width:min(232px, 56vw); height:min(232px, 56vw); object-fit:cover; border-radius:14px;
+    box-shadow:0 16px 40px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.12); }
+  .album-tekst { text-align:center; line-height:1.45; max-width:82vw; }
+  .album-tekst b { font-size:.95rem; }
+  .album-tekst span { font-size:.74rem; color:#d9b; }
+  @keyframes hoesIn { 0% { transform:rotateY(88deg) scale(.9); opacity:0; } 100% { transform:none; opacity:1; } }
+  @media (prefers-reduced-motion: reduce) { .album-hoes { animation:none; } }
   /* blijvend afspeel-vangnet bovenop de plaat: autoplay geweigerd → dit is dé knop */
   .speel-overlay { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:5;
     width:112px; height:112px; border-radius:50%; border:3px solid var(--stagelight); cursor:pointer;
@@ -470,7 +479,11 @@
   <div class="uitklap" id="chipUitklap" hidden></div>
 
   <div class="stage-mobiel">
-    <div class="grote-plaat"></div>
+    <div class="grote-plaat" id="grotePlaat"></div>
+    <div class="album-hoes" id="albumHoes" hidden>
+      <img id="albumHoesImg" alt="albumhoes">
+      <div class="album-tekst" id="albumTekst"></div>
+    </div>
     <button type="button" class="speel-overlay" id="btnSpeelOverlay" hidden><svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><small>tik om de plaat te starten</small></button>
     <div class="eq"><i></i><i></i><i></i><i></i></div>
     <button class="replay" id="btnReplay" hidden><svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true" style="vertical-align:-0.12em"><path d="M8 5v14l11-7z"/></svg> opnieuw afspelen</button>
@@ -691,6 +704,7 @@
         break;
       case 'hl:reveal':
         stopRondeAudio(); // Taak 5
+        toonAlbumHoes(data);
         break;
       case 'hl:game:over':
         renderState(data.room);
@@ -1081,7 +1095,23 @@
   }
 
   // ── audio: Spotify (indien verbonden) met terugval op preview ──────────────
+  function toonAlbumHoes(reveal) {
+    try {
+      if (!reveal?.cover) return; // geen hoes bekend — de plaat blijft gewoon staan
+      $('albumHoesImg').src = reveal.cover;
+      $('albumTekst').innerHTML = `<b>${esc(schoonTitel(reveal.title))}</b><br><span>${esc(reveal.artist)} · ${reveal.year}</span>`;
+      $('albumHoes').hidden = false;
+      $('grotePlaat').hidden = true;
+      const eq = document.querySelector('.stage-mobiel .eq'); if (eq) eq.hidden = true;
+    } catch { /* decoratie mag het spel nooit breken */ }
+  }
+  function verbergAlbumHoes() {
+    $('albumHoes').hidden = true;
+    $('grotePlaat').hidden = false;
+    const eq = document.querySelector('.stage-mobiel .eq'); if (eq) eq.hidden = false;
+  }
   function startRondeAudio(payload) {
+    verbergAlbumHoes(); // volgende plaat draait — hoes weg, plaat terug
     const token = ++audioToken;
     const knop = $('btnReplay');
     if (knop) knop.hidden = true;
@@ -1324,6 +1354,7 @@
     localStorage.removeItem('hitlijnKamer');
     currentRoom = null;
     gekozenSlot = null; shoutArmed = false; daagSlot = null;
+    verbergAlbumHoes();
     removeWinOverlay();
     showEntry();
   }

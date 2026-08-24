@@ -96,6 +96,7 @@ function probeerAutoSkip(code, playerId) {
   k.room.round = null;
   k.spotifyIdVoorRonde = null;
   k.previewVoorRonde = null;
+  k.coverVoorRonde = null;
   k.room.nextTurn();
   // reden weglaten: de eerdere melding (verlaten / verbinding verloren) zei al waarom
   broadcast(code, 'hl:notice', { message: `Beurt van ${naam} overgeslagen` });
@@ -140,14 +141,20 @@ setInterval(() => {
 // Deezer-preview-URL's zijn gesigneerd en verlopen; pools.json bewaart daarom het
 // deezerId en de server haalt per ronde een verse preview-link op (met de
 // opgeslagen build-time-URL als fallback bij een API-hapering).
-async function versePreview(song) {
-  if (!song.deezerId) return song.previewUrl ?? null;
+async function verseTrackInfo(song) {
+  const terugval = { previewUrl: song.previewUrl ?? null, cover: null };
+  if (!song.deezerId) return terugval;
   try {
     const res = await fetch(`https://api.deezer.com/track/${song.deezerId}`, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return song.previewUrl ?? null;
+    if (!res.ok) return terugval;
     const data = await res.json();
-    return data.preview || song.previewUrl || null;
-  } catch { return song.previewUrl ?? null; }
+    return {
+      previewUrl: data.preview || song.previewUrl || null,
+      // albumhoes lift mee op dezelfde fetch — maar gaat pas bij de reveal naar de
+      // spelers (geheimhouding: de hoes verraadt het nummer)
+      cover: data.album?.cover_big ?? data.album?.cover_medium ?? null,
+    };
+  } catch { return terugval; }
 }
 
 async function startRonde(code) {
@@ -164,7 +171,7 @@ async function startRonde(code) {
       broadcastState(code);
       return;
     }
-    const previewUrl = await versePreview(song);
+    const { previewUrl, cover } = await verseTrackInfo(song);
     const kNa = rooms.get(code);
     if (kNa !== k || k.room.phase !== 'loading') return; // kamer weg of ingehaald tijdens await
     song.previewUrl = previewUrl;
@@ -172,6 +179,7 @@ async function startRonde(code) {
     k.room.beginRound({ title: song.title, artist: song.artist, year: song.year, youtubeId: song.id.slice(0, 11).padEnd(11, 'x') }, 0);
     k.spotifyIdVoorRonde = song.spotifyId ?? null;
     k.previewVoorRonde = previewUrl;
+    k.coverVoorRonde = cover;
     const nonce = k.room.round.nonce;
     broadcastState(code);
     const set = clients.get(code) ?? new Set();
@@ -202,9 +210,10 @@ function doeReveal(code) {
   const k = rooms.get(code); if (!k) return;
   const reveal = k.room.resolveReveal();
   if (!reveal) return;
-  broadcast(code, 'hl:reveal', reveal);
+  broadcast(code, 'hl:reveal', { ...reveal, cover: k.coverVoorRonde ?? null });
   k.spotifyIdVoorRonde = null;
   k.previewVoorRonde = null;
+  k.coverVoorRonde = null;
   broadcastState(code);
   if (k.room.phase === 'finished') {
     broadcast(code, 'hl:game:over', { winnerId: k.room.winnerId, room: k.room.publicState() });
@@ -300,7 +309,7 @@ function afhandelen(ws, data) {
       if (!rateLimit(ws.ip, 'create', 5, 60_000)) return fout(ws, 'Rustig aan — probeer het zo weer');
       const code = makeRoomCode(new Set(rooms.keys()));
       const room = new PlaatjeRoom(code, { id: ws.playerId, displayName: ws.naam, avatar: null }, { cardsToWin: data.cardsToWin, solo: data.solo === true });
-      rooms.set(code, { room, poolId: null, usedIds: new Set(), born: Date.now(), spotifyIdVoorRonde: null, previewVoorRonde: null });
+      rooms.set(code, { room, poolId: null, usedIds: new Set(), born: Date.now(), spotifyIdVoorRonde: null, previewVoorRonde: null, coverVoorRonde: null });
       ws.roomCode = code;
       if (!clients.has(code)) clients.set(code, new Set());
       clients.get(code).add(ws);
@@ -425,6 +434,7 @@ function afhandelen(ws, data) {
       k.room.round = null;
       k.spotifyIdVoorRonde = null;
       k.previewVoorRonde = null;
+      k.coverVoorRonde = null;
       k.room.nextTurn();
       broadcastState(ws.roomCode);
       startRonde(ws.roomCode);
