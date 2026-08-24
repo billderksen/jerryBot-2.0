@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SHOUT, makeRoomCode, validateName, dedupeSongs, themeFor, pickSong, audioSourceFor,
-  beoordeelDeezerHit, beoordeelSpotifyHit, moetOpnieuwZoeken, magBeurtOverslaan,
+  beoordeelDeezerHit, beoordeelSpotifyHit, moetOpnieuwZoeken, magBeurtOverslaan, wachterMoetIngrijpen,
 } from '../hitlijn/game.mjs';
 
 test('SHOUT is de hernoembare roep-constante', () => {
@@ -95,4 +95,23 @@ test('magBeurtOverslaan: alleen in luisterfase, bij een weggevallen actieve spel
   assert.equal(magBeurtOverslaan(maak({ phase: 'challenge' }), 'u1'), false);      // fase loopt op timers door
   assert.equal(magBeurtOverslaan(maak({ phase: 'reveal' }), 'u1'), false);
   assert.equal(magBeurtOverslaan(maak(), 'onbekend'), false);                      // geen speler
+});
+
+test('wachterMoetIngrijpen: alleen bij luisterfase + weggevallen actieve speler + publiek', () => {
+  const maak = (over = {}) => ({
+    players: new Map([
+      ['u1', { id: 'u1', connected: false, ...(over.u1 ?? {}) }],
+      ['u2', { id: 'u2', connected: true, ...(over.u2 ?? {}) }],
+    ]),
+    spectators: new Set(over.spectators ?? []),
+    activeUserId: over.activeUserId ?? 'u1',
+    phase: over.phase ?? 'listening',
+  });
+  assert.equal(wachterMoetIngrijpen(maak()), true);                                   // u2 wacht op u1
+  assert.equal(wachterMoetIngrijpen(maak({ u1: { connected: true } })), false);       // actief is er gewoon
+  assert.equal(wachterMoetIngrijpen(maak({ phase: 'challenge' })), false);            // fase loopt op timers door
+  assert.equal(wachterMoetIngrijpen(maak({ phase: 'reveal' })), false);
+  assert.equal(wachterMoetIngrijpen(maak({ u2: { connected: false } })), false);      // niemand kijkt: empty-timer ruimt op
+  assert.equal(wachterMoetIngrijpen(maak({ u2: { connected: false }, spectators: ['s1'] })), true); // toeschouwer telt als publiek
+  assert.equal(wachterMoetIngrijpen(maak({ activeUserId: 'geen' })), false);          // geen actieve speler
 });

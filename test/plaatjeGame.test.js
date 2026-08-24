@@ -285,3 +285,16 @@ test('room: host migreert mid-game naar een verbonden speler, niet in de lobby',
   assert.equal(room.hostId, 'u2'); // terugkeer geeft het hostschap niet automatisch terug
   deletePlaatjeRoom('r1');
 });
+
+test('room: solo-potje start met 1 speler, normaal blijft 2 vereisen', () => {
+  const solo = createPlaatjeRoom('r1', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 5, solo: true });
+  const kaart = { title: 'A', artist: 'AA', year: 1990, youtubeId: 'aaaaaaaaaaa' };
+  assert.equal(solo.publicState().settings.solo, true);
+  assert.equal(solo.start(() => kaart).ok, true); // 1 speler is genoeg
+  deletePlaatjeRoom('r1');
+
+  const normaal = createPlaatjeRoom('r1', { id: 'u1', displayName: 'Ben', avatar: null }, { cardsToWin: 5 });
+  assert.equal(normaal.publicState().settings.solo, false);
+  assert.equal(normaal.start(() => kaart).ok, false); // zonder tweede speler niet
+  deletePlaatjeRoom('r1');
+});

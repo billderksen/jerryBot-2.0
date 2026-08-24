@@ -99,3 +99,12 @@ export function magBeurtOverslaan(room, playerId) {
     && room.activeUserId === playerId
     && room.phase === 'listening';
 }
+
+// Wachter-beslissing: loopt er een luisterronde voor een speler die weg is, terwijl er
+// nog wél publiek wacht? Vangt de paden waar geen disconnect-event de skip-timer zette
+// (bv. collectieve wifi-dip waarna één speler terugkeert — de ronde was toen al gestart).
+export function wachterMoetIngrijpen(room) {
+  const actief = room.players.get(room.activeUserId);
+  if (!actief || actief.connected || room.phase !== 'listening') return false;
+  return [...room.players.values()].some((p) => p.connected) || room.spectators.size > 0;
+}

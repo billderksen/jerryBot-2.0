@@ -99,6 +99,10 @@
   .knop-spotify { width:100%; background:#1db954; color:#fff; border:none; border-radius:999px; padding:13px;
     font-weight:700; font-size:.9rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px; }
   .spotify-uitleg { font-size:.68rem; color:#987; line-height:1.5; text-align:center; }
+  .knop-solo { width:100%; margin-top:14px; background:rgba(0,0,0,.3); border:1.5px dashed rgba(34,224,192,.45);
+    color:#bdf0e6; border-radius:12px; padding:12px; font-family:'Anton'; letter-spacing:1.5px;
+    font-size:.95rem; cursor:pointer; }
+  .knop-solo small { display:block; font-family:'Bricolage Grotesque'; font-size:.6rem; letter-spacing:1px; opacity:.8; margin-top:2px; }
   .instap-voet { margin-top:auto; font-size:.62rem; color:#765; text-align:center; line-height:1.5; }
   .vinyl-deco { position:absolute; right:-95px; top:44px; width:190px; height:190px; border-radius:50%; opacity:.3;
     background:repeating-radial-gradient(circle, #0d0d0d 0 2px, #221 2px 4.5px); z-index:1; }
@@ -354,6 +358,7 @@
         Zonder Spotify speel je gewoon mee met 30-seconden-previews — niets nodig.</div>
       <div class="spotify-uitleg" id="spotifyVerbonden" hidden>✔ Verbonden met Spotify — je hoort straks volledige nummers</div>
     </div>
+    <button class="knop-solo" id="btnSolo" hidden>🎧 SOLO SPELEN<small>oefen je tijdlijn in je eentje — geen kamercode nodig</small></button>
     <div class="instap-voet">Geen account nodig · we bewaren niets over jou<br>huisregel: niet op je Spotify-app spieken 😉</div>
   </div>
 
@@ -639,6 +644,15 @@
     cards = Math.min(15, Math.max(5, Math.round(cards)));
     stuur('hl:room:create', { cardsToWin: cards });
   });
+  $('btnSolo').addEventListener('click', () => {
+    const v = naamOfFout(); if (!v) return;
+    naam = v; localStorage.setItem('hitlijnNaam', naam);
+    bootstrap();
+    let cards = Number($('veldCards').value);
+    if (!Number.isFinite(cards)) cards = 10;
+    cards = Math.min(15, Math.max(5, Math.round(cards)));
+    stuur('hl:room:create', { cardsToWin: cards, solo: true });
+  });
   $('btnJoin').addEventListener('click', () => {
     const v = naamOfFout(); if (!v) return;
     const code = $('veldCode').value.trim().toUpperCase();
@@ -666,8 +680,10 @@
       $('lobbyPools').innerHTML = pools.length
         ? `<select class="veld" id="poolSelect">${pools.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} (${p.count})</option>`).join('')}</select>`
         : '<div class="spotify-uitleg">Nog geen songpools beschikbaar.</div>';
-      const magStarten = room.players.length >= 2 && pools.length > 0;
-      $('lobbyActie').innerHTML = `<button class="knop-groot knop-maak" id="btnStart" ${magStarten ? '' : 'disabled style="opacity:.5"'}>START!<small>${room.players.length} speler(s)</small></button>`;
+      const solo = room.settings?.solo;
+      const magStarten = (solo || room.players.length >= 2) && pools.length > 0;
+      $('lobbyDeelChip').hidden = Boolean(solo);
+      $('lobbyActie').innerHTML = `<button class="knop-groot knop-maak" id="btnStart" ${magStarten ? '' : 'disabled style="opacity:.5"'}>START!<small>${solo ? 'solo-potje' : `${room.players.length} speler(s)`}</small></button>`;
       $('btnStart')?.addEventListener('click', () => {
         const poolId = $('poolSelect')?.value;
         if (poolId) stuur('hl:game:start', { poolId });
@@ -813,6 +829,10 @@
     const ik = me ? room.players.find((p) => p.id === me.id) : null;
     const isMijnBeurt = Boolean(ik) && room.activeUserId === me.id;
 
+    const solo = Boolean(room.settings?.solo);
+    $('topbarDeelChip').hidden = solo;
+    $('bandKop').hidden = solo;
+    $('bandLijn').hidden = solo; // jouw tijdlijn staat al onderin — geen dubbele band in solo
     $('kamercodeLabel').innerHTML = `<span class="kamercode-eyebrow-inline">kamer</span> ${esc(room.roomId)}`;
     bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => '✔');
     bindTikKopieer($('topbarDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '', () => '✔');
@@ -1399,6 +1419,7 @@
   async function initConfig() {
     try {
       const cfg = await fetch('/api/config').then((r) => r.json());
+      if (cfg.soloBeschikbaar) $('btnSolo').hidden = false;
       if (cfg.shout) SHOUT = cfg.shout;
       spotifyClientId = cfg.spotifyClientId || null;
     } catch { /* preview-only blijft werken zonder config */ }

@@ -63,6 +63,7 @@ export class PlaatjeRoom {
       cardsToWin: clampCardsToWin(settings.cardsToWin),
       poolIds: Array.isArray(settings.poolIds) && settings.poolIds.length ? settings.poolIds : ['base'],
       audioMode: settings.audioMode === 'vc' ? 'vc' : 'browser',
+      solo: settings.solo === true, // 1-speler-oefenpotje: start zonder tweede speler
     };
     this.phase = 'lobby';
     this.players = new Map(); // userId -> speler; insertion order = beurtvolgorde
@@ -132,7 +133,8 @@ export class PlaatjeRoom {
   }
 
   start(dealCard) {
-    if (this.phase !== 'lobby' || this.players.size < 2) return { ok: false };
+    const minSpelers = this.settings.solo ? 1 : 2;
+    if (this.phase !== 'lobby' || this.players.size < minSpelers) return { ok: false };
     for (const p of this.players.values()) {
       const card = dealCard();
       this.usedSongIds.add(card.youtubeId);
