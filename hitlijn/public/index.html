@@ -1519,7 +1519,14 @@
       if (!kaart) return;
       gekozenPoolId = kaart.dataset.pool;
       syncPoolKeuze(); // alleen class-toggles — de kaarten animeren, niets wordt herbouwd
-      kaart.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      // NIET scrollIntoView: die scrolt ook voorouders met verborgen overloop (de hele
+      // pagina schoof naar links en bleef zo staan) — alleen de kaartenrij zelf scrollen
+      const rij = kaart.closest('.pool-rij');
+      if (rij) {
+        const rijRect = rij.getBoundingClientRect();
+        const kaartRect = kaart.getBoundingClientRect();
+        rij.scrollTo({ left: rij.scrollLeft + (kaartRect.left + kaartRect.width / 2) - (rijRect.left + rijRect.width / 2), behavior: 'smooth' });
+      }
     });
     $('lobbyActie').addEventListener('click', (ev) => {
       const start = ev.target.closest('#btnStart');
