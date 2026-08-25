@@ -25,14 +25,18 @@ function laadBronnen() {
   // Op de RUWE Guilty-Pleasures-lijst bijhouden, niet na dedupeSongs: een GP-song die ook in
   // het Original-deck zit verliest van dedupe (dat wint eerst), maar hoort toch in feest-fout.
   const gpKeys = new Set();
+  const spKeys = new Set();   // Summer Party — eigen pool 'Zomerparty'
+  const origKeys = new Set(); // basisspel-deck — eigen pool 'Origineel'
   const uitDecks = decks.flatMap((naam) => {
     const pad = join(__dirname, 'decks', `${naam}.json`);
     if (!existsSync(pad)) { console.log(`(deck ontbreekt: ${naam})`); return []; }
     const songs = JSON.parse(readFileSync(pad, 'utf8')).songs.map((s) => ({ ...s, bron: naam }));
     if (naam === 'hitster-guilty-pleasures-nl') songs.forEach((s) => gpKeys.add(songKey(s)));
+    if (naam === 'hitster-summer-party-nl') songs.forEach((s) => spKeys.add(songKey(s)));
+    if (naam === 'hitster-original-nl') songs.forEach((s) => origKeys.add(songKey(s)));
     return songs;
   });
-  return { songs: dedupeSongs([...uitDecks, ...basis]), gpKeys }; // decks eerst: hun (kaart)jaar wint bij dubbelen
+  return { songs: dedupeSongs([...uitDecks, ...basis]), gpKeys, spKeys, origKeys }; // decks eerst: hun (kaart)jaar wint bij dubbelen
 }
 
 async function spotifyToken() {
@@ -87,7 +91,7 @@ async function zoekSpotify(song, token) {
   }
 }
 
-const { songs, gpKeys } = laadBronnen();
+const { songs, gpKeys, spKeys, origKeys } = laadBronnen();
 console.log(`${songs.length} unieke songs uit alle bronnen`);
 const state = existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : {};
 // instelbaar tempo: de Spotify-app deelt zijn quotum met de muziekspeler van de bot —
@@ -135,6 +139,8 @@ const pools = [
   { id: 'tijdperk-80-90', name: '80s & 90s', songs: [] },
   { id: 'tijdperk-00-nu', name: '00s & nu', songs: [] },
   { id: 'feest-fout', name: 'Feest & Fout', songs: [] },
+  { id: 'zomerparty', name: 'Zomerparty', songs: [] },
+  { id: 'origineel', name: 'Origineel', songs: [] },
 ];
 for (const s of bruikbaar) {
   const kaal = {
@@ -143,6 +149,8 @@ for (const s of bruikbaar) {
   };
   pools.find((p) => p.id === themeFor(s)).songs.push(kaal);
   if (gpKeys.has(s.id)) pools.find((p) => p.id === 'feest-fout').songs.push(kaal);
+  if (spKeys.has(s.id)) pools.find((p) => p.id === 'zomerparty').songs.push(kaal);
+  if (origKeys.has(s.id)) pools.find((p) => p.id === 'origineel').songs.push(kaal);
 }
 mkdirSync(dirname(OUT_FILE), { recursive: true });
 writeFileSync(OUT_FILE + '.tmp', JSON.stringify({ pools }, null, 1));
