@@ -382,6 +382,9 @@
   .verlaat-knop.zeker { width:auto; padding:0 10px; background:#a3122c; border-color:#ff5560;
     color:#fff; font-size:.68rem; font-weight:700; }
   .verlaat-knop-lobby { width:auto; height:auto; padding:6px 10px; font-size:.72rem; margin-top:4px; }
+  .geluid-knop { margin-left:auto; }
+  .geluid-knop.stil { opacity:.5; }
+  .audio-ind { margin-left:0; }
   .verlaat-knop-lobby.zeker { text-decoration:none; }
 
   /* jij aan zet: mysteriekaart + gok */
@@ -509,6 +512,7 @@
     <div class="wordmark">HIT<span>LIJN</span></div>
     <span class="kamercode" id="kamercodeLabel" role="button" tabindex="0"></span>
     <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.12em"><path d="M10 14a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07l-1.42 1.41"/><path d="M14 10a5 5 0 0 0-7.07 0l-2.12 2.12a5 5 0 1 0 7.07 7.07l1.42-1.41"/></svg></button>
+    <button type="button" class="verlaat-knop geluid-knop" id="btnGeluid" title="Geluidseffecten aan/uit"></button>
     <span class="audio-ind" id="audioInd"><span class="dot-pv"></span> preview</span>
   </div>
 
@@ -750,9 +754,11 @@
         break;
       case 'hl:reveal':
         // muziek loopt bewust door de onthulling heen — pas de volgende ronde neemt het over
+        speelGeluid(data.activeCorrect ? 'goed' : 'fout');
         toonAlbumHoes(data);
         break;
       case 'hl:game:over':
+        speelGeluid('fanfare');
         stopRondeAudio();
         renderState(data.room);
         break;
@@ -1041,6 +1047,7 @@
   let ficheStand = null; // { roomId, tokens }
   function toonFicheZweef(delta) {
     try {
+      speelGeluid(delta > 0 ? 'munt' : 'plop');
       const el = document.createElement('div');
       el.className = 'fiche-zweef ' + (delta > 0 ? 'plus' : 'min');
       el.innerHTML = `<span>${delta > 0 ? '+' : '−'}${Math.abs(delta)}</span><span class="chip"></span>`;
@@ -1122,6 +1129,81 @@
 
   const beperkteBeweging = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // ── geluidseffecten ───────────────────────────────────────────────────────
+  // Gesynthetiseerd via Web Audio (geen downloads, geen rechten). Bewust als losse
+  // laag met benoemde momenten: wil de eigenaar later echte (rechtenvrije) samples,
+  // dan is één regel per geluid genoeg — GELUID_BESTANDEN.goed = '/geluiden/goed.mp3'
+  // — en wint het bestand automatisch van de synthese.
+  let geluidAan = localStorage.getItem('hlGeluidAan') !== '0';
+  let sfxCtx = null;
+  let sfxGain = null;
+  const GELUID_BESTANDEN = {}; // naam -> url; leeg = alles synthese
+  const sfxBuffers = {};
+  function sfxContext() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!sfxCtx) {
+      sfxCtx = new AC();
+      sfxGain = sfxCtx.createGain();
+      sfxGain.gain.value = 0.22; // ruim onder de muziek — tikjes, geen alarmen
+      sfxGain.connect(sfxCtx.destination);
+    }
+    if (sfxCtx.state === 'suspended') sfxCtx.resume().catch(() => {});
+    return sfxCtx;
+  }
+  function sfxToon(ctx, { freq = 440, tijd = 0, duur = 0.08, type = 'sine', van = null, naar = null, volume = 1 }) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const t0 = ctx.currentTime + tijd;
+    osc.type = type;
+    osc.frequency.setValueAtTime(van ?? freq, t0);
+    if (naar) osc.frequency.exponentialRampToValueAtTime(naar, t0 + duur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(volume, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + duur);
+    osc.connect(g);
+    g.connect(sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + duur + 0.02);
+  }
+  const SFX_SYNTH = {
+    tik: (c) => sfxToon(c, { van: 620, naar: 420, duur: 0.07, type: 'triangle', volume: 0.7 }),
+    pak: (c) => sfxToon(c, { van: 380, naar: 560, duur: 0.09, type: 'triangle', volume: 0.7 }),
+    thunk: (c) => sfxToon(c, { van: 300, naar: 180, duur: 0.1 }),
+    bevestig: (c) => { sfxToon(c, { freq: 520, duur: 0.07, type: 'triangle' }); sfxToon(c, { freq: 700, tijd: 0.07, duur: 0.09, type: 'triangle' }); },
+    goed: (c) => { [523, 659, 784].forEach((f, i) => sfxToon(c, { freq: f, tijd: i * 0.09, duur: 0.16, type: 'triangle' })); },
+    fout: (c) => { sfxToon(c, { van: 260, naar: 240, duur: 0.18, type: 'sawtooth', volume: 0.45 }); sfxToon(c, { van: 220, naar: 185, tijd: 0.18, duur: 0.3, type: 'sawtooth', volume: 0.45 }); },
+    munt: (c) => { sfxToon(c, { freq: 988, duur: 0.07, type: 'square', volume: 0.35 }); sfxToon(c, { freq: 1319, tijd: 0.07, duur: 0.18, type: 'square', volume: 0.35 }); },
+    plop: (c) => sfxToon(c, { van: 240, naar: 140, duur: 0.12 }),
+    fanfare: (c) => { [523, 659, 784, 1047].forEach((f, i) => sfxToon(c, { freq: f, tijd: i * 0.11, duur: i === 3 ? 0.4 : 0.14, type: 'triangle' })); },
+  };
+  async function speelGeluid(naam) {
+    try {
+      if (!geluidAan) return;
+      const ctx = sfxContext();
+      if (!ctx) return;
+      const url = GELUID_BESTANDEN[naam];
+      if (url) {
+        if (!sfxBuffers[naam]) {
+          const raw = await fetch(url).then((r) => r.arrayBuffer());
+          sfxBuffers[naam] = await ctx.decodeAudioData(raw);
+        }
+        const bron = ctx.createBufferSource();
+        bron.buffer = sfxBuffers[naam];
+        bron.connect(sfxGain);
+        bron.start();
+        return;
+      }
+      SFX_SYNTH[naam]?.(ctx);
+    } catch { /* geluid mag het spel nooit raken */ }
+  }
+  const SFX_LUID = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></svg>';
+  const SFX_STIL = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M16 9l5 6M21 9l-5 6"/></svg>';
+  function syncGeluidKnop() {
+    const k = $('btnGeluid');
+    if (k) { k.innerHTML = geluidAan ? SFX_LUID : SFX_STIL; k.classList.toggle('stil', !geluidAan); }
+  }
+
   // iOS staat audio.play() alleen toe vanuit een tikgebaar. De rondeclip arriveert
   // pas ná de tik (via de WebSocket), dus we ontgrendelen het element alvast mét een
   // onhoorbaar stil fragment binnen het gebaar zelf — daarna mag elke ronde autoplayen.
@@ -1142,6 +1224,7 @@
     // Spotify's webspeler moet op mobiel vanuit een tikgebaar geactiveerd worden,
     // anders 'speelt' hij geluidloos (Spotify toont afspelen, je hoort niets)
     try { spotifyPlayer?.activateElement?.(); } catch { /* best effort */ }
+    sfxContext(); // effect-context meeliften op hetzelfde gebaar
     if (audioOntgrendeld) return;
     const audio = $('rondeAudio');
     audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
@@ -1338,6 +1421,7 @@
   // ── plaatsing op de eigen tijdlijn: tik of sleep → schim → groene knop ────
   function tikMijnVak(slot, room, isMijnBeurt) {
     if (!isMijnBeurt || room.phase !== 'listening' || room.round?.placedSlot != null) return;
+    speelGeluid('thunk');
     gekozenSlot = slot;
     renderState(currentRoom);
   }
@@ -1351,6 +1435,7 @@
     if (!magSlepen() || sleepSessie) return;
     ev.preventDefault();
     if (ev.target.closest('#mijnSpook')) { gekozenSlot = null; renderState(currentRoom); }
+    speelGeluid('pak');
     const kloon = document.createElement('div');
     kloon.id = 'sleepKloon';
     kloon.innerHTML = '<div class="mysterie-kaart"><span class="speelt">SPEELT NU</span></div>';
@@ -1403,7 +1488,7 @@
     sleepSessie.kloon.remove();
     const bewogen = sleepSessie.bewogen;
     sleepSessie = null;
-    if (doel) { gekozenSlot = Number(doel.dataset.mijnSlot); renderState(currentRoom); }
+    if (doel) { speelGeluid('thunk'); gekozenSlot = Number(doel.dataset.mijnSlot); renderState(currentRoom); }
     else if (bewogen) renderState(currentRoom); // kaart terug naar de duimzone
   }
 
@@ -1442,6 +1527,7 @@
   // Eén keer gebonden, op stabiele containers: overleeft elke re-render. De tweede tik
   // binnen 2.5s bevestigt het verlaten (mis-tik-bescherming).
   function wapenVerlaatKnop(knop) {
+    speelGeluid('tik');
     if (knop.dataset.zeker) { verlaatKamer(); return; }
     knop.dataset.zeker = '1';
     knop.classList.add('zeker');
@@ -1465,10 +1551,18 @@
       const kaart = ev.target.closest('#mysterieKaart');
       if (kaart && !kaart.classList.contains('weg')) startSleep(ev);
     });
+    $('btnGeluid').addEventListener('click', () => {
+      geluidAan = !geluidAan;
+      localStorage.setItem('hlGeluidAan', geluidAan ? '1' : '0');
+      syncGeluidKnop();
+      speelGeluid('tik'); // hoorbaar bij aanzetten, stil bij uit — precies goed
+    });
     $('duimzone').addEventListener('click', (ev) => {
       ontgrendelAudio(); // elke tik is een gebaar — herstelt een gemiste ontgrendeling vanzelf
       const knop = ev.target.closest('button');
       if (!knop || knop.disabled) return;
+      if (knop.id === 'btnLeg' || knop.id === 'btnDaag') speelGeluid('bevestig');
+      else speelGeluid('tik');
       switch (knop.id) {
         case 'btnLeg':
           if (gekozenSlot == null) return;
@@ -1507,6 +1601,7 @@
     $('bandLijn').addEventListener('click', (ev) => {
       const vak = ev.target.closest('[data-band-slot]');
       if (!vak || !shoutArmed) return;
+      speelGeluid('thunk');
       daagSlot = Number(vak.dataset.bandSlot); // schim daar, groene knop bevestigt
       renderState(currentRoom);
     });
@@ -1517,6 +1612,7 @@
     $('lobbyPools').addEventListener('click', (ev) => {
       const kaart = ev.target.closest('[data-pool]');
       if (!kaart) return;
+      speelGeluid('tik');
       gekozenPoolId = kaart.dataset.pool;
       syncPoolKeuze(); // alleen class-toggles — de kaarten animeren, niets wordt herbouwd
       // NIET scrollIntoView: die scrolt ook voorouders met verborgen overloop (de hele
@@ -1531,7 +1627,7 @@
     $('lobbyActie').addEventListener('click', (ev) => {
       const start = ev.target.closest('#btnStart');
       if (!start || start.disabled) return;
-      if (gekozenPoolId) { ontgrendelAudio(); stuur('hl:game:start', { poolId: gekozenPoolId }); }
+      if (gekozenPoolId) { ontgrendelAudio(); speelGeluid('bevestig'); stuur('hl:game:start', { poolId: gekozenPoolId }); }
     });
   }
 
@@ -1875,6 +1971,7 @@
   }
   laadSpotifyTokens();
   bindVasteInteractie();
+  syncGeluidKnop();
   (async () => {
     await initConfig();               // spotifyClientId + SHOUT
     await verwerkSpotifyCallback();   // ruilt ?code in als we net van Spotify terugkomen
