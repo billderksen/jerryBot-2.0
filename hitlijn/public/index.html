@@ -159,6 +159,9 @@
     .pool-kaart, .pool-kaart.gekozen::before { animation:none; }
     .pool-kaart.gekozen .pool-plaat::after { animation:none; }
   }
+  .lobby-qr-blok { display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .lobby-qr-blok small { font-size:.58rem; color:#a89; letter-spacing:1px; }
+  .lobby-qr { width:128px; height:128px; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.45); }
   .lobby-lijst { display:flex; flex-direction:column; gap:8px; width:100%; }
   .lobby-rij { display:flex; align-items:center; gap:10px; width:100%; padding:9px 12px; border-radius:10px;
     background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08); font-size:.82rem; }
@@ -439,6 +442,25 @@
   .win-sub { color:#d9c; font-size:.78rem; line-height:1.7; max-width:300px; animation:fadein .5s .3s both; position:relative; z-index:2; }
   .win-kaart { animation:wip .5s cubic-bezier(.2,1.6,.35,1) .25s both; position:relative; z-index:2; }
   .win-overlay .knop-groot { max-width:260px; position:relative; z-index:2; }
+  /* winst-podium: 2 | 1 | 3, zuilen rijzen gestaffeld op */
+  .podium-rij { display:flex; align-items:flex-end; gap:12px; position:relative; z-index:2; margin:6px 0 4px; }
+  .podium-blok { display:flex; flex-direction:column; align-items:center; gap:6px; animation:podiumOp .55s cubic-bezier(.2,.8,.3,1.2) backwards; }
+  .podium-blok.p1 { animation-delay:.35s; }
+  .podium-blok.p2 { animation-delay:.15s; }
+  .podium-blok.p3 { animation-delay:.5s; }
+  @keyframes podiumOp { 0% { opacity:0; transform:translateY(34px); } 100% { opacity:1; transform:none; } }
+  .podium-naam { font-size:.72rem; color:#f6eee2; display:flex; align-items:center; gap:5px; max-width:104px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .podium-zuil { width:84px; border-radius:9px 9px 0 0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:2px; font-family:'Anton'; color:#2b1c05; box-shadow:0 8px 20px rgba(0,0,0,.45); }
+  .podium-zuil b { font-size:1.5rem; line-height:1; }
+  .podium-zuil small { font-family:'Bricolage Grotesque'; font-size:.56rem; font-weight:700; opacity:.8; }
+  .p1 .podium-zuil { height:96px; background:linear-gradient(180deg,#ffd76e,#c8951b); }
+  .p2 .podium-zuil { height:68px; background:linear-gradient(180deg,#d8dce6,#8f97a8); color:#242a36; }
+  .p3 .podium-zuil { height:52px; background:linear-gradient(180deg,#e2a06a,#9c5a26); color:#3a2008; }
+  .win-verlaat { background:none; border:none; color:#b9a; font-size:.72rem; text-decoration:underline dotted;
+    cursor:pointer; position:relative; z-index:2; margin-top:2px; }
+  @media (prefers-reduced-motion: reduce) { .podium-blok { animation:none; } }
   .win-regen { position:absolute; top:-4vh; width:8px; height:12px; border-radius:2px; pointer-events:none; opacity:.9; }
   @keyframes wip { 0%{ transform:scale(.4); opacity:0; } 70%{ transform:scale(1.1); opacity:1; } 100%{ transform:scale(1); } }
   @keyframes fadein { from{ opacity:0; } to{ opacity:1; } }
@@ -498,6 +520,10 @@
     <div class="wordmark">HIT<span>LIJN</span></div>
     <span class="kamercode-groot" id="lobbyCode" role="button" tabindex="0"></span>
     <button type="button" class="deel-chip" id="lobbyDeelChip"></button>
+    <div class="lobby-qr-blok" id="lobbyQrBlok" hidden>
+      <img class="lobby-qr" id="lobbyQr" alt="QR-code van de deel-link">
+      <small>scan om mee te doen</small>
+    </div>
     <div class="lobby-lijst" id="lobbySpelers"></div>
     <div id="lobbyPools" style="width:100%"></div>
     <div id="lobbyActie" style="width:100%"></div>
@@ -832,7 +858,14 @@
   // ── render: lobby ────────────────────────────────────────────────────────
   function renderLobby(room) {
     currentRoom = room;
+    removeWinOverlay(); // rematch: van winst-scherm terug de lobby in
     showInstap('lobby');
+    const soloQr = Boolean(room.settings?.solo);
+    $('lobbyQrBlok').hidden = soloQr;
+    if (!soloQr && $('lobbyQr').dataset.kamer !== room.roomId) {
+      $('lobbyQr').dataset.kamer = room.roomId;
+      $('lobbyQr').src = `/api/qr/${encodeURIComponent(room.roomId)}`;
+    }
     $('lobbyCode').hidden = Boolean(room.settings?.solo);
     $('lobbyCode').innerHTML = `<span class="kamercode-eyebrow">kamercode</span><span>${esc(room.roomId)}</span>`;
     bindTikKopieer($('lobbyCode'), () => currentRoom?.roomId,
@@ -1055,8 +1088,20 @@
       setTimeout(() => el.remove(), 1800);
     } catch { /* decoratie mag het spel nooit breken */ }
   }
+  let vorigeRoep = null; // { nonce, count } — voor de stinger zodra iemand HITLIJN roept
   function renderState(room) {
     currentRoom = room;
+    const roep = room.round?.challengers;
+    if (roep) {
+      const stand = { nonce: room.round.nonce, count: roep.length };
+      if (vorigeRoep && vorigeRoep.nonce === stand.nonce && stand.count > vorigeRoep.count) {
+        const nieuwste = roep[roep.length - 1];
+        if (!me || nieuwste !== me.id) speelGeluid('stinger'); // de roeper zelf had al zijn bevestig-bop
+      }
+      vorigeRoep = stand;
+    } else {
+      vorigeRoep = null;
+    }
     const ikNu = me ? room.players.find((p) => p.id === me.id) : null;
     if (ikNu) {
       if (ficheStand && ficheStand.roomId === room.roomId && room.phase !== 'lobby'
@@ -1081,11 +1126,23 @@
     const winKaart = reveal ? kaartHtml({ year: reveal.year, title: reveal.title, artist: reveal.artist }, 'sz-m2') : '';
     const el = document.createElement('div');
     el.className = 'win-overlay';
+    const rangorde = [...room.players].sort((a, b) => (b.timeline.length - a.timeline.length) || (b.tokens - a.tokens));
+    const podiumBlok = (p, plek) => p ? `
+      <div class="podium-blok p${plek}">
+        <div class="podium-naam">${avaHtml(p, 24)}<span>${esc(p.displayName)}</span></div>
+        <div class="podium-zuil"><b>${plek}</b><small>${p.timeline.length} kaarten</small></div>
+      </div>` : '';
+    const rest = rangorde.slice(3);
+    const benIkHost = me && me.id === room.hostId;
     el.innerHTML = `
       <div class="win-titel">${esc(winnaar.displayName)} WINT!</div>
       ${winKaart ? `<div class="win-kaart">${winKaart}</div>` : ''}
-      <div class="win-sub">${room.players.map((p) => `${esc(p.displayName)}: ${p.timeline.length} kaarten`).join(' · ')}</div>
-      <button class="knop-groot knop-maak" id="btnTerug">Terug naar start</button>`;
+      <div class="podium-rij">${podiumBlok(rangorde[1], 2)}${podiumBlok(rangorde[0], 1)}${podiumBlok(rangorde[2], 3)}</div>
+      ${rest.length ? `<div class="win-sub">${rest.map((p) => `${esc(p.displayName)}: ${p.timeline.length} kaarten`).join(' · ')}</div>` : ''}
+      ${benIkHost
+        ? '<button class="knop-groot knop-maak" id="btnRematch">NOG EEN POTJE<small>zelfde tafel, zelfde spelers</small></button>'
+        : '<div class="win-sub">de host kan een nieuw potje starten…</div>'}
+      <button class="win-verlaat" id="btnTerug">tafel verlaten</button>`;
     try {
       const kleuren = ['#ff2e88', '#ff9d3c', '#22e0c0', '#ffd76e', '#f2e8d5'];
       for (let i = 0; i < 20; i++) {
@@ -1099,6 +1156,10 @@
       }
     } catch { /* confettiregen is puur decoratief — nooit blokkerend */ }
     document.body.appendChild(el);
+    $('btnRematch') && ($('btnRematch').onclick = () => {
+      speelGeluid('bevestig');
+      stuur('hl:game:rematch'); // de lobby-state die volgt ruimt dit overlay op
+    });
     $('btnTerug').onclick = () => {
       el.remove();
       stuur('hl:room:leave');
@@ -1167,6 +1228,11 @@
     osc.stop(t0 + duur + 0.02);
   }
   const SFX_SYNTH = {
+    stinger: (c) => {
+      sfxToon(c, { van: 196, naar: 185, duur: 0.32, type: 'sawtooth', volume: 0.5 });
+      sfxToon(c, { freq: 466, tijd: 0.02, duur: 0.12, type: 'square', volume: 0.3 });
+      sfxToon(c, { freq: 554, tijd: 0.15, duur: 0.24, type: 'square', volume: 0.35 });
+    },
     tik: (c) => sfxToon(c, { van: 620, naar: 420, duur: 0.07, type: 'triangle', volume: 0.7 }),
     pak: (c) => sfxToon(c, { van: 380, naar: 560, duur: 0.09, type: 'triangle', volume: 0.7 }),
     thunk: (c) => sfxToon(c, { van: 300, naar: 180, duur: 0.1 }),

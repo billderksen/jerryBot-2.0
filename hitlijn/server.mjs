@@ -7,6 +7,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import QRCode from 'qrcode';
 import { PlaatjeRoom, canHostSkipTurn, shouldDeleteRoom } from '../src/utils/plaatjeGame.js';
 import { SHOUT, makeRoomCode, validateName, pickSong, audioSourceFor, magBeurtOverslaan, wachterMoetIngrijpen } from './game.mjs';
 
@@ -24,6 +25,23 @@ app.use(express.static(join(__dirname, 'public'), {
 }));
 app.get('/gezondheid', (req, res) => res.json({ ok: true }));
 app.get('/api/config', (req, res) => res.json({ spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? null, shout: SHOUT, soloBeschikbaar: true }));
+// QR voor de lobby: scan = deel-link. Server-side gegenereerd (geen client-lib nodig);
+// 404 voor onbestaande kamers zodat dit geen gratis QR-dienst wordt.
+app.get('/api/qr/:code', async (req, res) => {
+  const code = String(req.params.code ?? '').toUpperCase().slice(0, 8);
+  if (!rooms.has(code)) return res.status(404).end();
+  const host = req.get('host') ?? 'hitlijn.nl';
+  const proto = host.startsWith('localhost') ? 'http' : 'https';
+  try {
+    const png = await QRCode.toBuffer(`${proto}://${host}/?kamer=${code}`, {
+      width: 264, margin: 2, color: { dark: '#17091cff', light: '#f2e8d5ff' },
+    });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(png);
+  } catch { res.status(500).end(); }
+});
+
 // Spotify PKCE-redirect landt op de pagina zelf
 app.get('/callback', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
@@ -427,6 +445,20 @@ function afhandelen(ws, data) {
       const k = rooms.get(ws.roomCode); if (!k) break;
       const r = k.room.challenge(ws.playerId, data.slot, Date.now());
       if (!r.ok) return fout(ws, r.reason ?? 'Uitdagen kan nu niet');
+      broadcastState(ws.roomCode);
+      break;
+    }
+    case 'hl:game:rematch': {
+      const k = rooms.get(ws.roomCode); if (!k) break;
+      if (ws.playerId !== k.room.hostId) return fout(ws, 'Alleen de host kan een nieuw potje starten');
+      if (k.room.phase !== 'finished') return fout(ws, 'Het potje is nog bezig');
+      clearTimer(ws.roomCode);
+      clearAutoSkip(ws.roomCode);
+      k.room.resetVoorRematch();
+      k.spotifyIdVoorRonde = null;
+      k.previewVoorRonde = null;
+      k.coverVoorRonde = null;
+      broadcast(ws.roomCode, 'hl:notice', { message: 'Nieuw potje — zelfde tafel!' });
       broadcastState(ws.roomCode);
       break;
     }

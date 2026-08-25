@@ -117,6 +117,19 @@ export class PlaatjeRoom {
     this.emptySince = null;
   }
 
+  // Zelfde tafel, nieuw potje: terug naar de lobby met dezelfde spelers en host.
+  // start() deelt daarna zelf verse kaarten en fiches uit; usedSongIds blijft bewust
+  // staan zodat een avond lang geen nummers herhalen.
+  resetVoorRematch() {
+    this.phase = 'lobby';
+    this.round = null;
+    this.lastReveal = null;
+    this.winnerId = null;
+    this.activeIdx = 0;
+    this.loadFailStreak = 0;
+    this.emptySince = null;
+  }
+
   removePlayer(userId) {
     this.spectators.delete(userId);
     if (this.phase === 'lobby') {

@@ -298,3 +298,31 @@ test('room: solo-potje start met 1 speler, normaal blijft 2 vereisen', () => {
   assert.equal(normaal.start(() => kaart).ok, false); // zonder tweede speler niet
   deletePlaatjeRoom('r1');
 });
+
+test('room: resetVoorRematch — zelfde tafel terug naar de lobby, start opnieuw mogelijk', () => {
+  const room = maakKamer(); // u1 + u2, gestart (phase loading)
+  room.beginRound({ title: 'X', artist: 'Y', year: 1990, youtubeId: 'aaaaaaaaaaa' }, 0);
+  room.place('u1', 0);
+  room.resolveReveal();
+  room.winnerId = 'u1';
+  room.phase = 'finished';
+  room.resetVoorRematch();
+  assert.equal(room.phase, 'lobby');
+  assert.equal(room.round, null);
+  assert.equal(room.lastReveal, null);
+  assert.equal(room.winnerId, null);
+  assert.equal(room.activeUserId, 'u1'); // rotatie terug naar het begin
+  assert.equal(room.players.size, 2);    // zelfde spelers, zelfde host
+  assert.equal(room.hostId, 'u1');
+  const startSongs = [
+    { title: 'A', artist: 'AA', year: 1978, youtubeId: 'aaaaaaaaaaa' },
+    { title: 'B', artist: 'BB', year: 1994, youtubeId: 'bbbbbbbbbbb' },
+  ];
+  let i = 0;
+  assert.equal(room.start(() => startSongs[i++]).ok, true); // opnieuw starten werkt
+  for (const p of room.players.values()) {
+    assert.equal(p.timeline.length, 1); // verse kaarten
+    assert.equal(p.tokens, 2);          // verse fiches
+  }
+  deletePlaatjeRoom('r1');
+});
