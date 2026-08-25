@@ -124,23 +124,41 @@
     display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
   .kamercode-eyebrow { font-family:'Bricolage Grotesque'; font-weight:600; text-transform:lowercase;
     letter-spacing:1.5px; font-size:.52rem; color:#c9a; }
-  /* playlist-kiezer: rij platenhoezen, swipebaar; half zichtbaar kaartje = 'er is meer' */
+  /* playlist-kiezer: krat platenhoezen — entree gestaffeld, de gekozen plaat licht uit
+     het krat en draait; alles op transform/opacity zodat er niets lagt */
   .pool-kop { width:100%; font-family:'Anton'; letter-spacing:1.5px; font-size:.72rem; color:#ffe9c9; margin:2px 0 -6px; }
-  .pool-rij { display:flex; gap:10px; overflow-x:auto; padding:6px 2px 10px; width:100%; -webkit-overflow-scrolling:touch; }
+  .pool-rij { display:flex; gap:10px; overflow-x:auto; padding:20px 2px 10px; width:100%; -webkit-overflow-scrolling:touch; }
   .pool-kaart { flex:0 0 auto; width:106px; border-radius:12px; padding:10px 8px 9px; cursor:pointer;
     background:rgba(0,0,0,.32); border:1.5px solid rgba(255,255,255,.14); color:#e9dcc8;
     display:flex; flex-direction:column; align-items:center; gap:6px; font-family:inherit;
-    -webkit-tap-highlight-color:transparent; transition:transform .12s; }
-  .pool-kaart:active { transform:scale(.96); }
+    -webkit-tap-highlight-color:transparent; position:relative;
+    transition:transform .28s cubic-bezier(.2,.8,.3,1.25), box-shadow .28s, border-color .28s, background .28s;
+    animation:poolIn .5s ease-out backwards; animation-delay:var(--instap, 0s); }
+  @keyframes poolIn { 0% { opacity:0; transform:translateY(16px) scale(.9); } 100% { opacity:1; transform:none; } }
+  .pool-kaart:active { transform:scale(.95); }
   .pool-kaart b { font-size:.66rem; line-height:1.25; text-align:center; }
-  .pool-kaart small { font-size:.55rem; color:#a89; }
+  .pool-kaart small { font-size:.55rem; color:#a89; transition:color .28s; }
   .pool-kaart .pool-plaat { width:46px; height:46px; border-radius:50%; position:relative;
-    background:repeating-radial-gradient(circle, #0d0d0d 0 1.5px, #221 1.5px 3.5px); }
+    background:repeating-radial-gradient(circle, #0d0d0d 0 1.5px, #221 1.5px 3.5px);
+    transition:transform .35s cubic-bezier(.2,.8,.3,1.2); }
   .pool-kaart .pool-plaat::after { content:''; position:absolute; inset:15px; border-radius:50%;
     background:radial-gradient(circle at 35% 30%, var(--labelkleur, var(--hotpink)), rgba(0,0,0,.45)); }
-  .pool-kaart.gekozen { border-color:var(--teal); box-shadow:0 0 18px rgba(34,224,192,.45); color:#fff;
-    background:rgba(34,224,192,.08); }
+  .pool-kaart.gekozen { border-color:var(--teal); color:#fff; background:rgba(34,224,192,.08);
+    transform:translateY(-5px) scale(1.05);
+    box-shadow:0 10px 22px rgba(0,0,0,.45), 0 0 20px rgba(34,224,192,.45); }
   .pool-kaart.gekozen small { color:#8fd9c9; }
+  .pool-kaart.gekozen .pool-plaat { transform:translateY(-11px) scale(1.06);
+    box-shadow:0 8px 16px rgba(0,0,0,.5); }
+  .pool-kaart.gekozen .pool-plaat::after { animation:plaatDraai 2.2s linear infinite; }
+  @keyframes plaatDraai { to { transform:rotate(360deg); } }
+  .pool-kaart.gekozen::before { content:''; position:absolute; inset:0; border-radius:12px; pointer-events:none;
+    background:linear-gradient(115deg, transparent 32%, rgba(255,255,255,.2) 46%, transparent 60%);
+    background-size:250% 100%; animation:glansSweep .65s ease-out forwards; }
+  @keyframes glansSweep { 0% { background-position:130% 0; opacity:1; } 100% { background-position:-60% 0; opacity:0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pool-kaart, .pool-kaart.gekozen::before { animation:none; }
+    .pool-kaart.gekozen .pool-plaat::after { animation:none; }
+  }
   .lobby-lijst { display:flex; flex-direction:column; gap:8px; width:100%; }
   .lobby-rij { display:flex; align-items:center; gap:10px; width:100%; padding:9px 12px; border-radius:10px;
     background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08); font-size:.82rem; }
@@ -823,15 +841,18 @@
     if (benIkHost) {
       if (!pools.some((pl) => pl.id === gekozenPoolId)) gekozenPoolId = pools[0]?.id ?? null;
       const labelkleuren = ['var(--hotpink)', 'var(--stagelight)', 'var(--teal)', '#ffd76e', '#6a4c93'];
+      // 'gekozen' zit bewust NIET in de html: selectie wisselt via class-toggles, zodat de
+      // lift/draai vloeiend animeert en de entree-animatie maar één keer speelt
       zetHtml($('lobbyPools'), pools.length
         ? `<div class="pool-kop">KIES JE PLAYLIST</div>
            <div class="pool-rij">${pools.map((pl, i) => `
-             <button type="button" class="pool-kaart${pl.id === gekozenPoolId ? ' gekozen' : ''}" data-pool="${esc(pl.id)}" style="--labelkleur:${labelkleuren[i % labelkleuren.length]}">
+             <button type="button" class="pool-kaart" data-pool="${esc(pl.id)}" style="--labelkleur:${labelkleuren[i % labelkleuren.length]};--instap:${i * 70}ms">
                <span class="pool-plaat"></span>
                <b>${esc(pl.name)}</b>
                <small>${pl.count} platen</small>
              </button>`).join('')}</div>`
         : '<div class="spotify-uitleg">Nog geen songpools beschikbaar.</div>');
+      syncPoolKeuze();
       const solo = room.settings?.solo;
       const magStarten = (solo || room.players.length >= 2) && pools.length > 0;
       $('lobbyDeelChip').hidden = Boolean(solo);
@@ -1398,6 +1419,12 @@
     chipTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ''; }, 5000);
   }
 
+  function syncPoolKeuze() {
+    for (const k of document.querySelectorAll('.pool-kaart')) {
+      k.classList.toggle('gekozen', k.dataset.pool === gekozenPoolId);
+    }
+  }
+
   function isMijnBeurtNu() { return Boolean(me && currentRoom && currentRoom.activeUserId === me.id); }
 
   function verlaatKamer() {
@@ -1491,7 +1518,8 @@
       const kaart = ev.target.closest('[data-pool]');
       if (!kaart) return;
       gekozenPoolId = kaart.dataset.pool;
-      if (currentRoom) renderState(currentRoom);
+      syncPoolKeuze(); // alleen class-toggles — de kaarten animeren, niets wordt herbouwd
+      kaart.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     });
     $('lobbyActie').addEventListener('click', (ev) => {
       const start = ev.target.closest('#btnStart');
