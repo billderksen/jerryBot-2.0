@@ -1110,14 +1110,15 @@
   }
  ],
  "live": {
-  "pak": "pak-1.mp3",
-  "thunk": "thunk-2.mp3",
-  "bevestig": "bevestig-1.mp3",
-  "goed": "goed-2.mp3",
-  "fout": "fout-1.mp3",
-  "munt": "munt-2.mp3",
+  "tik": "tik-mixkit-5.mp3",
+  "pak": "pak-6.mp3",
+  "thunk": "thunk-mixkit-3.mp3",
+  "bevestig": "bevestig-mixkit-3.mp3",
+  "goed": "goed-mixkit-13.mp3",
+  "fout": "fout-mixkit-14.mp3",
+  "munt": "munt-mixkit-9.mp3",
   "plop": "plop-1.mp3",
-  "fanfare": "fanfare-3.mp3",
-  "stinger": "stinger-2.mp3"
+  "fanfare": "fanfare-mixkit-11.mp3",
+  "stinger": "stinger-17.mp3"
  }
 }

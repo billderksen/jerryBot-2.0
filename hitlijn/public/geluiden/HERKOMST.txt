@@ -28,3 +28,22 @@ Bewerking: alles mono mp3 (96-128 kbit/s), Mixkit-previews afgekapt op 5s.
 manifest.json (bron 1+2) en mixkit/manifest-mixkit.json (bron 3) koppelen
 elk bestand aan een spelmoment; "live" in manifest.json is wat nu in het
 spel zit. Kiezen kan op /geluidenlab.html.
+
+--- WAT NU IN HET SPEL ZIT (keuze eigenaar, 26 aug) ---
+tik       Select click                        (mixkit)   live-mixkit/tik.mp3
+pak       zachte zwiep                        (Kenney)   pak.mp3
+thunk     Record player needle drop on vinyl  (mixkit)   live-mixkit/thunk.mp3
+bevestig  Arcade score interface              (mixkit)   live-mixkit/bevestig.mp3
+goed      Winning notification                (mixkit)   live-mixkit/goed.mp3
+fout      Wrong answer fail notification      (mixkit)   live-mixkit/fout.mp3
+munt      Coin win notification               (mixkit)   live-mixkit/munt.mp3
+plop      fiche weg                           (Kenney)   plop.mp3
+fanfare   Video game win                      (mixkit)   live-mixkit/fanfare.mp3
+stinger   jingles_HIT15                       (Kenney)   stinger.mp3
+
+DEPLOY: hitlijn/public/geluiden/mixkit/ en .../live-mixkit/ staan in .gitignore
+(Mixkit-licentie). Na een verse checkout die twee mappen van de server kopiëren:
+  scp -r oude-host:/pad/hitlijn/public/geluiden/mixkit      hitlijn/public/geluiden/
+  scp -r oude-host:/pad/hitlijn/public/geluiden/live-mixkit hitlijn/public/geluiden/
+Ontbreken ze, dan valt het spel per geluid automatisch terug op de synthese —
+niets breekt, het klinkt alleen weer als de oude piepjes.

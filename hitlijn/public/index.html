@@ -1464,15 +1464,19 @@
   let sfxGain = null;
   // naam -> url; wat hier staat wint van de synthese. Gekozen via /geluidenlab.html uit
   // Kenney's CC0-pakketten (publiek domein). 'tik' staat nog op synthese.
+  // naam -> url; wat hier staat wint van de synthese. Gekozen via /geluidenlab.html.
+  // /geluiden/live-mixkit/ staat niet in git (Mixkit-licentie verbiedt meeleveren met
+  // broncode) — ontbreekt een bestand, dan valt speelGeluid terug op de synthese.
   const GELUID_BESTANDEN = {
+    tik: '/geluiden/live-mixkit/tik.mp3',
     pak: '/geluiden/pak.mp3',
-    thunk: '/geluiden/thunk.mp3',
-    bevestig: '/geluiden/bevestig.mp3',
-    goed: '/geluiden/goed.mp3',
-    fout: '/geluiden/fout.mp3',
-    munt: '/geluiden/munt.mp3',
+    thunk: '/geluiden/live-mixkit/thunk.mp3',
+    bevestig: '/geluiden/live-mixkit/bevestig.mp3',
+    goed: '/geluiden/live-mixkit/goed.mp3',
+    fout: '/geluiden/live-mixkit/fout.mp3',
+    munt: '/geluiden/live-mixkit/munt.mp3',
     plop: '/geluiden/plop.mp3',
-    fanfare: '/geluiden/fanfare.mp3',
+    fanfare: '/geluiden/live-mixkit/fanfare.mp3',
     stinger: '/geluiden/stinger.mp3',
   };
   const sfxBuffers = {};
@@ -1525,16 +1529,21 @@
       const ctx = sfxContext();
       if (!ctx) return;
       const url = GELUID_BESTANDEN[naam];
-      if (url) {
-        if (!sfxBuffers[naam]) {
-          const raw = await fetch(url).then((r) => r.arrayBuffer());
-          sfxBuffers[naam] = await ctx.decodeAudioData(raw);
+      if (url && sfxBuffers[naam] !== 'mislukt') {
+        try {
+          if (!sfxBuffers[naam]) {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(String(res.status));
+            sfxBuffers[naam] = await ctx.decodeAudioData(await res.arrayBuffer());
+          }
+          const bron = ctx.createBufferSource();
+          bron.buffer = sfxBuffers[naam];
+          bron.connect(sfxGain);
+          bron.start();
+          return;
+        } catch {
+          sfxBuffers[naam] = 'mislukt'; // bestand ontbreekt (verse checkout) — val terug op synthese
         }
-        const bron = ctx.createBufferSource();
-        bron.buffer = sfxBuffers[naam];
-        bron.connect(sfxGain);
-        bron.start();
-        return;
       }
       SFX_SYNTH[naam]?.(ctx);
     } catch { /* geluid mag het spel nooit raken */ }

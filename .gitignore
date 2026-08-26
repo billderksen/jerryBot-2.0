@@ -59,3 +59,4 @@ hitlijn/data/
 
 # Mixkit-geluiden: gebruik in de app mag, meeleveren met broncode niet (zie geluiden/HERKOMST.txt)
 hitlijn/public/geluiden/mixkit/
+hitlijn/public/geluiden/live-mixkit/
