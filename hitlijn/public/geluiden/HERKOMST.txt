@@ -1,19 +1,30 @@
-Alle geluidskandidaten in kandidaten/ zijn CC0 (Creative Commons Zero, publiek domein)
-en komen uit de audiopakketten van Kenney (kenney.nl):
+Drie bronnen, drie licentiesituaties — bewust uit elkaar gehouden.
 
-  Interface Sounds · UI Audio · Casino Audio · RPG Audio ·
-  Impact Sounds · Sci-Fi Sounds · Digital Audio · Music Jingles
+1. kandidaten/*.mp3 (behalve hype-*)  — CC0 van Kenney (kenney.nl)
+   Interface Sounds, UI Audio, Casino Audio, RPG Audio, Impact Sounds,
+   Sci-Fi Sounds, Digital Audio, Music Jingles. Publiek domein: vrij te
+   gebruiken en te verspreiden, ook commercieel, zonder naamsvermelding.
 
-CC0 betekent: vrij te gebruiken, ook commercieel, zonder naamsvermelding en zonder
-voorwaarden. De licentie staat in de License.txt van elk oorspronkelijk pakket.
+2. kandidaten/hype-*.mp3 — zelf gemaakt met ffmpeg-synthese
+   (hitlijn/tools/maak-hypegeluiden.mjs). Airhorn, riser, sub-drop,
+   scratches, tape-stop, applaus, cash, buzzer, stabs. Geen bron, geen
+   licentie: opnieuw te genereren met dat script.
 
-Andere bekende bronnen zijn bewust NIET automatisch geplunderd: Freesound en Pixabay
-vragen een account/API-sleutel, en op OpenGameArt verschilt de licentie per bestand
-(CC0 naast CC-BY en GPL) — dat laat zich niet betrouwbaar automatiseren. Wil je daar
-toch iets vandaan halen: zet de bestanden in kandidaten/ en meld het, dan neem ik ze
-op in het manifest.
+3. mixkit/*.mp3 — Mixkit Sound Effects Free License. NIET IN GIT.
+   De licentie staat gebruik in een eindproduct (ook commercieel, zonder
+   naamsvermelding) uitdrukkelijk toe: "You're permitted to download,
+   copy, modify, distribute and publicly perform the Sound Effect Items
+   on any web or social media platform ... and in video games."
+   Maar óók: "You can't redistribute the Item on its own, as stock, in a
+   tool or template, or with source files."
+   Deze repo is openbaar, dus meeleveren met de broncode zou daaronder
+   vallen. Daarom staat hitlijn/public/geluiden/mixkit/ in .gitignore en
+   leeft die map alleen op de server — hetzelfde patroon als pools.json.
+   Bij een verse checkout ontbreekt de map; het geluidenlab werkt dan
+   gewoon door met bron 1 en 2. Opnieuw ophalen kan met het script in
+   docs of door de map van de server te kopiëren.
 
-Bewerking: omgezet naar mono mp3 (96 kbit/s) met ffmpeg, gefilterd op speelduur zodat
-knopgeluiden kort blijven. manifest.json koppelt elk bestand aan het spelmoment en het
-bronbestand; de sleutel "live" bevat wat op dit moment in het spel zit.
-Kiezen kan via /geluidenlab.html.
+Bewerking: alles mono mp3 (96-128 kbit/s), Mixkit-previews afgekapt op 5s.
+manifest.json (bron 1+2) en mixkit/manifest-mixkit.json (bron 3) koppelen
+elk bestand aan een spelmoment; "live" in manifest.json is wat nu in het
+spel zit. Kiezen kan op /geluidenlab.html.

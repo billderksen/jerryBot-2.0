@@ -99,6 +99,16 @@
    "bestand": "tik-20.mp3",
    "label": "interface \u00b7 select_005",
    "bron": "interface-sounds/Audio/select_005.ogg"
+  },
+  {
+   "bestand": "hype-tik.mp3",
+   "label": "hype \u00b7 droge tik",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-tik-diep.mp3",
+   "label": "hype \u00b7 diepe tik",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "pak": [
@@ -201,6 +211,11 @@
    "bestand": "pak-20.mp3",
    "label": "rpg \u00b7 cloth4",
    "bron": "rpg-audio/Audio/cloth4.ogg"
+  },
+  {
+   "bestand": "hype-scratch-op.mp3",
+   "label": "hype \u00b7 scratch omhoog",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "thunk": [
@@ -303,6 +318,16 @@
    "bestand": "thunk-20.mp3",
    "label": "impact \u00b7 impactSoft_heavy_000",
    "bron": "impact-sounds/Audio/impactSoft_heavy_000.ogg"
+  },
+  {
+   "bestand": "hype-scratch-neer.mp3",
+   "label": "hype \u00b7 scratch omlaag",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-drop.mp3",
+   "label": "hype \u00b7 sub-drop",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "bevestig": [
@@ -405,6 +430,11 @@
    "bestand": "bevestig-20.mp3",
    "label": "ui \u00b7 switch19",
    "bron": "ui-audio/Audio/switch19.ogg"
+  },
+  {
+   "bestand": "hype-stab.mp3",
+   "label": "hype \u00b7 akkoord-stab",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "goed": [
@@ -507,6 +537,21 @@
    "bestand": "goed-20.mp3",
    "label": "music-jingles \u00b7 jingles_PIZZI16",
    "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI16.ogg"
+  },
+  {
+   "bestand": "hype-fanfare.mp3",
+   "label": "hype \u00b7 akkoord-fanfare",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-cash.mp3",
+   "label": "hype \u00b7 cash-bel",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-applaus.mp3",
+   "label": "hype \u00b7 applaus",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "fout": [
@@ -609,6 +654,16 @@
    "bestand": "fout-20.mp3",
    "label": "interface \u00b7 scratch_005",
    "bron": "interface-sounds/Audio/scratch_005.ogg"
+  },
+  {
+   "bestand": "hype-buzzer.mp3",
+   "label": "hype \u00b7 buzzer",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-tapestop.mp3",
+   "label": "hype \u00b7 tape-stop",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "munt": [
@@ -711,6 +766,11 @@
    "bestand": "munt-20.mp3",
    "label": "casino \u00b7 chips-stack-5",
    "bron": "casino-audio/Audio/chips-stack-5.ogg"
+  },
+  {
+   "bestand": "hype-cash.mp3",
+   "label": "hype \u00b7 cash-bel",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "plop": [
@@ -813,6 +873,11 @@
    "bestand": "plop-20.mp3",
    "label": "interface \u00b7 back_002",
    "bron": "interface-sounds/Audio/back_002.ogg"
+  },
+  {
+   "bestand": "hype-tapestop.mp3",
+   "label": "hype \u00b7 tape-stop",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "fanfare": [
@@ -915,6 +980,16 @@
    "bestand": "fanfare-20.mp3",
    "label": "music-jingles \u00b7 jingles_NES11 (0.8s)",
    "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES11.ogg"
+  },
+  {
+   "bestand": "hype-fanfare.mp3",
+   "label": "hype \u00b7 akkoord-fanfare",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-applaus.mp3",
+   "label": "hype \u00b7 applaus",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "stinger": [
@@ -1017,6 +1092,21 @@
    "bestand": "stinger-20.mp3",
    "label": "sci-fi \u00b7 forceField_001",
    "bron": "sci-fi-sounds/Audio/forceField_001.ogg"
+  },
+  {
+   "bestand": "hype-airhorn.mp3",
+   "label": "hype \u00b7 AIRHORN",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-riser.mp3",
+   "label": "hype \u00b7 riser",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
+  },
+  {
+   "bestand": "hype-drop.mp3",
+   "label": "hype \u00b7 sub-drop",
+   "bron": "zelf gemaakt (ffmpeg-synthese)"
   }
  ],
  "live": {

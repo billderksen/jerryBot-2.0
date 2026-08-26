@@ -56,3 +56,6 @@ hitlijn/tools/zonder-audio.txt
 
 # HITLIJN resolved pool data: productiedata, deck-afgeleid — blijft buiten de publieke repo; deploy kopieert.
 hitlijn/data/
+
+# Mixkit-geluiden: gebruik in de app mag, meeleveren met broncode niet (zie geluiden/HERKOMST.txt)
+hitlijn/public/geluiden/mixkit/

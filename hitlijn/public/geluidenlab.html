@@ -117,8 +117,8 @@
   // manifest.live vult de beginstand aan: wat al in het spel zit, staat meteen aangevinkt
   let manifest = {};
 
-  function speelBestand(bestand) {
-    const a = new Audio('/geluiden/kandidaten/' + bestand);
+  function speelBestand(bestand, map) {
+    const a = new Audio('/geluiden/' + (map ?? 'kandidaten') + '/' + bestand);
     a.volume = 0.8;
     a.play().catch(() => {});
   }
@@ -143,7 +143,7 @@
         <button data-alle="${id}">▶ speel alle ${kandidaten.length} achter elkaar</button></div>
         <div class="knoppen">
         <button class="synth ${keuze[id] === 'synth' ? 'gekozen' : ''}" data-id="${id}" data-kies="synth">▸ synth</button>
-        ${kandidaten.map((k, i) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}"><span class="nr">${i + 1}</span>${k.label}${manifest.live?.[id] === k.bestand ? '<span class="live-tag">IN HET SPEL</span>' : ''}</button>`).join('')}
+        ${kandidaten.map((k, i) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" data-map="${k.map ?? ''}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}"><span class="nr">${i + 1}</span>${k.label}${manifest.live?.[id] === k.bestand ? '<span class="live-tag">IN HET SPEL</span>' : ''}</button>`).join('')}
       </div>`;
       lijst.appendChild(blok);
     }
@@ -160,7 +160,7 @@
       const origineel = alle.textContent;
       for (const [i, k] of (manifest[id] ?? []).entries()) {
         alle.textContent = `speelt ${i + 1}/${manifest[id].length} — ${k.label}`;
-        speelBestand(k.bestand);
+        speelBestand(k.bestand, k.map);
         await new Promise((r) => setTimeout(r, 1400));
       }
       alle.textContent = origineel;
@@ -170,7 +170,7 @@
     const knop = ev.target.closest('button[data-id]');
     if (!knop) return;
     const id = knop.dataset.id;
-    if (knop.dataset.bestand) speelBestand(knop.dataset.bestand);
+    if (knop.dataset.bestand) speelBestand(knop.dataset.bestand, knop.dataset.map || undefined);
     else SYNTH[id]?.(audio());
     keuze[id] = knop.dataset.kies;
     localStorage.setItem('hlGeluidKeuze', JSON.stringify(keuze));
@@ -189,10 +189,20 @@
     render();
   });
 
-  fetch('/geluiden/kandidaten/manifest.json')
-    .then((r) => r.json())
-    .then((m) => { manifest = m; for (const [id, b] of Object.entries(m.live ?? {})) if (!keuze[id]) keuze[id] = b; render(); })
-    .catch(() => { document.getElementById('lijst').innerHTML = '<div class="moment">Kon de kandidaten niet laden.</div>'; });
+  // twee bronnen: /kandidaten (CC0 + zelfgemaakt, in de repo) en /mixkit (server-only,
+  // want die licentie staat meeleveren met broncode niet toe). Ontbreekt de tweede, dan
+  // werkt het lab gewoon met de eerste.
+  Promise.all([
+    fetch('/geluiden/kandidaten/manifest.json').then((r) => r.json()),
+    fetch('/geluiden/mixkit/manifest-mixkit.json').then((r) => r.ok ? r.json() : {}).catch(() => ({})),
+  ]).then(([basis, mix]) => {
+    manifest = basis;
+    for (const [moment, lijst] of Object.entries(mix)) {
+      for (const k of lijst) manifest[moment] = [...(manifest[moment] ?? []), { ...k, map: 'mixkit' }];
+    }
+    for (const [id, b] of Object.entries(basis.live ?? {})) if (!keuze[id]) keuze[id] = b;
+    render();
+  }).catch(() => { document.getElementById('lijst').innerHTML = '<div class="moment">Kon de kandidaten niet laden.</div>'; });
 })();
 </script>
 </body>
