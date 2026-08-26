@@ -598,15 +598,12 @@
     .spook { width:136px; height:124px; }
     /* 'safe center': centreert zolang de kaarten passen, en begint links zodra
        de tijdlijn breder wordt dan het paneel (anders zou het begin wegvallen) */
-    .mijn-lijn, .band-lijn { gap:9px; justify-content:safe center;
-      scrollbar-width:thin; scrollbar-color:rgba(255,157,60,.6) rgba(0,0,0,.25); padding-bottom:10px; }
-    .mijn-lijn::-webkit-scrollbar, .band-lijn::-webkit-scrollbar { height:9px; }
-    .mijn-lijn::-webkit-scrollbar-track, .band-lijn::-webkit-scrollbar-track {
-      background:rgba(0,0,0,.25); border-radius:999px; }
-    .mijn-lijn::-webkit-scrollbar-thumb, .band-lijn::-webkit-scrollbar-thumb {
-      background:rgba(255,157,60,.55); border-radius:999px; }
-    .mijn-lijn::-webkit-scrollbar-thumb:hover, .band-lijn::-webkit-scrollbar-thumb:hover {
-      background:rgba(255,157,60,.85); }
+    .mijn-lijn, .band-lijn { cursor:grab; }
+    .mijn-lijn.pannen, .band-lijn.pannen { cursor:grabbing; scroll-behavior:auto; }
+    .mijn-lijn.pannen *, .band-lijn.pannen * { pointer-events:none; }
+    /* geen schuifbalk: schuiven gaat met slepen (muisknop ingedrukt) of het muiswiel */
+    .mijn-lijn, .band-lijn { gap:9px; justify-content:safe center; scrollbar-width:none; }
+    .mijn-lijn::-webkit-scrollbar, .band-lijn::-webkit-scrollbar { width:0; height:0; display:none; }
     #mijnHint, #spelersHint.onder { text-align:center; }
     .mysterie-kaart { width:136px; height:124px; }
     .mysterie-kaart .speelt { font-size:.55rem; padding:10px 0 5px; }
@@ -1922,6 +1919,44 @@
     $('btnLobbyVerlaat').addEventListener('click', () => wapenVerlaatKnop($('btnLobbyVerlaat')));
 
     for (const lijn of [$('mijnLijn'), $('bandLijn')]) {
+      // Slepen met de muisknop ingedrukt = de tijdlijn opzij schuiven (het muis-equivalent
+      // van vegen). Alleen met een échte muis: touch scrollt al vanzelf, en de pen/vinger
+      // moet de kaart kunnen blijven slepen. Pas vanaf 5px beweging wordt het een pan,
+      // zodat een gewone klik op een plek gewoon een klik blijft.
+      let pan = null;
+      lijn.addEventListener('pointerdown', (ev) => {
+        if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
+        if (ev.target.closest('#mijnSpook, #mysterieKaart')) return; // dat is kaart-slepen
+        if (lijn.scrollWidth <= lijn.clientWidth + 1) return;        // niets te schuiven
+        pan = { startX: ev.clientX, startScroll: lijn.scrollLeft, bewogen: false };
+      });
+      window.addEventListener('pointermove', (ev) => {
+        if (!pan) return;
+        const dx = ev.clientX - pan.startX;
+        if (!pan.bewogen && Math.abs(dx) < 5) return;
+        pan.bewogen = true;
+        lijn.classList.add('pannen');
+        lijn.scrollLeft = pan.startScroll - dx;
+        ev.preventDefault();
+      });
+      window.addEventListener('pointerup', () => {
+        if (!pan) return;
+        const bewogen = pan.bewogen;
+        pan = null;
+        lijn.classList.remove('pannen');
+        // Een sleep mag niet als klik op een vak eindigen. Alleen de klik die direct uit
+        // dit gebaar volgt wordt geslikt; blijft die uit, dan ruimt de timer de handler
+        // op — anders at hij later een gewone klik op een plek op.
+        if (bewogen) {
+          const tot = Date.now() + 350;
+          const slik = (e) => {
+            if (Date.now() <= tot) { e.stopPropagation(); e.preventDefault(); }
+            lijn.removeEventListener('click', slik, true);
+          };
+          lijn.addEventListener('click', slik, true);
+          setTimeout(() => lijn.removeEventListener('click', slik, true), 400);
+        }
+      });
       lijn.addEventListener('wheel', (ev) => {
         const kanSchuiven = lijn.scrollWidth > lijn.clientWidth + 1;
         if (!kanSchuiven || ev.deltaY === 0) return;
