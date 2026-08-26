@@ -234,6 +234,11 @@
   @keyframes spookGloed { 50% { box-shadow:0 0 26px rgba(255,157,60,.7); } }
   .band-lijn .spook { width:82px; height:70px; }
   .spook.daag { outline-color:var(--teal); box-shadow:0 0 18px rgba(34,224,192,.5); }
+  /* voorlopige plek van de actieve speler — zichtbaar voor de anderen, nog niet bevestigd */
+  .spook.voorlopig { opacity:.55; outline-style:dotted; outline-color:rgba(255,157,60,.75);
+    box-shadow:0 0 12px rgba(255,157,60,.25); animation:voorlopigPuls 1.1s ease-in-out infinite; }
+  @keyframes voorlopigPuls { 50% { opacity:.8; } }
+  @media (prefers-reduced-motion: reduce) { .spook.voorlopig { animation:none; } }
   @keyframes knipper { 50% { opacity:.4; } }
   .band-lijn .vak { width:28px; height:70px; } /* mini-formaat, past bij sz-s kaarten in de band */
   .countdown { height:5px; border-radius:3px; background:rgba(255,255,255,.15); overflow:hidden; margin-top:9px; }
@@ -1043,6 +1048,12 @@
         stopRondeAudio();
         renderState(data.room);
         break;
+      case 'hl:turn:hover':
+        // live meekijken: de anderen zien de kaart meebewegen vóór de bevestiging,
+        // zodat ze kunnen anticiperen op een HITLIJN-roep
+        kijkSlot = data.slot === null ? null : { nonce: data.nonce, slot: data.slot };
+        if (currentRoom) renderState(currentRoom);
+        break;
       case 'hl:notice':
         toonMelding(data.message);
         break;
@@ -1168,6 +1179,8 @@
     for (let slot = 0; slot <= actief.timeline.length; slot++) {
       if (gelegd === slot) delen.push('<div class="spook"></div>');
       else if (kiesbaar && daagSlot === slot) delen.push(`<div class="spook daag" data-band-slot="${slot}"></div>`);
+      else if (gelegd == null && kijkSlot && kijkSlot.nonce === room.round?.nonce && kijkSlot.slot === slot)
+        delen.push(`<div class="spook voorlopig${kiesbaar ? '' : ''}" data-band-slot="${slot}" title="overweegt hier"></div>`);
       else delen.push(`<div class="vak${kiesbaar ? ' kies' : ''}" data-band-slot="${slot}"><span class="plus">+</span></div>`);
       if (slot < actief.timeline.length) delen.push(kaartHtml(actief.timeline[slot], 'sz-s'));
     }
@@ -1363,6 +1376,7 @@
       setTimeout(() => el.remove(), 1800);
     } catch { /* decoratie mag het spel nooit breken */ }
   }
+  let kijkSlot = null;   // { nonce, slot } — waar de actieve speler zijn kaart nú overweegt
   let plaatNummer = 0;   // hoeveelste plaat van dit potje (round.nonce; wisselen telt mee)
   let vorigeRoep = null; // { nonce, count } — voor de stinger zodra iemand HITLIJN roept
   function renderState(room) {
@@ -1797,10 +1811,15 @@
   }
 
   // ── plaatsing op de eigen tijdlijn: tik of sleep → schim → groene knop ────
+  function meldVoorlopigePlek(slot) {
+    // alleen betekenisvol als ik aan zet ben; de server controleert dat ook
+    stuur('hl:turn:hover', { slot });
+  }
   function tikMijnVak(slot, room, isMijnBeurt) {
     if (!isMijnBeurt || room.phase !== 'listening' || room.round?.placedSlot != null) return;
     speelGeluid('thunk');
     gekozenSlot = slot;
+    meldVoorlopigePlek(slot);
     renderState(currentRoom);
   }
 
@@ -1812,7 +1831,7 @@
   function startSleep(ev) {
     if (!magSlepen() || sleepSessie) return;
     ev.preventDefault();
-    if (ev.target.closest('#mijnSpook')) { gekozenSlot = null; renderState(currentRoom); }
+    if (ev.target.closest('#mijnSpook')) { gekozenSlot = null; meldVoorlopigePlek(null); renderState(currentRoom); }
     speelGeluid('pak');
     const kloon = document.createElement('div');
     kloon.id = 'sleepKloon';
@@ -1866,7 +1885,7 @@
     sleepSessie.kloon.remove();
     const bewogen = sleepSessie.bewogen;
     sleepSessie = null;
-    if (doel) { speelGeluid('thunk'); gekozenSlot = Number(doel.dataset.mijnSlot); renderState(currentRoom); }
+    if (doel) { speelGeluid('thunk'); gekozenSlot = Number(doel.dataset.mijnSlot); meldVoorlopigePlek(gekozenSlot); renderState(currentRoom); }
     else if (bewogen) renderState(currentRoom); // kaart terug naar de duimzone
   }
 
@@ -2063,6 +2082,7 @@
     // een ronde die het listening/challenge-venster verlaat neemt lokale, per-ronde
     // interactiestate met zich mee — anders overleeft een vergeten keuze/wapening de volgende ronde
     if (!['listening', 'challenge'].includes(room.phase)) { shoutArmed = false; daagSlot = null; }
+    if (room.round?.placedSlot != null || !room.round || kijkSlot?.nonce !== room.round?.nonce) kijkSlot = null;
 
     // plaatsing-state: keuze vervalt zodra de keuzefase voorbij is
     if (!(isMijnBeurt && room.phase === 'listening') || room.round?.placedSlot != null) gekozenSlot = null;

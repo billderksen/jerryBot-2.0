@@ -411,6 +411,22 @@ function afhandelen(ws, data) {
       startRonde(ws.roomCode);
       break;
     }
+    case 'hl:turn:hover': {
+      // voorlopige plek van de actieve speler: puur cosmetisch, raakt de spelstand niet.
+      // Verklapt niets — de plek zegt niets over het nummer zelf.
+      const k = rooms.get(ws.roomCode); if (!k) break;
+      const r = k.room;
+      if (r.phase !== 'listening' || !r.round || r.round.placedSlot != null) break;
+      if (ws.playerId !== r.activeUserId) break;
+      const actief = r.players.get(ws.playerId);
+      const slot = data.slot === null ? null : Number(data.slot);
+      if (slot !== null && (!Number.isInteger(slot) || slot < 0 || slot > actief.timeline.length)) break;
+      const bericht = JSON.stringify({ type: 'hl:turn:hover', slot, nonce: r.round.nonce });
+      for (const c of clients.get(ws.roomCode) ?? []) {
+        if (c.readyState === 1 && c !== ws) c.send(bericht); // de speler zelf ziet zijn eigen schim al
+      }
+      break;
+    }
     case 'hl:turn:place': {
       const k = rooms.get(ws.roomCode); if (!k) break;
       const r = k.room.place(ws.playerId, data.slot);
