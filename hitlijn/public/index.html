@@ -333,6 +333,10 @@
   @keyframes overlayPuls { 50% { box-shadow:0 0 48px rgba(255,157,60,.8); } }
   @media (prefers-reduced-motion: reduce) { .speel-overlay { animation:none; } }
   .replay { background:none; border:none; color:#b9a; font-size:.72rem; text-decoration:underline dotted; cursor:pointer; }
+  /* welke plaat van dit potje speelt er nu — telt ook een gewisseld nummer mee */
+  .plaat-teller { font-family:'Anton'; letter-spacing:2px; font-size:.62rem; color:var(--stagelight);
+    background:rgba(0,0,0,.32); border:1px solid rgba(255,157,60,.35); border-radius:999px;
+    padding:4px 12px; align-self:center; }
 
   /* jouw tijdlijn = hoofdvlak */
   .mijn { margin-top:auto; position:relative; z-index:2; border-radius:20px 20px 0 0; padding:12px 14px 14px;
@@ -594,7 +598,15 @@
     .spook { width:136px; height:124px; }
     /* 'safe center': centreert zolang de kaarten passen, en begint links zodra
        de tijdlijn breder wordt dan het paneel (anders zou het begin wegvallen) */
-    .mijn-lijn, .band-lijn { gap:9px; justify-content:safe center; }
+    .mijn-lijn, .band-lijn { gap:9px; justify-content:safe center;
+      scrollbar-width:thin; scrollbar-color:rgba(255,157,60,.6) rgba(0,0,0,.25); padding-bottom:10px; }
+    .mijn-lijn::-webkit-scrollbar, .band-lijn::-webkit-scrollbar { height:9px; }
+    .mijn-lijn::-webkit-scrollbar-track, .band-lijn::-webkit-scrollbar-track {
+      background:rgba(0,0,0,.25); border-radius:999px; }
+    .mijn-lijn::-webkit-scrollbar-thumb, .band-lijn::-webkit-scrollbar-thumb {
+      background:rgba(255,157,60,.55); border-radius:999px; }
+    .mijn-lijn::-webkit-scrollbar-thumb:hover, .band-lijn::-webkit-scrollbar-thumb:hover {
+      background:rgba(255,157,60,.85); }
     #mijnHint, #spelersHint.onder { text-align:center; }
     .mysterie-kaart { width:136px; height:124px; }
     .mysterie-kaart .speelt { font-size:.55rem; padding:10px 0 5px; }
@@ -800,6 +812,7 @@
   <div class="uitklap" id="chipUitklap" hidden></div>
 
   <div class="stage-mobiel">
+    <div class="plaat-teller" id="plaatTeller" hidden></div>
     <div class="grote-plaat" id="grotePlaat"></div>
     <div class="album-hoes" id="albumHoes" hidden>
       <img id="albumHoesImg" alt="albumhoes">
@@ -1302,6 +1315,11 @@
     // verbergen liet de lege container met opvulling staan
     $('bandWrap').hidden = solo;
     $('kamercodeLabel').hidden = solo; // niemand kan joinen — een code tonen wekt alleen verwarring
+    // plaat-teller: onthoud het nummer, zodat het ook bij de onthulling blijft staan
+    if (room.round?.nonce) plaatNummer = room.round.nonce;
+    if (room.phase === 'lobby' || room.phase === 'finished') plaatNummer = 0;
+    $('plaatTeller').hidden = plaatNummer === 0;
+    $('plaatTeller').textContent = `PLAAT ${plaatNummer}`;
     $('kamercodeLabel').innerHTML = `<span class="kamercode-eyebrow-inline">kamer</span> ${esc(room.roomId)}`;
     bindTikKopieer($('kamercodeLabel'), () => currentRoom?.roomId, () => IKOON.vink);
     bindTikKopieer($('topbarDeelChip'), () => currentRoom ? `${location.origin}/?kamer=${encodeURIComponent(currentRoom.roomId)}` : '', () => IKOON.vink);
@@ -1348,6 +1366,7 @@
       setTimeout(() => el.remove(), 1800);
     } catch { /* decoratie mag het spel nooit breken */ }
   }
+  let plaatNummer = 0;   // hoeveelste plaat van dit potje (round.nonce; wisselen telt mee)
   let vorigeRoep = null; // { nonce, count } — voor de stinger zodra iemand HITLIJN roept
   function renderState(room) {
     currentRoom = room;
@@ -1902,6 +1921,15 @@
     $('btnVerlaat').addEventListener('click', () => wapenVerlaatKnop($('btnVerlaat')));
     $('btnLobbyVerlaat').addEventListener('click', () => wapenVerlaatKnop($('btnLobbyVerlaat')));
 
+    for (const lijn of [$('mijnLijn'), $('bandLijn')]) {
+      lijn.addEventListener('wheel', (ev) => {
+        const kanSchuiven = lijn.scrollWidth > lijn.clientWidth + 1;
+        if (!kanSchuiven || ev.deltaY === 0) return;
+        // verticaal wielen schuift de tijdlijn opzij; de pagina scrolt hier toch niet
+        lijn.scrollLeft += ev.deltaY;
+        ev.preventDefault();
+      }, { passive: false });
+    }
     $('mijnLijn').addEventListener('click', (ev) => {
       const vak = ev.target.closest('[data-mijn-slot]');
       if (vak && currentRoom) tikMijnVak(Number(vak.dataset.mijnSlot), currentRoom, isMijnBeurtNu());
