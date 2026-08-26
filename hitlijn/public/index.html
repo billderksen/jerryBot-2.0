@@ -388,6 +388,16 @@
   .verlaat-knop.zeker { width:auto; padding:0 10px; background:#a3122c; border-color:#ff5560;
     color:#fff; font-size:.68rem; font-weight:700; }
   .verlaat-knop-lobby { width:auto; height:auto; padding:6px 10px; font-size:.72rem; margin-top:4px; }
+  /* volumeschuif is een desktop/tablet-toevoeging; mobiel blijft ongewijzigd */
+  .sp-lijn { display:none; }
+  .sp-chip.sp-actief { display:none; } /* mobiel: staat al groot in de band */
+  .volume-blok { display:none; align-items:center; gap:7px; color:#c9a; margin-left:auto; }
+  .volume-blok input[type=range] { -webkit-appearance:none; appearance:none; width:96px; height:4px;
+    border-radius:3px; background:rgba(255,255,255,.22); outline:none; cursor:pointer; }
+  .volume-blok input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px;
+    border-radius:50%; background:var(--stagelight); box-shadow:0 0 8px rgba(255,157,60,.7); cursor:pointer; }
+  .volume-blok input[type=range]::-moz-range-thumb { width:14px; height:14px; border:none; border-radius:50%;
+    background:var(--stagelight); box-shadow:0 0 8px rgba(255,157,60,.7); cursor:pointer; }
   .geluid-knop { margin-left:auto; }
   .geluid-knop.stil { opacity:.5; }
   .audio-ind { margin-left:0; }
@@ -567,6 +577,84 @@
     .p3 .podium-zuil { height:66px; }
   }
 
+  /* ══ desktop-verfijning: panelen en een spelerskolom die de ruimte echt gebruikt ══ */
+  @media (min-width: 820px) {
+    .volume-blok { display:flex; }
+    #spelView .topbar { gap:14px; padding:16px 20px 10px; }
+    #spelView .topbar .wordmark { font-size:1.3rem; }
+
+    /* alles wordt een paneel: rustige kaders i.p.v. losse elementen op een verloop */
+    #bandWrap, .mijn, .duimzone, #spelersRij .sp-chip {
+      background:linear-gradient(180deg, rgba(74,19,48,.55), rgba(42,10,28,.75));
+      border:1px solid rgba(255,255,255,.09);
+      box-shadow:0 10px 26px rgba(0,0,0,.35);
+    }
+    #bandWrap { margin:0 20px; border-radius:16px; padding:14px 18px; }
+    .mijn { margin:0 20px; border-radius:16px; border-top:4px solid #7a5a2e; padding:14px 18px 16px; }
+    .duimzone { margin:12px 20px 16px; border-radius:16px; }
+
+    /* spelerskolom: elke medespeler een kaart met naam, fiches én zijn tijdlijn */
+    #spelersRij { padding:0 20px 0 0; gap:10px; }
+    #spelersRij .sp-chip {
+      display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+      border-radius:14px; padding:10px 12px; font-size:.78rem; }
+    #spelersRij .sp-chip .sp-lijn {
+      display:flex; flex-wrap:wrap; gap:4px; width:100%; margin-top:4px; }
+    #spelersRij .sp-chip .sp-lijn i {
+      font-style:normal; font-family:'Anton'; font-size:.68rem; letter-spacing:.5px;
+      background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12);
+      border-radius:5px; padding:2px 6px; color:#ffe9c9; }
+    #spelersRij .sp-chip .sp-lijn.leeg { font-family:inherit; font-size:.6rem; color:#a89; }
+    #spelersHint { padding:8px 20px 0 0; font-size:.6rem; }
+
+    /* onthulling naast de hoes i.p.v. eronder — benut de breedte */
+    .album-hoes { flex-direction:row; align-items:center; gap:22px; text-align:left; }
+    .album-hoes .album-tekst { text-align:left; max-width:280px; }
+    .album-hoes .album-tekst b { font-size:1.3rem; line-height:1.2; display:block; margin-bottom:6px; }
+    .album-hoes .album-tekst span { font-size:.9rem; }
+    .stempel-mobiel { font-size:1.05rem; }
+
+    /* eigen beurt: geen dubbele tijdlijn (de band herhaalt wat onderin al interactief staat) */
+    #spelView.mijn-beurt #bandWrap { display:none; }
+
+    /* het podium krijgt een eigen vlak, zodat het midden niet als leegte oogt */
+    .stage-mobiel { margin:0 0 0 20px; border-radius:20px; justify-content:center;
+      background:radial-gradient(ellipse 70% 60% at 50% 40%, rgba(255,157,60,.08), transparent 70%),
+                 linear-gradient(180deg, rgba(255,255,255,.035), rgba(0,0,0,.18));
+      border:1px solid rgba(255,255,255,.07); box-shadow:inset 0 1px 0 rgba(255,255,255,.05); }
+    #spelView.zonder-zij .stage-mobiel { margin:0 20px; }
+
+    /* de hele tafel in de zijkolom, met de speler aan zet gemarkeerd */
+    #spelersRij .sp-chip.sp-actief { display:flex; border-color:rgba(255,157,60,.5);
+      box-shadow:0 0 0 1px rgba(255,157,60,.25), 0 10px 26px rgba(0,0,0,.35); }
+    #spelersRij .sp-chip.sp-actief::before { content:'AAN ZET'; font-family:'Anton'; font-size:.5rem;
+      letter-spacing:1.5px; background:var(--stagelight); color:#301c05; border-radius:4px; padding:2px 6px; }
+
+    /* onthulling: compacte kaart in de podiumkolom i.p.v. een banner over de volle breedte */
+    #stempelWrap { display:flex; justify-content:center; }
+    .stempel-mobiel { max-width:560px; transform:rotate(-.6deg); }
+
+    /* lege actiebalk niet tonen (bv. tijdens de onthulling van iemand anders) */
+    .duimzone:empty { display:none; }
+
+    /* topbar: bedieningsgroep netjes rechts */
+    .geluid-knop { margin-left:0; }
+    #spelView .topbar .audio-ind { margin-left:0; }
+
+    /* duimbalk als één nette werkbalk */
+    .duimzone .gok-kolom { max-width:520px; }
+    .duimzone .gok-rij { gap:10px; }
+    .knop-gok { font-size:.9rem; padding:11px; }
+  }
+
+  /* ruime schermen: meer breedte en een grotere spelerskolom */
+  @media (min-width: 1200px) {
+    body { max-width:1280px; }
+    #spelView { grid-template-columns:1fr 360px; }
+    .sz-m2 { width:118px; height:104px; }
+    .sz-m2 .jaar { font-size:1.5rem; }
+  }
+
   /* muis aanwezig: subtiele hovers (touch krijgt hier niets van mee) */
   @media (hover: hover) and (pointer: fine) {
     .pool-kaart:hover:not(.gekozen) { transform:translateY(-3px); border-color:rgba(255,255,255,.3); }
@@ -645,6 +733,10 @@
     <div class="wordmark">HIT<span>LIJN</span></div>
     <span class="kamercode" id="kamercodeLabel" role="button" tabindex="0"></span>
     <button type="button" class="deel-chip-compact" id="topbarDeelChip" title="Deel-link kopiëren"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.12em"><path d="M10 14a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07l-1.42 1.41"/><path d="M14 10a5 5 0 0 0-7.07 0l-2.12 2.12a5 5 0 1 0 7.07 7.07l1.42-1.41"/></svg></button>
+    <div class="volume-blok" title="Muziekvolume">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+      <input type="range" id="volumeSchuif" min="0" max="100" step="1" aria-label="Muziekvolume">
+    </div>
     <button type="button" class="verlaat-knop geluid-knop" id="btnGeluid" title="Geluidseffecten aan/uit"></button>
     <span class="audio-ind" id="audioInd"><span class="dot-pv"></span> preview</span>
   </div>
@@ -1025,7 +1117,12 @@
 
   function spelerChipHtml(p) {
     const weg = p.connected === false;
-    return `<span class="sp-chip${weg ? ' speler-weg' : ''}" data-speler="${esc(p.id)}">${avaHtml(p, 22)} ${esc(p.displayName)}${weg ? '<span class="weg-tag">weg</span>' : ''} · <b>${p.timeline.length}</b> ${chipsHtml(p.tokens)}</span>`;
+    // .sp-lijn (de jaartallen van die speler) is alleen zichtbaar op brede schermen —
+    // daar is ruimte om ieders tijdlijn permanent te tonen; mobiel blijft de compacte chip
+    const lijn = p.timeline.length
+      ? `<span class="sp-lijn">${p.timeline.map((c) => `<i>${c.year}</i>`).join('')}</span>`
+      : '<span class="sp-lijn leeg">nog geen kaarten</span>';
+    return `<span class="sp-chip${weg ? ' speler-weg' : ''}${p.isActief ? ' sp-actief' : ''}" data-speler="${esc(p.id)}">${avaHtml(p, 22)} ${esc(p.displayName)}${weg ? '<span class="weg-tag">weg</span>' : ''} · <b>${p.timeline.length}</b> ${chipsHtml(p.tokens)}${lijn}</span>`;
   }
 
   function stempelHtml(reveal, room) {
@@ -1169,11 +1266,16 @@
     $('stempelWrap').innerHTML = (room.lastReveal && ['reveal', 'finished'].includes(room.phase))
       ? stempelHtml(room.lastReveal, room) : '';
 
-    const andereSpelers = room.players.filter((p) => p.id !== room.activeUserId && (!me || p.id !== me.id));
+    // desktop toont de hele tafel in de zijkolom; op mobiel blijft de actieve speler
+    // eruit (die staat al groot in de band) — CSS verbergt hem daar
+    const andereSpelers = room.players.filter((p) => !me || p.id !== me.id)
+      .map((p) => ({ ...p, isActief: p.id === room.activeUserId }));
     zetHtml($('spelersRij'), andereSpelers.map(spelerChipHtml).join(''));
     $('spelersHint').hidden = andereSpelers.length === 0;
     // alleen betekenisvol in de desktop-media-query; op mobiel is deze klasse inert
     $('spelView').classList.toggle('zonder-zij', andereSpelers.length === 0);
+    // desktop: als ik zelf aan zet ben is de band een kopie van mijn eigen tijdlijn
+    $('spelView').classList.toggle('mijn-beurt', isMijnBeurt);
 
     renderMijn(room, ik, isMijnBeurt);
     renderDuimzone(room, ik, isMijnBeurt);
@@ -1305,6 +1407,20 @@
   // dan is één regel per geluid genoeg — GELUID_BESTANDEN.goed = '/geluiden/goed.mp3'
   // — en wint het bestand automatisch van de synthese.
   let geluidAan = localStorage.getItem('hlGeluidAan') !== '0';
+  // muziekvolume (0-1). Geldt voor beide bronnen: het <audio>-element voor previews en
+  // de Spotify-webspeler. Los van de geluidseffecten, die hun eigen niveau houden.
+  let muziekVolume = Math.min(1, Math.max(0, Number(localStorage.getItem('hlVolume') ?? 0.7)));
+  function pasVolumeToe() {
+    try { $('rondeAudio').volume = muziekVolume; } catch { /* iOS negeert dit */ }
+    try { spotifyPlayer?.setVolume?.(muziekVolume); } catch { /* speler nog niet klaar */ }
+  }
+  function zetVolume(v) {
+    muziekVolume = Math.min(1, Math.max(0, v));
+    localStorage.setItem('hlVolume', String(muziekVolume));
+    pasVolumeToe();
+    const s = $('volumeSchuif');
+    if (s && Number(s.value) !== Math.round(muziekVolume * 100)) s.value = String(Math.round(muziekVolume * 100));
+  }
   let sfxCtx = null;
   let sfxGain = null;
   const GELUID_BESTANDEN = {}; // naam -> url; leeg = alles synthese
@@ -1462,6 +1578,7 @@
     if (!payload.previewUrl) { toonMelding('Deze plaat heeft geen geluidsfragment — gok op je gevoel'); meldAudioDebug('geen-previewurl'); return; }
     const audio = $('rondeAudio');
     audio.src = payload.previewUrl;
+    audio.volume = muziekVolume;
     const speelt = audio.play();
     const knop = $('btnReplay');
     if (knop) knop.hidden = false; // altijd beschikbaar zodra er iets te herhalen valt, niet alleen bij een geblokkeerde autoplay
@@ -1726,6 +1843,7 @@
       const kaart = ev.target.closest('#mysterieKaart');
       if (kaart && !kaart.classList.contains('weg')) startSleep(ev);
     });
+    $('volumeSchuif').addEventListener('input', (ev) => zetVolume(Number(ev.target.value) / 100));
     $('btnGeluid').addEventListener('click', () => {
       geluidAan = !geluidAan;
       localStorage.setItem('hlGeluidAan', geluidAan ? '1' : '0');
@@ -1948,7 +2066,7 @@
           spotifyPlayer = new Spotify.Player({
             name: 'HITLIJN',
             getOAuthToken: (cb) => cb(spotifyTokens?.access ?? ''),
-            volume: 0.8,
+            volume: muziekVolume,
           });
           spotifyPlayer.addListener('ready', ({ device_id }) => { spotifyDeviceId = device_id; resolve(true); });
           spotifyPlayer.addListener('not_ready', () => { spotifyDeviceId = null; });
@@ -1998,7 +2116,7 @@
       if (speeldeSpotify && !herkansing && spotifyPlayer) {
         try {
           for (const v of [0.65, 0.4, 0.2, 0.08]) {
-            await spotifyPlayer.setVolume(v);
+            await spotifyPlayer.setVolume(v * muziekVolume);
             await new Promise((rs) => setTimeout(rs, 140));
           }
         } catch { /* fade is decoratie */ }
@@ -2042,7 +2160,7 @@
         throw new Error('spotify-play mislukt: ' + res.status);
       }
       spotifyPlayingThisRound = true;
-      try { await spotifyPlayer?.setVolume?.(1); } catch { /* volume terug is best effort */ }
+      try { await spotifyPlayer?.setVolume?.(muziekVolume); } catch { /* volume terug is best effort */ }
       // laat zien wáár hij speelt — Connect pakt soms een ander apparaat (laptop!)
       spotifyFetch('/me/player').then(async (r) => {
         if (!r.ok) return;
@@ -2147,6 +2265,7 @@
   laadSpotifyTokens();
   bindVasteInteractie();
   syncGeluidKnop();
+  zetVolume(muziekVolume); // schuif op de bewaarde stand + direct toepassen
   (async () => {
     await initConfig();               // spotifyClientId + SHOUT
     await verwerkSpotifyCallback();   // ruilt ?code in als we net van Spotify terugkomen
