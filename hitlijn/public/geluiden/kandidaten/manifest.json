@@ -1,0 +1,172 @@
+{
+ "tik": [
+  {
+   "bestand": "tik-1.mp3",
+   "label": "klik zacht",
+   "bron": "interface-sounds/Audio/click_001.ogg"
+  },
+  {
+   "bestand": "tik-2.mp3",
+   "label": "klik dof",
+   "bron": "interface-sounds/Audio/click_004.ogg"
+  },
+  {
+   "bestand": "tik-3.mp3",
+   "label": "schakelaar",
+   "bron": "interface-sounds/Audio/switch_002.ogg"
+  }
+ ],
+ "pak": [
+  {
+   "bestand": "pak-1.mp3",
+   "label": "kaart schuift",
+   "bron": "casino-audio/Audio/card-slide-1.ogg"
+  },
+  {
+   "bestand": "pak-2.mp3",
+   "label": "kaart pakken",
+   "bron": "casino-audio/Audio/card-shove-2.ogg"
+  },
+  {
+   "bestand": "pak-3.mp3",
+   "label": "oppakken kort",
+   "bron": "interface-sounds/Audio/drop_002.ogg"
+  }
+ ],
+ "thunk": [
+  {
+   "bestand": "thunk-1.mp3",
+   "label": "kaart neerleggen",
+   "bron": "casino-audio/Audio/card-place-1.ogg"
+  },
+  {
+   "bestand": "thunk-2.mp3",
+   "label": "kaart tikken",
+   "bron": "casino-audio/Audio/card-place-3.ogg"
+  },
+  {
+   "bestand": "thunk-3.mp3",
+   "label": "doffe plof",
+   "bron": "interface-sounds/Audio/drop_004.ogg"
+  }
+ ],
+ "bevestig": [
+  {
+   "bestand": "bevestig-1.mp3",
+   "label": "bevestiging",
+   "bron": "interface-sounds/Audio/confirmation_001.ogg"
+  },
+  {
+   "bestand": "bevestig-2.mp3",
+   "label": "bevestiging warm",
+   "bron": "interface-sounds/Audio/confirmation_004.ogg"
+  },
+  {
+   "bestand": "bevestig-3.mp3",
+   "label": "bong",
+   "bron": "interface-sounds/Audio/bong_001.ogg"
+  }
+ ],
+ "goed": [
+  {
+   "bestand": "goed-1.mp3",
+   "label": "pizzicato kort",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI00.ogg"
+  },
+  {
+   "bestand": "goed-2.mp3",
+   "label": "steeldrum",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL00.ogg"
+  },
+  {
+   "bestand": "goed-3.mp3",
+   "label": "8-bit",
+   "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES00.ogg"
+  }
+ ],
+ "fout": [
+  {
+   "bestand": "fout-1.mp3",
+   "label": "fout kort",
+   "bron": "interface-sounds/Audio/error_003.ogg"
+  },
+  {
+   "bestand": "fout-2.mp3",
+   "label": "fout laag",
+   "bron": "interface-sounds/Audio/error_006.ogg"
+  },
+  {
+   "bestand": "fout-3.mp3",
+   "label": "8-bit helaas",
+   "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES13.ogg"
+  }
+ ],
+ "munt": [
+  {
+   "bestand": "munt-1.mp3",
+   "label": "fiche neerleggen",
+   "bron": "casino-audio/Audio/chip-lay-1.ogg"
+  },
+  {
+   "bestand": "munt-2.mp3",
+   "label": "fiches rinkelen",
+   "bron": "casino-audio/Audio/chips-handle-2.ogg"
+  },
+  {
+   "bestand": "munt-3.mp3",
+   "label": "fiches tikken",
+   "bron": "casino-audio/Audio/chips-collide-1.ogg"
+  }
+ ],
+ "plop": [
+  {
+   "bestand": "plop-1.mp3",
+   "label": "fiche weg",
+   "bron": "casino-audio/Audio/chip-lay-3.ogg"
+  },
+  {
+   "bestand": "plop-2.mp3",
+   "label": "fiche botsing",
+   "bron": "casino-audio/Audio/chips-collide-3.ogg"
+  },
+  {
+   "bestand": "plop-3.mp3",
+   "label": "wegzakken",
+   "bron": "interface-sounds/Audio/minimize_002.ogg"
+  }
+ ],
+ "fanfare": [
+  {
+   "bestand": "fanfare-1.mp3",
+   "label": "sax-fanfare",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX07.ogg"
+  },
+  {
+   "bestand": "fanfare-2.mp3",
+   "label": "steel-fanfare",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL07.ogg"
+  },
+  {
+   "bestand": "fanfare-3.mp3",
+   "label": "hit-fanfare",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT03.ogg"
+  }
+ ],
+ "stinger": [
+  {
+   "bestand": "stinger-1.mp3",
+   "label": "hit-stinger",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT00.ogg"
+  },
+  {
+   "bestand": "stinger-2.mp3",
+   "label": "digitaal",
+   "bron": "digital-audio/Audio/laser1.ogg"
+  },
+  {
+   "bestand": "stinger-3.mp3",
+   "label": "8-bit spannend",
+   "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES05.ogg"
+  }
+ ]
+}

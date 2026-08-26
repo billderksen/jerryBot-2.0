@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HITLIJN — geluidenlab</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
+<style>
+  :root { --night:#17091c; --stagelight:#ff9d3c; --hotpink:#ff2e88; --teal:#22e0c0; --cardboard:#f2e8d5; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Bricolage Grotesque', system-ui, sans-serif; color:#f6eee2; min-height:100dvh;
+    padding:26px 18px 60px; background:
+      radial-gradient(ellipse 90% 30% at 50% 8%, rgba(255,157,60,.16), transparent 65%),
+      radial-gradient(ellipse 60% 25% at 8% 60%, rgba(255,46,136,.10), transparent 70%),
+      var(--night); }
+  .wrap { max-width:860px; margin:0 auto; }
+  .wordmark { font-family:'Anton'; letter-spacing:2px; color:var(--cardboard); font-size:2rem;
+    text-shadow:3px 3px 0 var(--hotpink), 5px 5px 0 rgba(0,0,0,.4); transform:rotate(-1.5deg); }
+  .wordmark span { color:var(--stagelight); }
+  h1 small { display:block; font-family:'Bricolage Grotesque'; font-size:.8rem; letter-spacing:0;
+    color:#c9a; margin-top:10px; text-shadow:none; transform:none; font-weight:400; line-height:1.6; }
+  .moment { background:linear-gradient(180deg, rgba(74,19,48,.5), rgba(42,10,28,.7));
+    border:1px solid rgba(255,255,255,.09); border-radius:16px; padding:14px 16px; margin-top:16px; }
+  .moment h2 { font-family:'Anton'; letter-spacing:1.5px; font-size:.95rem; color:#ffe9c9; }
+  .moment p { font-size:.72rem; color:#a89; margin-top:2px; }
+  .knoppen { display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
+  button { font-family:inherit; cursor:pointer; border-radius:11px; padding:10px 14px; font-size:.78rem;
+    border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.32); color:#e9dcc8; }
+  button:hover { border-color:rgba(255,157,60,.6); }
+  button.gekozen { background:rgba(34,224,192,.14); border-color:var(--teal); color:#fff; }
+  button.synth { border-style:dashed; }
+  .keuzeblok { margin-top:26px; background:rgba(0,0,0,.42); border:1.5px dashed rgba(255,157,60,.5);
+    border-radius:14px; padding:16px; }
+  .keuzeblok h2 { font-family:'Anton'; letter-spacing:1.5px; font-size:.9rem; color:var(--stagelight); }
+  pre { margin-top:10px; font-size:.74rem; line-height:1.7; color:#bdf0e6; white-space:pre-wrap; }
+  .voet { margin-top:22px; font-size:.66rem; color:#765; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="wordmark">HIT<span>LIJN</span></h1>
+  <h1><small>Geluidenlab — luister per moment het huidige geluid (gestippelde knop) naast drie
+  rechtenvrije kandidaten uit Kenney's CC0-pakketten. Tik je keuze aan; onderaan staat het
+  overzicht dat je aan mij kunt doorgeven.</small></h1>
+
+  <div id="lijst"></div>
+
+  <div class="keuzeblok">
+    <h2>JOUW KEUZE</h2>
+    <pre id="samenvatting">nog niets gekozen</pre>
+    <div class="knoppen">
+      <button id="btnKopieer">Kopieer overzicht</button>
+      <button id="btnReset">Begin opnieuw</button>
+    </div>
+  </div>
+
+  <div class="voet">Alle kandidaten zijn CC0 (publiek domein) van kenney.nl — vrij te gebruiken,
+  ook commercieel, zonder naamsvermelding. De huidige geluiden zijn door de browser zelf
+  gesynthetiseerd.</div>
+</div>
+
+<script>
+(() => {
+  const MOMENTEN = [
+    ['tik', 'Knop of kaart aantikken', 'het vaakst gehoorde geluid — moet kort en zacht zijn'],
+    ['pak', 'Plaat oppakken om te slepen', 'begin van je zet'],
+    ['thunk', 'Kaart op een plek zetten', 'het neerleggen zelf'],
+    ['bevestig', 'LEG HIER / DAAG UIT', 'je bevestigt je keuze'],
+    ['goed', 'Goed gelegd', 'het feestmoment bij de onthulling'],
+    ['fout', 'Fout gelegd', 'het "helaas"-moment'],
+    ['munt', 'Fiche erbij (+1)', 'goede gok op artiest en titel'],
+    ['plop', 'Fiche kwijt (−1)', 'nieuw nummer of uitdaging'],
+    ['fanfare', 'Iemand wint', 'einde van het potje'],
+    ['stinger', 'Iemand roept HITLIJN', 'hoor je bij alle andere spelers'],
+  ];
+
+  // ── de huidige (gesynthetiseerde) geluiden, identiek aan die in het spel ──
+  let ctx = null, gain = null;
+  function audio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!ctx) { ctx = new AC(); gain = ctx.createGain(); gain.gain.value = 0.22; gain.connect(ctx.destination); }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function toon(c, { freq = 440, tijd = 0, duur = .08, type = 'sine', van = null, naar = null, volume = 1 }) {
+    const osc = c.createOscillator(), g = c.createGain(), t0 = c.currentTime + tijd;
+    osc.type = type;
+    osc.frequency.setValueAtTime(van ?? freq, t0);
+    if (naar) osc.frequency.exponentialRampToValueAtTime(naar, t0 + duur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(volume, t0 + .008);
+    g.gain.exponentialRampToValueAtTime(.001, t0 + duur);
+    osc.connect(g); g.connect(gain); osc.start(t0); osc.stop(t0 + duur + .02);
+  }
+  const SYNTH = {
+    tik: (c) => toon(c, { van:620, naar:420, duur:.07, type:'triangle', volume:.7 }),
+    pak: (c) => toon(c, { van:380, naar:560, duur:.09, type:'triangle', volume:.7 }),
+    thunk: (c) => toon(c, { van:300, naar:180, duur:.1 }),
+    bevestig: (c) => { toon(c, { freq:520, duur:.07, type:'triangle' }); toon(c, { freq:700, tijd:.07, duur:.09, type:'triangle' }); },
+    goed: (c) => [523,659,784].forEach((f,i) => toon(c, { freq:f, tijd:i*.09, duur:.16, type:'triangle' })),
+    fout: (c) => { toon(c, { van:260, naar:240, duur:.18, type:'sawtooth', volume:.45 }); toon(c, { van:220, naar:185, tijd:.18, duur:.3, type:'sawtooth', volume:.45 }); },
+    munt: (c) => { toon(c, { freq:988, duur:.07, type:'square', volume:.35 }); toon(c, { freq:1319, tijd:.07, duur:.18, type:'square', volume:.35 }); },
+    plop: (c) => toon(c, { van:240, naar:140, duur:.12 }),
+    fanfare: (c) => [523,659,784,1047].forEach((f,i) => toon(c, { freq:f, tijd:i*.11, duur:i===3?.4:.14, type:'triangle' })),
+    stinger: (c) => { toon(c, { van:196, naar:185, duur:.32, type:'sawtooth', volume:.5 }); toon(c, { freq:466, tijd:.02, duur:.12, type:'square', volume:.3 }); toon(c, { freq:554, tijd:.15, duur:.24, type:'square', volume:.35 }); },
+  };
+
+  const keuze = JSON.parse(localStorage.getItem('hlGeluidKeuze') || '{}');
+  let manifest = {};
+
+  function speelBestand(bestand) {
+    const a = new Audio('/geluiden/kandidaten/' + bestand);
+    a.volume = 0.8;
+    a.play().catch(() => {});
+  }
+
+  function toonSamenvatting() {
+    const regels = MOMENTEN.map(([id, titel]) => {
+      const k = keuze[id];
+      const wat = !k ? '— (nog niets gekozen)' : k === 'synth' ? 'huidige (synthesizer)' : k;
+      return `${(id + ':').padEnd(10)} ${wat}`;
+    });
+    document.getElementById('samenvatting').textContent = regels.join('\n');
+  }
+
+  function render() {
+    const lijst = document.getElementById('lijst');
+    lijst.innerHTML = '';
+    for (const [id, titel, uitleg] of MOMENTEN) {
+      const blok = document.createElement('div');
+      blok.className = 'moment';
+      const kandidaten = manifest[id] ?? [];
+      blok.innerHTML = `<h2>${titel}</h2><p>${uitleg}</p><div class="knoppen">
+        <button class="synth ${keuze[id] === 'synth' ? 'gekozen' : ''}" data-id="${id}" data-kies="synth">▸ huidige (synth)</button>
+        ${kandidaten.map((k) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}">▸ ${k.label}</button>`).join('')}
+      </div>`;
+      lijst.appendChild(blok);
+    }
+    toonSamenvatting();
+  }
+
+  document.addEventListener('click', (ev) => {
+    const knop = ev.target.closest('button[data-id]');
+    if (!knop) return;
+    const id = knop.dataset.id;
+    if (knop.dataset.bestand) speelBestand(knop.dataset.bestand);
+    else SYNTH[id]?.(audio());
+    keuze[id] = knop.dataset.kies;
+    localStorage.setItem('hlGeluidKeuze', JSON.stringify(keuze));
+    render();
+  });
+
+  document.getElementById('btnKopieer').addEventListener('click', async () => {
+    const tekst = document.getElementById('samenvatting').textContent;
+    try { await navigator.clipboard.writeText(tekst); document.getElementById('btnKopieer').textContent = 'Gekopieerd!'; }
+    catch { document.getElementById('btnKopieer').textContent = 'Kopiëren lukte niet — selecteer de tekst zelf'; }
+    setTimeout(() => { document.getElementById('btnKopieer').textContent = 'Kopieer overzicht'; }, 2000);
+  });
+  document.getElementById('btnReset').addEventListener('click', () => {
+    for (const k of Object.keys(keuze)) delete keuze[k];
+    localStorage.removeItem('hlGeluidKeuze');
+    render();
+  });
+
+  fetch('/geluiden/kandidaten/manifest.json')
+    .then((r) => r.json())
+    .then((m) => { manifest = m; render(); })
+    .catch(() => { document.getElementById('lijst').innerHTML = '<div class="moment">Kon de kandidaten niet laden.</div>'; });
+})();
+</script>
+</body>
+</html>

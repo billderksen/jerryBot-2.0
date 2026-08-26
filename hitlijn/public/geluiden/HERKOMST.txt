@@ -1,0 +1,8 @@
+Geluidskandidaten in kandidaten/ komen uit de CC0-pakketten van Kenney (kenney.nl):
+  Interface Sounds, Casino Audio, Music Jingles, Digital Audio.
+
+Licentie: Creative Commons Zero (CC0 1.0, publiek domein) — vrij te gebruiken, ook
+commercieel, zonder naamsvermelding. Zie de License.txt in elk oorspronkelijk pakket.
+
+Omgezet naar mono mp3 (96 kbit/s) met ffmpeg; manifest.json koppelt elk bestand aan
+het spelmoment en het bronbestand. Kiezen kan via /geluidenlab.html.
