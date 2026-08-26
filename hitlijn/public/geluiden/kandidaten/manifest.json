@@ -14,6 +14,36 @@
    "bestand": "tik-3.mp3",
    "label": "schakelaar",
    "bron": "interface-sounds/Audio/switch_002.ogg"
+  },
+  {
+   "bestand": "tik-4.mp3",
+   "label": "ui-klik 1",
+   "bron": "ui-audio/Audio/click1.ogg"
+  },
+  {
+   "bestand": "tik-5.mp3",
+   "label": "ui-klik 5",
+   "bron": "ui-audio/Audio/click5.ogg"
+  },
+  {
+   "bestand": "tik-6.mp3",
+   "label": "muisklik",
+   "bron": "ui-audio/Audio/mouseclick1.ogg"
+  },
+  {
+   "bestand": "tik-7.mp3",
+   "label": "select zacht",
+   "bron": "interface-sounds/Audio/select_003.ogg"
+  },
+  {
+   "bestand": "tik-8.mp3",
+   "label": "tick droog",
+   "bron": "interface-sounds/Audio/tick_002.ogg"
+  },
+  {
+   "bestand": "tik-9.mp3",
+   "label": "glas-tik",
+   "bron": "interface-sounds/Audio/glass_002.ogg"
   }
  ],
  "pak": [
@@ -31,6 +61,21 @@
    "bestand": "pak-3.mp3",
    "label": "oppakken kort",
    "bron": "interface-sounds/Audio/drop_002.ogg"
+  },
+  {
+   "bestand": "pak-4.mp3",
+   "label": "kaart schuift traag",
+   "bron": "casino-audio/Audio/card-slide-6.ogg"
+  },
+  {
+   "bestand": "pak-5.mp3",
+   "label": "stof/opnemen",
+   "bron": "rpg-audio/Audio/cloth1.ogg"
+  },
+  {
+   "bestand": "pak-6.mp3",
+   "label": "zachte zwiep",
+   "bron": "ui-audio/Audio/rollover2.ogg"
   }
  ],
  "thunk": [
@@ -48,6 +93,21 @@
    "bestand": "thunk-3.mp3",
    "label": "doffe plof",
    "bron": "interface-sounds/Audio/drop_004.ogg"
+  },
+  {
+   "bestand": "thunk-4.mp3",
+   "label": "kaart neer (vol)",
+   "bron": "casino-audio/Audio/card-place-4.ogg"
+  },
+  {
+   "bestand": "thunk-5.mp3",
+   "label": "neerleggen dof",
+   "bron": "rpg-audio/Audio/bookPlace2.ogg"
+  },
+  {
+   "bestand": "thunk-6.mp3",
+   "label": "zachte plof",
+   "bron": "impact-sounds/Audio/footstep_carpet_002.ogg"
   }
  ],
  "bevestig": [
@@ -65,6 +125,21 @@
    "bestand": "bevestig-3.mp3",
    "label": "bong",
    "bron": "interface-sounds/Audio/bong_001.ogg"
+  },
+  {
+   "bestand": "bevestig-4.mp3",
+   "label": "bevestiging helder",
+   "bron": "interface-sounds/Audio/confirmation_002.ogg"
+  },
+  {
+   "bestand": "bevestig-5.mp3",
+   "label": "schakelaar stevig",
+   "bron": "ui-audio/Audio/switch2.ogg"
+  },
+  {
+   "bestand": "bevestig-6.mp3",
+   "label": "select bevestigend",
+   "bron": "interface-sounds/Audio/select_001.ogg"
   }
  ],
  "goed": [
@@ -82,6 +157,21 @@
    "bestand": "goed-3.mp3",
    "label": "8-bit",
    "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES00.ogg"
+  },
+  {
+   "bestand": "goed-4.mp3",
+   "label": "pizzicato uitbundig",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI07.ogg"
+  },
+  {
+   "bestand": "goed-5.mp3",
+   "label": "sax kort",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX00.ogg"
+  },
+  {
+   "bestand": "goed-6.mp3",
+   "label": "steel vrolijk",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL04.ogg"
   }
  ],
  "fout": [
@@ -99,6 +189,21 @@
    "bestand": "fout-3.mp3",
    "label": "8-bit helaas",
    "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES13.ogg"
+  },
+  {
+   "bestand": "fout-4.mp3",
+   "label": "pizzicato helaas",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI10.ogg"
+  },
+  {
+   "bestand": "fout-5.mp3",
+   "label": "sax helaas",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX10.ogg"
+  },
+  {
+   "bestand": "fout-6.mp3",
+   "label": "fout zacht",
+   "bron": "interface-sounds/Audio/error_008.ogg"
   }
  ],
  "munt": [
@@ -168,5 +273,16 @@
    "label": "8-bit spannend",
    "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES05.ogg"
   }
- ]
+ ],
+ "live": {
+  "pak": "pak-1.mp3",
+  "thunk": "thunk-2.mp3",
+  "bevestig": "bevestig-1.mp3",
+  "goed": "goed-2.mp3",
+  "fout": "fout-1.mp3",
+  "munt": "munt-2.mp3",
+  "plop": "plop-1.mp3",
+  "fanfare": "fanfare-3.mp3",
+  "stinger": "stinger-2.mp3"
+ }
 }

@@ -1462,7 +1462,19 @@
   }
   let sfxCtx = null;
   let sfxGain = null;
-  const GELUID_BESTANDEN = {}; // naam -> url; leeg = alles synthese
+  // naam -> url; wat hier staat wint van de synthese. Gekozen via /geluidenlab.html uit
+  // Kenney's CC0-pakketten (publiek domein). 'tik' staat nog op synthese.
+  const GELUID_BESTANDEN = {
+    pak: '/geluiden/pak.mp3',
+    thunk: '/geluiden/thunk.mp3',
+    bevestig: '/geluiden/bevestig.mp3',
+    goed: '/geluiden/goed.mp3',
+    fout: '/geluiden/fout.mp3',
+    munt: '/geluiden/munt.mp3',
+    plop: '/geluiden/plop.mp3',
+    fanfare: '/geluiden/fanfare.mp3',
+    stinger: '/geluiden/stinger.mp3',
+  };
   const sfxBuffers = {};
   function sfxContext() {
     const AC = window.AudioContext || window.webkitAudioContext;

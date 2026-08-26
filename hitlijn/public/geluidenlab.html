@@ -107,6 +107,7 @@
   };
 
   const keuze = JSON.parse(localStorage.getItem('hlGeluidKeuze') || '{}');
+  // manifest.live vult de beginstand aan: wat al in het spel zit, staat meteen aangevinkt
   let manifest = {};
 
   function speelBestand(bestand) {
@@ -133,7 +134,7 @@
       const kandidaten = manifest[id] ?? [];
       blok.innerHTML = `<h2>${titel}</h2><p>${uitleg}</p><div class="knoppen">
         <button class="synth ${keuze[id] === 'synth' ? 'gekozen' : ''}" data-id="${id}" data-kies="synth">▸ huidige (synth)</button>
-        ${kandidaten.map((k) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}">▸ ${k.label}</button>`).join('')}
+        ${kandidaten.map((k) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}">▸ ${k.label}${manifest.live?.[id] === k.bestand ? ' <b>· nu in het spel</b>' : ''}</button>`).join('')}
       </div>`;
       lijst.appendChild(blok);
     }
@@ -165,7 +166,7 @@
 
   fetch('/geluiden/kandidaten/manifest.json')
     .then((r) => r.json())
-    .then((m) => { manifest = m; render(); })
+    .then((m) => { manifest = m; for (const [id, b] of Object.entries(m.live ?? {})) if (!keuze[id]) keuze[id] = b; render(); })
     .catch(() => { document.getElementById('lijst').innerHTML = '<div class="moment">Kon de kandidaten niet laden.</div>'; });
 })();
 </script>
