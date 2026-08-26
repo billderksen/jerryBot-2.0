@@ -517,6 +517,13 @@
     #lobbyPools .pool-kaart b { font-size:.72rem; }
     #lobbyPools .pool-kaart small { font-size:.6rem; }
     #instapLobby .vinyl-deco { right:-150px; top:-30px; opacity:.18; } /* uit de spelerslijst blijven */
+    /* geen kamercode/QR (solo): één kolom, netjes gecentreerd */
+    #instapLobby.zonder-links {
+      max-width:640px;
+      grid-template-columns:1fr;
+      grid-template-areas:'kop' 'rechts' 'verlaat';
+    }
+    #instapLobby.zonder-links .lobby-kolom.links { display:none; }
     #instapLobby > .wordmark { grid-area:kop; justify-self:center; }
     .lobby-kolom { display:flex; flex-direction:column; align-items:center; gap:14px; min-width:0; }
     .lobby-kolom.links { grid-area:links; }
@@ -1100,6 +1107,9 @@
     showInstap('lobby');
     const soloQr = Boolean(room.settings?.solo);
     $('lobbyQrBlok').hidden = soloQr;
+    // solo: linkerkolom (code + deel-link + QR) is leeg; laat het desktop-raster dan
+    // inklappen, anders claimt die kolom ruimte en staat alles uit het midden
+    $('instapLobby').classList.toggle('zonder-links', soloQr);
     if (!soloQr && $('lobbyQr').dataset.kamer !== room.roomId) {
       $('lobbyQr').dataset.kamer = room.roomId;
       $('lobbyQr').src = `/api/qr/${encodeURIComponent(room.roomId)}`;
