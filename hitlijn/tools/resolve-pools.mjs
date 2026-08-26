@@ -112,6 +112,9 @@ let n = 0, zonder = [];
 for (const song of songs) {
   if (n >= LIMIT) break;
   const key = songKey(song);
+  // metadata uit de bron (incl. jaartal-correcties) wint altijd van de cache: de cache
+  // bewaart alleen de dure zoekresultaten, niet de waarheid over het nummer zelf
+  if (state[key] && state[key].year !== song.year) state[key] = { ...state[key], year: song.year };
   if (!state[key]) {
     n++;
     const deezer = await zoekDeezer(song); await sleep(1000);
