@@ -1,0 +1,32 @@
+{
+ "gemaakt": "2026-08-26T07:30:03.219Z",
+ "afwijkingen": [
+  {
+   "key": "beatles|get back",
+   "artist": "The Beatles",
+   "title": "Get Back",
+   "year": 1969,
+   "jaar": 2000,
+   "bewijs": "Get Back — The Beatles",
+   "op": "2026-08-26"
+  },
+  {
+   "key": "james brown|i got you",
+   "artist": "James Brown",
+   "title": "I Got You (I Feel Good)",
+   "year": 1965,
+   "jaar": 1991,
+   "bewijs": "I Got You (I Feel Good) — James Brown",
+   "op": "2026-08-26"
+  },
+  {
+   "key": "meat loaf|paradise by the dashboard light",
+   "artist": "Meat Loaf",
+   "title": "Paradise By The Dashboard Light",
+   "year": 1978,
+   "jaar": 1984,
+   "bewijs": "Paradise by the Dashboard Light — Meat Loaf",
+   "op": "2026-08-26"
+  }
+ ]
+}

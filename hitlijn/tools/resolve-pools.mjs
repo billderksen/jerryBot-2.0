@@ -36,7 +36,16 @@ function laadBronnen() {
     if (naam === 'hitster-original-nl') songs.forEach((s) => origKeys.add(songKey(s)));
     return songs;
   });
-  return { songs: dedupeSongs([...uitDecks, ...basis]), gpKeys, spKeys, origKeys }; // decks eerst: hun (kaart)jaar wint bij dubbelen
+  // Jaartal-correctielaag (maak-jaarcorrecties.mjs): gescrapete decks dragen soms het
+  // heruitgavejaar. Vóór dedupe toegepast, zodat elke variant het juiste jaar krijgt.
+  const corrPad = join(__dirname, 'jaar-correcties.json');
+  const corr = existsSync(corrPad) ? JSON.parse(readFileSync(corrPad, 'utf8')).correcties ?? {} : {};
+  const gecorrigeerd = [...uitDecks, ...basis].map((s) => {
+    const c = corr[songKey(s)];
+    return c && Number.isFinite(c.jaar) ? { ...s, year: c.jaar } : s;
+  });
+  if (Object.keys(corr).length) console.log(`(${Object.keys(corr).length} jaartal-correcties toegepast)`);
+  return { songs: dedupeSongs(gecorrigeerd), gpKeys, spKeys, origKeys }; // decks eerst: hun (kaart)jaar wint bij dubbelen
 }
 
 async function spotifyToken() {
