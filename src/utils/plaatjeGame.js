@@ -152,6 +152,10 @@ export class PlaatjeRoom {
       const card = dealCard();
       this.usedSongIds.add(card.youtubeId);
       p.timeline = [{ title: card.title, artist: card.artist, year: card.year }];
+      // vers potje = verse fiches — zonder dit droeg een rematch de oude stand mee
+      // (en telde tokensEarned dubbel in het leaderboard van het volgende potje)
+      p.tokens = 2;
+      p.tokensEarned = 0;
     }
     this.activeIdx = 0;
     this.phase = 'loading';

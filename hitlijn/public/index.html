@@ -320,6 +320,10 @@
   .sp-chip .ava { width:22px; height:22px; font-size:.6rem; }
   .sp-chip b { color:var(--teal); }
   .sp-chip .chip { width:10px; height:10px; }
+  /* mini-speelkaart vóór het getal: dit zijn kaarten, de muntjes erachter zijn fiches */
+  .kaart-mini { display:inline-block; width:9px; height:12px; border-radius:2px; margin-right:1px;
+    background:linear-gradient(160deg,#e8c26a,#d18b2f); box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+    vertical-align:-1px; }
   .sp-chip.open { border-color:rgba(255,157,60,.5); }
   .scroll-hint { text-align:center; font-size:.58rem; color:#875; margin-top:2px; }
   .uitklap { margin:2px 12px 0; padding:8px 10px; border-radius:11px; background:rgba(0,0,0,.28);
@@ -342,8 +346,12 @@
     font-size:clamp(.8rem, 3.4vh, 1.4rem); color:#ffd; }
   .stage-mobiel .eq { height:22px; } .stage-mobiel .eq i { width:5px; }
   /* onthulde albumhoes op de plek van de plaat, tot de volgende ronde start */
-  .album-hoes { display:flex; flex-direction:column; align-items:center; gap:12px; animation:hoesIn .5s ease-out; }
-  .album-hoes img { height:min(232px, 56vw, 24vh); width:auto; aspect-ratio:1; flex-shrink:0;
+  /* De hoes is het rekbare deel; de tekst (titel/artiest/jaartal) krimpt nooit mee.
+     Op kleine schermen werd de onderkant — het jaartal — afgeknipt door overflow:hidden. */
+  .album-hoes { display:flex; flex-direction:column; align-items:center; gap:12px; animation:hoesIn .5s ease-out;
+    min-height:0; max-height:100%; }
+  .album-hoes .album-tekst { flex-shrink:0; }
+  .album-hoes img { height:min(232px, 56vw, 24vh); width:auto; aspect-ratio:1; flex:0 1 auto; min-height:64px;
     object-fit:cover; border-radius:14px;
     box-shadow:0 16px 40px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.12); }
   .album-tekst { text-align:center; line-height:1.45; max-width:82vw; }
@@ -656,7 +664,7 @@
     /* schaalt mee met de schermhoogte: op een liggende iPad past alles zonder scrollen */
     .grote-plaat { width:min(300px, 26vh); }
     .grote-plaat::after { font-size:min(2rem, 3.6vh); }
-    .album-hoes img { height:min(280px, 30vh); width:auto; }
+    .album-hoes img { height:min(280px, 30vh); width:auto; min-height:96px; }
     .stage-mobiel { min-height:0; padding:4px 0; gap:8px; overflow:hidden; }
     .mijn { padding:10px 14px 12px; }
     .podium-zuil { width:110px; }
@@ -1073,11 +1081,18 @@
       case 'hl:round':
         startRondeAudio(data); // Taak 5
         break;
-      case 'hl:reveal':
-        // muziek loopt bewust door de onthulling heen — pas de volgende ronde neemt het over
-        speelGeluid(data.activeCorrect ? 'goed' : 'fout');
-        toonAlbumHoes(data);
+      case 'hl:reveal': {
+        // muziek loopt bewust door de onthulling heen — pas de volgende ronde neemt het over.
+        // Het effect is persoonlijk: wie de kaart steelt met een goede HITLIJN-roep hoort
+        // en ziet 'goed'; 'fout' is alleen voor de speler die zelf verkeerd legde; de rest
+        // krijgt bij een misser een neutrale onthulling (de stempel zegt al FOUT GELEGD).
+        const ikWonSteal = Boolean(me && data.stolenBy && data.stolenBy === me.id);
+        const ikLegdeFout = Boolean(me && !data.activeCorrect && data.activeId === me.id);
+        const uitkomst = (data.activeCorrect || ikWonSteal) ? 'goed' : ikLegdeFout ? 'fout' : 'neutraal';
+        if (uitkomst !== 'neutraal') speelGeluid(uitkomst);
+        toonAlbumHoes(data, uitkomst);
         break;
+      }
       case 'hl:game:over':
         speelGeluid('fanfare');
         stopRondeAudio();
@@ -1229,7 +1244,7 @@
     const lijn = p.timeline.length
       ? `<span class="sp-lijn">${p.timeline.map((c) => `<i>${c.year}</i>`).join('')}</span>`
       : '<span class="sp-lijn leeg">nog geen kaarten</span>';
-    return `<span class="sp-chip${weg ? ' speler-weg' : ''}${p.isActief ? ' sp-actief' : ''}" data-speler="${esc(p.id)}">${avaHtml(p, 22)} ${esc(p.displayName)}${weg ? '<span class="weg-tag">weg</span>' : ''} · <b>${p.timeline.length}</b> ${chipsHtml(p.tokens)}${lijn}</span>`;
+    return `<span class="sp-chip${weg ? ' speler-weg' : ''}${p.isActief ? ' sp-actief' : ''}" data-speler="${esc(p.id)}">${avaHtml(p, 22)} ${esc(p.displayName)}${weg ? '<span class="weg-tag">weg</span>' : ''} · <span class="kaart-mini" title="kaarten"></span><b>${p.timeline.length}</b> ${chipsHtml(p.tokens)}${lijn}</span>`;
   }
 
   function stempelHtml(reveal, room) {
@@ -1373,6 +1388,7 @@
       <span class="aanzet-mini">AAN ZET</span>${avaHtml(actief, 26)}<span class="band-naam">${esc(actief.displayName)}</span>
       <div class="mini-plaat"></div>` : '';
     zetHtml($('bandLijn'), actief ? bandLijnHtml(actief, room) : '');
+    scrollBandNaarSpook(room);
     $('countdownWrap').hidden = room.phase !== 'challenge' || Boolean(room.settings?.solo);
 
     $('stempelWrap').innerHTML = (room.lastReveal && ['reveal', 'finished'].includes(room.phase))
@@ -1657,6 +1673,11 @@
     sfxContext(); // effect-context meeliften op hetzelfde gebaar
     if (audioOntgrendeld) return;
     const audio = $('rondeAudio');
+    // Een element met een échte clip (spelend of gepauzeerd) is zelf het bewijs dat
+    // audio werkt. Overschrijven met het stille fragment zette juist de muziek stil:
+    // bleef de vlag door een race false, dan doodde élke tik op de actiebalk (gok-veld,
+    // LEG HIER) de spelende preview. Alleen een leeg element krijgt de wav-truc.
+    if (audio.currentSrc && !audio.currentSrc.startsWith('data:')) { audioOntgrendeld = true; return; }
     audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
     audio.play().then(() => {
       audioOntgrendeld = true;
@@ -1668,11 +1689,11 @@
   }
 
   // ── audio: Spotify (indien verbonden) met terugval op preview ──────────────
-  function toonAlbumHoes(reveal) {
+  function toonAlbumHoes(reveal, uitkomst) {
     try {
-      if (!reveal?.cover) return; // geen hoes bekend — de plaat blijft gewoon staan
-      $('albumHoes').classList.toggle('goed', Boolean(reveal.activeCorrect));
-      $('albumHoes').classList.toggle('fout', !reveal.activeCorrect);
+      if (!reveal?.cover) { $('albumHoes').classList.remove('goed', 'fout'); return; } // geen hoes — plaat blijft staan, oude kleurklasse mag niet blijven hangen
+      $('albumHoes').classList.toggle('goed', uitkomst === 'goed');
+      $('albumHoes').classList.toggle('fout', uitkomst === 'fout');
       $('albumHoesImg').src = reveal.cover;
       $('albumTekst').innerHTML = `<b>${esc(schoonTitel(reveal.title))}</b><br><span>${esc(reveal.artist)} · ${reveal.year}</span>`;
       $('albumHoes').hidden = false;
@@ -1694,7 +1715,9 @@
     if (reden) meldAudioDebug('oude-track-gepauzeerd', reden);
     spotifyFetch('/me/player/pause', { method: 'PUT' }).catch(() => {});
   }
+  let laatsteRondePayload = null; // voor een herstart na terugkeer uit de achtergrond
   function startRondeAudio(payload) {
+    laatsteRondePayload = payload;
     verbergAlbumHoes(); // volgende plaat draait — hoes weg, plaat terug
     const token = ++audioToken;
     const knop = $('btnReplay');
@@ -1744,9 +1767,44 @@
   $('btnSpeelOverlay').addEventListener('click', () => {
     try { spotifyPlayer?.activateElement?.(); } catch { /* best effort */ }
     const audio = $('rondeAudio');
-    audio.play().then(() => { $('btnSpeelOverlay').hidden = true; audioOntgrendeld = true; meldAudioDebug('overlay-start', 'ok'); })
-      .catch((e) => meldAudioDebug('overlay-fout', e?.name ?? e));
+    // is er een preview geladen, dan is doorspelen genoeg; anders (Spotify-ronde na
+    // terugkeer uit de achtergrond) start de hele ronde-audio opnieuw
+    if (audio.currentSrc && !audio.currentSrc.startsWith('data:')) {
+      audio.play().then(() => { $('btnSpeelOverlay').hidden = true; audioOntgrendeld = true; meldAudioDebug('overlay-start', 'ok'); })
+        .catch((e) => meldAudioDebug('overlay-fout', e?.name ?? e));
+      return;
+    }
+    if (laatsteRondePayload && ['listening', 'challenge'].includes(currentRoom?.phase)) {
+      $('btnSpeelOverlay').hidden = true;
+      meldAudioDebug('overlay-herstart', 'ronde opnieuw na achtergrond');
+      startRondeAudio(laatsteRondePayload);
+    }
   });
+  // iOS bevriest de Spotify-webspeler (en pauzeert previews) zodra de app naar de
+  // achtergrond gaat, en herstelt dat niet vanzelf. Bij terugkeer: device stil opnieuw
+  // registreren, een gepauzeerde preview gewoon doorzetten, en klinkt er dan nog niets
+  // terwijl een ronde loopt — speelknop tonen (iOS eist toch een nieuw tikgebaar).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (spotifyPlayer && heeftSpotifyToken()) { try { spotifyPlayer.connect(); } catch { /* best effort */ } }
+    if (!['listening', 'challenge'].includes(currentRoom?.phase)) return;
+    meldAudioDebug('terug-uit-achtergrond', currentRoom.phase);
+    setTimeout(() => {
+      if (!['listening', 'challenge'].includes(currentRoom?.phase)) return;
+      const audio = $('rondeAudio');
+      const previewGeladen = audio.currentSrc && !audio.currentSrc.startsWith('data:');
+      if (previewGeladen && audio.paused && !audio.ended) { audio.play().catch(() => { $('btnSpeelOverlay').hidden = false; }); return; }
+      if (previewGeladen && !audio.paused) return; // preview speelt gewoon door
+      if (spotifyPlayingThisRound && spotifyPlayer) {
+        // de vlag kan blijven staan terwijl iOS de speler allang heeft losgelaten — de SDK zelf weet het
+        spotifyPlayer.getCurrentState().then((st) => { if (!st || st.paused) $('btnSpeelOverlay').hidden = false; })
+          .catch(() => { $('btnSpeelOverlay').hidden = false; });
+        return;
+      }
+      $('btnSpeelOverlay').hidden = false;
+    }, 900);
+  });
+
   $('btnReplay').addEventListener('click', () => {
     const audio = $('rondeAudio');
     audio.currentTime = 0;
@@ -1838,7 +1896,7 @@
       const x = r && r.width ? r.left + r.width / 2 : window.innerWidth / 2;
       const y = r && r.height ? r.top + r.height * 0.45 : window.innerHeight * 0.38;
       const kleuren = ['#ff2e88', '#ff9d3c', '#22e0c0', '#ffd76e', '#f2e8d5'];
-      if (reveal?.activeCorrect) {
+      if (reveal?.activeCorrect || (me && reveal?.stolenBy === me.id)) {
         spawnSalvo(x, y, { aantal: 26, minKracht: 90, maxKracht: 250, kleuren });
         setTimeout(() => spawnSalvo(x, y, { aantal: 20, minKracht: 70, maxKracht: 190, kleuren }), 180);
         setTimeout(() => spawnSalvo(x, y, { aantal: 16, minKracht: 60, maxKracht: 160, kleuren }), 380);
@@ -1846,6 +1904,26 @@
       if (reveal?.guessCorrect) {
         setTimeout(() => spawnMuntenFontein(x, y), reveal?.activeCorrect ? 450 : 120);
       }
+    } catch { /* decoratie mag het spel nooit breken */ }
+  }
+
+  // De band scrollt zelf naar de kaart van de actieve speler (schim of gelegd) zodra
+  // die buiten beeld valt — bij lange tijdlijnen moest je er anders handmatig heen.
+  // Alleen bij een veránderde plek (key), zodat eigen scrollen niet wordt overschreven.
+  let bandScrollKey = null;
+  function scrollBandNaarSpook(room) {
+    try {
+      const rij = $('bandLijn');
+      const sp = rij?.querySelector('.spook');
+      if (!sp || getComputedStyle(rij).display === 'none') { bandScrollKey = null; return; }
+      const key = `${room.round?.nonce ?? ''}:${room.round?.placedSlot ?? ''}:${kijkSlot?.slot ?? ''}`;
+      if (key === bandScrollKey) return;
+      bandScrollKey = key;
+      const rijR = rij.getBoundingClientRect();
+      const r = sp.getBoundingClientRect();
+      if (r.left >= rijR.left - 2 && r.right <= rijR.right + 2) return; // al in beeld
+      // niet scrollIntoView: die verschuift ook overflow:hidden-voorouders (de pagina)
+      rij.scrollTo({ left: rij.scrollLeft + (r.left + r.width / 2) - (rijR.left + rijR.width / 2), behavior: 'smooth' });
     } catch { /* decoratie mag het spel nooit breken */ }
   }
 

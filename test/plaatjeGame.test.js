@@ -306,6 +306,10 @@ test('room: resetVoorRematch — zelfde tafel terug naar de lobby, start opnieuw
   room.resolveReveal();
   room.winnerId = 'u1';
   room.phase = 'finished';
+  // fiches zijn in het potje uitgegeven/verdiend — een rematch moet ze echt verversen
+  // (de oude assert slaagde vanzelf omdat niemand ooit een fiche had uitgegeven)
+  room.players.get('u2').tokens = 0;
+  room.players.get('u2').tokensEarned = 3;
   room.resetVoorRematch();
   assert.equal(room.phase, 'lobby');
   assert.equal(room.round, null);
@@ -323,6 +327,7 @@ test('room: resetVoorRematch — zelfde tafel terug naar de lobby, start opnieuw
   for (const p of room.players.values()) {
     assert.equal(p.timeline.length, 1); // verse kaarten
     assert.equal(p.tokens, 2);          // verse fiches
+    assert.equal(p.tokensEarned, 0);    // telt niet dubbel in het volgende leaderboard-resultaat
   }
   deletePlaatjeRoom('r1');
 });
