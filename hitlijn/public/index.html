@@ -541,6 +541,9 @@
         'stage zij3'
         'mijn mijn'
         'duim duim';
+      /* alleen de podiumrij groeit; zonder dit verdeelde het grid de resthoogte over
+         álle rijen en werd o.a. de onthullingsstempel tot een lege doos uitgerekt */
+      grid-template-rows:auto auto auto 1fr auto auto auto auto;
     }
     /* geen medespelers (solo, of iedereen weg): rechterkolom verdwijnt i.p.v. leeg te gapen */
     #spelView.zonder-zij {
@@ -550,6 +553,11 @@
     #spelView.zonder-zij #spelersRij,
     #spelView.zonder-zij #spelersHint,
     #spelView.zonder-zij #chipUitklap { display:none; }
+    /* Elk grid-item moet mogen krimpen. Zonder min-width:0 rekt een brede tijdlijn
+       (veel kaarten) de hele kolom op, wordt de pagina breder dan het scherm en
+       schuift o.a. de LEG HIER-knop buiten beeld. */
+    #spelView > * { min-width:0; }
+    .mijn-lijn, .band-lijn, #spelersRij { min-width:0; }
     #spelView .topbar { grid-area:topbar; }
     #bandWrap { grid-area:band; }
     #stempelWrap { grid-area:stempel; }
@@ -636,7 +644,6 @@
     .album-hoes .album-tekst { text-align:left; max-width:280px; }
     .album-hoes .album-tekst b { font-size:1.3rem; line-height:1.2; display:block; margin-bottom:6px; }
     .album-hoes .album-tekst span { font-size:.9rem; }
-    .stempel-mobiel { font-size:1.05rem; }
 
     /* eigen beurt: geen dubbele tijdlijn (de band herhaalt wat onderin al interactief staat) */
     #spelView.mijn-beurt #bandWrap { display:none; }
@@ -655,8 +662,12 @@
       letter-spacing:1.5px; background:var(--stagelight); color:#301c05; border-radius:4px; padding:2px 6px; }
 
     /* onthulling: compacte kaart in de podiumkolom i.p.v. een banner over de volle breedte */
-    #stempelWrap { display:flex; justify-content:center; }
-    .stempel-mobiel { max-width:560px; transform:rotate(-.6deg); }
+    #stempelWrap { display:flex; justify-content:center; align-items:flex-start; }
+    .stempel-mobiel { max-width:none; width:auto; margin:10px 12px 0; padding:10px 26px;
+      border-radius:999px; transform:rotate(-.6deg); }
+    .stempel-kop { font-size:1.2rem; letter-spacing:2px; }
+    /* de titel/artiest/jaar staan al groot naast de albumhoes — niet dubbel tonen */
+    .stempel-wat { display:none; }
 
     /* lege actiebalk niet tonen (bv. tijdens de onthulling van iemand anders) */
     .duimzone:empty { display:none; }
