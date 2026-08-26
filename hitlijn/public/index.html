@@ -508,11 +508,23 @@
         'kop kop'
         'links rechts'
         'verlaat verlaat';
+      align-content:center; /* blok verticaal in het midden i.p.v. bovenaan geplakt */
     }
+    /* platenkrat wrapt op desktop: geen scrollbalk terwijl er ruimte zat is */
+    #lobbyPools .pool-rij { flex-wrap:wrap; overflow:visible; justify-content:flex-start; gap:12px; padding:14px 0 4px; }
+    #lobbyPools .pool-kaart { width:126px; padding:12px 10px 11px; }
+    #lobbyPools .pool-kaart .pool-plaat { width:54px; height:54px; }
+    #lobbyPools .pool-kaart b { font-size:.72rem; }
+    #lobbyPools .pool-kaart small { font-size:.6rem; }
+    #instapLobby .vinyl-deco { right:-150px; top:-30px; opacity:.18; } /* uit de spelerslijst blijven */
     #instapLobby > .wordmark { grid-area:kop; justify-self:center; }
-    .lobby-kolom { display:flex; flex-direction:column; align-items:center; gap:14px; }
+    .lobby-kolom { display:flex; flex-direction:column; align-items:center; gap:14px; min-width:0; }
     .lobby-kolom.links { grid-area:links; }
+    /* min-width:0 is essentieel: zonder dat duwt de horizontale platenrij de kolom
+       breder dan de pagina en schuift de hele lobby scheef */
     .lobby-kolom.rechts { grid-area:rechts; align-items:stretch; }
+    .lobby-kolom.rechts > * { min-width:0; max-width:100%; }
+    #lobbyPools .pool-rij { min-width:0; }
     .lobby-qr { width:190px; height:190px; }
     #btnLobbyVerlaat { grid-area:verlaat; justify-self:center; }
 
@@ -557,14 +569,26 @@
     .duimzone > .duim-uitleg { flex:1; }
     .gok-kolom .veld { max-width:420px; }
 
-    /* er is ruimte zat: kaarten en plaat een maat groter */
-    .sz-m2 { width:108px; height:98px; }
-    .sz-m2 .jaar { font-size:1.4rem; }
-    .sz-m2 .titel { font-size:.7rem; }
-    .vak { height:98px; }
-    .spook { width:108px; height:98px; }
-    .band-lijn .vak { height:74px; }
-    .band-lijn .spook { width:88px; height:74px; }
+    /* er is ruimte zat: speelkaarten, mysteriekaart en tijdlijn een flinke maat groter */
+    .sz-m2 { width:136px; height:124px; padding:10px 11px; }
+    .sz-m2 .jaar { font-size:1.75rem; }
+    .sz-m2 .titel { font-size:.78rem; }
+    .vak { width:42px; height:124px; }
+    .vak.hot { width:66px; }
+    .vak .plus { width:30px; height:30px; font-size:.95rem; }
+    .spook { width:136px; height:124px; }
+    /* 'safe center': centreert zolang de kaarten passen, en begint links zodra
+       de tijdlijn breder wordt dan het paneel (anders zou het begin wegvallen) */
+    .mijn-lijn, .band-lijn { gap:9px; justify-content:safe center; }
+    #mijnHint, #spelersHint.onder { text-align:center; }
+    .mysterie-kaart { width:136px; height:124px; }
+    .mysterie-kaart .speelt { font-size:.55rem; padding:10px 0 5px; }
+    /* de band (tijdlijn van de speler aan zet) mag ook groter */
+    .band-lijn .sz-s { width:112px; height:96px; padding:8px 9px; }
+    .band-lijn .sz-s .jaar { font-size:1.25rem; }
+    .band-lijn .sz-s .titel { font-size:.66rem; }
+    .band-lijn .vak { width:36px; height:96px; }
+    .band-lijn .spook { width:112px; height:96px; }
     /* schaalt mee met de schermhoogte: op een liggende iPad past alles zonder scrollen */
     .grote-plaat { width:min(300px, 26vh); height:min(300px, 26vh); }
     .grote-plaat::after { inset:39%; font-size:min(2rem, 3.6vh); }
@@ -651,8 +675,12 @@
   @media (min-width: 1200px) {
     body { max-width:1280px; }
     #spelView { grid-template-columns:1fr 360px; }
-    .sz-m2 { width:118px; height:104px; }
-    .sz-m2 .jaar { font-size:1.5rem; }
+    .sz-m2 { width:152px; height:138px; }
+    .sz-m2 .jaar { font-size:1.95rem; }
+    .sz-m2 .titel { font-size:.84rem; }
+    .vak { height:138px; }
+    .spook { width:152px; height:138px; }
+    .mysterie-kaart { width:152px; height:138px; }
   }
 
   /* muis aanwezig: subtiele hovers (touch krijgt hier niets van mee) */
