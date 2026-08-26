@@ -205,6 +205,8 @@
      (overflow:hidden) zijn eigen tijdlijn af. Het podium mag als enige krimpen. */
   .band, .spelers-rij, .scroll-hint, .uitklap, .mijn, .duimzone { flex-shrink:0; }
   .stage-mobiel { min-height:0; }
+  /* eigen beurt: geen dubbele tijdlijn — de band herhaalt wat onderin al interactief staat */
+  #spelView.mijn-beurt #bandWrap { display:none; }
   .band { margin:6px 12px 0; border-radius:14px; padding:11px 14px; position:relative; z-index:2; overflow:hidden;
     background:linear-gradient(180deg, rgba(255,157,60,.10), rgba(0,0,0,.3));
     border:1px solid rgba(255,157,60,.4); }
@@ -670,9 +672,6 @@
     .album-hoes .album-tekst { text-align:left; max-width:280px; }
     .album-hoes .album-tekst b { font-size:1.3rem; line-height:1.2; display:block; margin-bottom:6px; }
     .album-hoes .album-tekst span { font-size:.9rem; }
-
-    /* eigen beurt: geen dubbele tijdlijn (de band herhaalt wat onderin al interactief staat) */
-    #spelView.mijn-beurt #bandWrap { display:none; }
 
     /* het podium krijgt een eigen vlak, zodat het midden niet als leegte oogt */
     .stage-mobiel { margin:0 0 0 20px; border-radius:20px; justify-content:center;
@@ -1356,8 +1355,10 @@
     $('spelersHint').hidden = andereSpelers.length === 0;
     // alleen betekenisvol in de desktop-media-query; op mobiel is deze klasse inert
     $('spelView').classList.toggle('zonder-zij', andereSpelers.length === 0);
-    // desktop: als ik zelf aan zet ben is de band een kopie van mijn eigen tijdlijn
-    $('spelView').classList.toggle('mijn-beurt', isMijnBeurt);
+    // Ben ik zelf aan zet, dan herhaalt de band precies mijn eigen tijdlijn hieronder.
+    // Alleen tijdens het leggen verbergen; in de challenge-fase blijft hij staan, want
+    // daar hangt de aftelbalk in.
+    $('spelView').classList.toggle('mijn-beurt', isMijnBeurt && room.phase === 'listening');
 
     renderMijn(room, ik, isMijnBeurt);
     renderDuimzone(room, ik, isMijnBeurt);
