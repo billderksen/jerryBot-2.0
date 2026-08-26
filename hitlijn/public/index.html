@@ -200,6 +200,11 @@
   .dot-pv { width:8px; height:8px; border-radius:50%; background:var(--stagelight); box-shadow:0 0 7px rgba(255,157,60,.7); display:inline-block; }
   .chip-knop { width:12px; height:12px; vertical-align:-2px; margin-left:2px; }
 
+  /* flex-shrink:0 — het spelscherm is een kolom op schermhoogte; zonder dit worden de
+     band en de spelersrij platgedrukt zodra de inhoud net niet past, en knipt de band
+     (overflow:hidden) zijn eigen tijdlijn af. Het podium mag als enige krimpen. */
+  .band, .spelers-rij, .scroll-hint, .uitklap, .mijn, .duimzone { flex-shrink:0; }
+  .stage-mobiel { min-height:0; }
   .band { margin:6px 12px 0; border-radius:14px; padding:11px 14px; position:relative; z-index:2; overflow:hidden;
     background:linear-gradient(180deg, rgba(255,157,60,.10), rgba(0,0,0,.3));
     border:1px solid rgba(255,157,60,.4); }
