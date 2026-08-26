@@ -1,8 +1,19 @@
-Geluidskandidaten in kandidaten/ komen uit de CC0-pakketten van Kenney (kenney.nl):
-  Interface Sounds, Casino Audio, Music Jingles, Digital Audio.
+Alle geluidskandidaten in kandidaten/ zijn CC0 (Creative Commons Zero, publiek domein)
+en komen uit de audiopakketten van Kenney (kenney.nl):
 
-Licentie: Creative Commons Zero (CC0 1.0, publiek domein) — vrij te gebruiken, ook
-commercieel, zonder naamsvermelding. Zie de License.txt in elk oorspronkelijk pakket.
+  Interface Sounds · UI Audio · Casino Audio · RPG Audio ·
+  Impact Sounds · Sci-Fi Sounds · Digital Audio · Music Jingles
 
-Omgezet naar mono mp3 (96 kbit/s) met ffmpeg; manifest.json koppelt elk bestand aan
-het spelmoment en het bronbestand. Kiezen kan via /geluidenlab.html.
+CC0 betekent: vrij te gebruiken, ook commercieel, zonder naamsvermelding en zonder
+voorwaarden. De licentie staat in de License.txt van elk oorspronkelijk pakket.
+
+Andere bekende bronnen zijn bewust NIET automatisch geplunderd: Freesound en Pixabay
+vragen een account/API-sleutel, en op OpenGameArt verschilt de licentie per bestand
+(CC0 naast CC-BY en GPL) — dat laat zich niet betrouwbaar automatiseren. Wil je daar
+toch iets vandaan halen: zet de bestanden in kandidaten/ en meld het, dan neem ik ze
+op in het manifest.
+
+Bewerking: omgezet naar mono mp3 (96 kbit/s) met ffmpeg, gefilterd op speelduur zodat
+knopgeluiden kort blijven. manifest.json koppelt elk bestand aan het spelmoment en het
+bronbestand; de sleutel "live" bevat wat op dit moment in het spel zit.
+Kiezen kan via /geluidenlab.html.

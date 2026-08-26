@@ -24,7 +24,13 @@
     border:1px solid rgba(255,255,255,.09); border-radius:16px; padding:14px 16px; margin-top:16px; }
   .moment h2 { font-family:'Anton'; letter-spacing:1.5px; font-size:.95rem; color:#ffe9c9; }
   .moment p { font-size:.72rem; color:#a89; margin-top:2px; }
-  .knoppen { display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
+  .knoppen { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+  .knoppen button { padding:8px 11px; font-size:.72rem; }
+  .knoppen .nr { opacity:.5; margin-right:5px; font-family:'Anton'; }
+  .moment .kop-rij { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .moment .kop-rij button { padding:5px 10px; font-size:.64rem; margin-left:auto; }
+  .live-tag { font-size:.55rem; letter-spacing:1px; background:var(--teal); color:#053c33;
+    border-radius:4px; padding:2px 6px; margin-left:6px; font-weight:700; }
   button { font-family:inherit; cursor:pointer; border-radius:11px; padding:10px 14px; font-size:.78rem;
     border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.32); color:#e9dcc8; }
   button:hover { border-color:rgba(255,157,60,.6); }
@@ -40,9 +46,10 @@
 <body>
 <div class="wrap">
   <h1 class="wordmark">HIT<span>LIJN</span></h1>
-  <h1><small>Geluidenlab — luister per moment het huidige geluid (gestippelde knop) naast drie
-  rechtenvrije kandidaten uit Kenney's CC0-pakketten. Tik je keuze aan; onderaan staat het
-  overzicht dat je aan mij kunt doorgeven.</small></h1>
+  <h1><small>Geluidenlab — per moment twintig rechtenvrije kandidaten (CC0, publiek domein).
+  Tik een knop om te horen, of speel ze in één keer achter elkaar af. Je keuze licht op en
+  wordt onthouden; onderaan staat het overzicht dat je aan mij kunt doorgeven. Wat nu in het
+  spel zit is gemarkeerd.</small></h1>
 
   <div id="lijst"></div>
 
@@ -132,16 +139,34 @@
       const blok = document.createElement('div');
       blok.className = 'moment';
       const kandidaten = manifest[id] ?? [];
-      blok.innerHTML = `<h2>${titel}</h2><p>${uitleg}</p><div class="knoppen">
-        <button class="synth ${keuze[id] === 'synth' ? 'gekozen' : ''}" data-id="${id}" data-kies="synth">▸ huidige (synth)</button>
-        ${kandidaten.map((k) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}">▸ ${k.label}${manifest.live?.[id] === k.bestand ? ' <b>· nu in het spel</b>' : ''}</button>`).join('')}
+      blok.innerHTML = `<div class="kop-rij"><h2>${titel}</h2><p>${uitleg}</p>
+        <button data-alle="${id}">▶ speel alle ${kandidaten.length} achter elkaar</button></div>
+        <div class="knoppen">
+        <button class="synth ${keuze[id] === 'synth' ? 'gekozen' : ''}" data-id="${id}" data-kies="synth">▸ synth</button>
+        ${kandidaten.map((k, i) => `<button data-id="${id}" data-kies="${k.bestand}" data-bestand="${k.bestand}" class="${keuze[id] === k.bestand ? 'gekozen' : ''}"><span class="nr">${i + 1}</span>${k.label}${manifest.live?.[id] === k.bestand ? '<span class="live-tag">IN HET SPEL</span>' : ''}</button>`).join('')}
       </div>`;
       lijst.appendChild(blok);
     }
     toonSamenvatting();
   }
 
-  document.addEventListener('click', (ev) => {
+  let reeksBezig = false;
+  document.addEventListener('click', async (ev) => {
+    const alle = ev.target.closest('button[data-alle]');
+    if (alle) {
+      if (reeksBezig) return;
+      reeksBezig = true;
+      const id = alle.dataset.alle;
+      const origineel = alle.textContent;
+      for (const [i, k] of (manifest[id] ?? []).entries()) {
+        alle.textContent = `speelt ${i + 1}/${manifest[id].length} — ${k.label}`;
+        speelBestand(k.bestand);
+        await new Promise((r) => setTimeout(r, 1400));
+      }
+      alle.textContent = origineel;
+      reeksBezig = false;
+      return;
+    }
     const knop = ev.target.closest('button[data-id]');
     if (!knop) return;
     const id = knop.dataset.id;

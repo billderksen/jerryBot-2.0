@@ -44,6 +44,61 @@
    "bestand": "tik-9.mp3",
    "label": "glas-tik",
    "bron": "interface-sounds/Audio/glass_002.ogg"
+  },
+  {
+   "bestand": "tik-10.mp3",
+   "label": "interface \u00b7 click_002",
+   "bron": "interface-sounds/Audio/click_002.ogg"
+  },
+  {
+   "bestand": "tik-11.mp3",
+   "label": "interface \u00b7 click_003",
+   "bron": "interface-sounds/Audio/click_003.ogg"
+  },
+  {
+   "bestand": "tik-12.mp3",
+   "label": "interface \u00b7 click_005",
+   "bron": "interface-sounds/Audio/click_005.ogg"
+  },
+  {
+   "bestand": "tik-13.mp3",
+   "label": "ui \u00b7 click2",
+   "bron": "ui-audio/Audio/click2.ogg"
+  },
+  {
+   "bestand": "tik-14.mp3",
+   "label": "ui \u00b7 click3",
+   "bron": "ui-audio/Audio/click3.ogg"
+  },
+  {
+   "bestand": "tik-15.mp3",
+   "label": "ui \u00b7 click4",
+   "bron": "ui-audio/Audio/click4.ogg"
+  },
+  {
+   "bestand": "tik-16.mp3",
+   "label": "interface \u00b7 tick_001",
+   "bron": "interface-sounds/Audio/tick_001.ogg"
+  },
+  {
+   "bestand": "tik-17.mp3",
+   "label": "interface \u00b7 tick_004",
+   "bron": "interface-sounds/Audio/tick_004.ogg"
+  },
+  {
+   "bestand": "tik-18.mp3",
+   "label": "interface \u00b7 select_002",
+   "bron": "interface-sounds/Audio/select_002.ogg"
+  },
+  {
+   "bestand": "tik-19.mp3",
+   "label": "interface \u00b7 select_004",
+   "bron": "interface-sounds/Audio/select_004.ogg"
+  },
+  {
+   "bestand": "tik-20.mp3",
+   "label": "interface \u00b7 select_005",
+   "bron": "interface-sounds/Audio/select_005.ogg"
   }
  ],
  "pak": [
@@ -76,6 +131,76 @@
    "bestand": "pak-6.mp3",
    "label": "zachte zwiep",
    "bron": "ui-audio/Audio/rollover2.ogg"
+  },
+  {
+   "bestand": "pak-7.mp3",
+   "label": "casino \u00b7 card-slide-2",
+   "bron": "casino-audio/Audio/card-slide-2.ogg"
+  },
+  {
+   "bestand": "pak-8.mp3",
+   "label": "casino \u00b7 card-slide-3",
+   "bron": "casino-audio/Audio/card-slide-3.ogg"
+  },
+  {
+   "bestand": "pak-9.mp3",
+   "label": "casino \u00b7 card-slide-4",
+   "bron": "casino-audio/Audio/card-slide-4.ogg"
+  },
+  {
+   "bestand": "pak-10.mp3",
+   "label": "casino \u00b7 card-slide-5",
+   "bron": "casino-audio/Audio/card-slide-5.ogg"
+  },
+  {
+   "bestand": "pak-11.mp3",
+   "label": "casino \u00b7 card-slide-7",
+   "bron": "casino-audio/Audio/card-slide-7.ogg"
+  },
+  {
+   "bestand": "pak-12.mp3",
+   "label": "casino \u00b7 card-slide-8",
+   "bron": "casino-audio/Audio/card-slide-8.ogg"
+  },
+  {
+   "bestand": "pak-13.mp3",
+   "label": "casino \u00b7 card-shove-1",
+   "bron": "casino-audio/Audio/card-shove-1.ogg"
+  },
+  {
+   "bestand": "pak-14.mp3",
+   "label": "casino \u00b7 card-shove-3",
+   "bron": "casino-audio/Audio/card-shove-3.ogg"
+  },
+  {
+   "bestand": "pak-15.mp3",
+   "label": "casino \u00b7 card-shove-4",
+   "bron": "casino-audio/Audio/card-shove-4.ogg"
+  },
+  {
+   "bestand": "pak-16.mp3",
+   "label": "casino \u00b7 card-fan-1",
+   "bron": "casino-audio/Audio/card-fan-1.ogg"
+  },
+  {
+   "bestand": "pak-17.mp3",
+   "label": "casino \u00b7 card-fan-2",
+   "bron": "casino-audio/Audio/card-fan-2.ogg"
+  },
+  {
+   "bestand": "pak-18.mp3",
+   "label": "rpg \u00b7 cloth2",
+   "bron": "rpg-audio/Audio/cloth2.ogg"
+  },
+  {
+   "bestand": "pak-19.mp3",
+   "label": "rpg \u00b7 cloth3",
+   "bron": "rpg-audio/Audio/cloth3.ogg"
+  },
+  {
+   "bestand": "pak-20.mp3",
+   "label": "rpg \u00b7 cloth4",
+   "bron": "rpg-audio/Audio/cloth4.ogg"
   }
  ],
  "thunk": [
@@ -108,6 +233,76 @@
    "bestand": "thunk-6.mp3",
    "label": "zachte plof",
    "bron": "impact-sounds/Audio/footstep_carpet_002.ogg"
+  },
+  {
+   "bestand": "thunk-7.mp3",
+   "label": "casino \u00b7 card-place-2",
+   "bron": "casino-audio/Audio/card-place-2.ogg"
+  },
+  {
+   "bestand": "thunk-8.mp3",
+   "label": "rpg \u00b7 bookPlace1",
+   "bron": "rpg-audio/Audio/bookPlace1.ogg"
+  },
+  {
+   "bestand": "thunk-9.mp3",
+   "label": "rpg \u00b7 bookPlace3",
+   "bron": "rpg-audio/Audio/bookPlace3.ogg"
+  },
+  {
+   "bestand": "thunk-10.mp3",
+   "label": "rpg \u00b7 dropLeather",
+   "bron": "rpg-audio/Audio/dropLeather.ogg"
+  },
+  {
+   "bestand": "thunk-11.mp3",
+   "label": "impact \u00b7 footstep_carpet_000",
+   "bron": "impact-sounds/Audio/footstep_carpet_000.ogg"
+  },
+  {
+   "bestand": "thunk-12.mp3",
+   "label": "impact \u00b7 footstep_carpet_001",
+   "bron": "impact-sounds/Audio/footstep_carpet_001.ogg"
+  },
+  {
+   "bestand": "thunk-13.mp3",
+   "label": "impact \u00b7 footstep_carpet_003",
+   "bron": "impact-sounds/Audio/footstep_carpet_003.ogg"
+  },
+  {
+   "bestand": "thunk-14.mp3",
+   "label": "impact \u00b7 footstep_carpet_004",
+   "bron": "impact-sounds/Audio/footstep_carpet_004.ogg"
+  },
+  {
+   "bestand": "thunk-15.mp3",
+   "label": "impact \u00b7 footstep_wood_000",
+   "bron": "impact-sounds/Audio/footstep_wood_000.ogg"
+  },
+  {
+   "bestand": "thunk-16.mp3",
+   "label": "impact \u00b7 footstep_wood_001",
+   "bron": "impact-sounds/Audio/footstep_wood_001.ogg"
+  },
+  {
+   "bestand": "thunk-17.mp3",
+   "label": "impact \u00b7 footstep_wood_002",
+   "bron": "impact-sounds/Audio/footstep_wood_002.ogg"
+  },
+  {
+   "bestand": "thunk-18.mp3",
+   "label": "impact \u00b7 footstep_wood_003",
+   "bron": "impact-sounds/Audio/footstep_wood_003.ogg"
+  },
+  {
+   "bestand": "thunk-19.mp3",
+   "label": "impact \u00b7 footstep_wood_004",
+   "bron": "impact-sounds/Audio/footstep_wood_004.ogg"
+  },
+  {
+   "bestand": "thunk-20.mp3",
+   "label": "impact \u00b7 impactSoft_heavy_000",
+   "bron": "impact-sounds/Audio/impactSoft_heavy_000.ogg"
   }
  ],
  "bevestig": [
@@ -140,6 +335,76 @@
    "bestand": "bevestig-6.mp3",
    "label": "select bevestigend",
    "bron": "interface-sounds/Audio/select_001.ogg"
+  },
+  {
+   "bestand": "bevestig-7.mp3",
+   "label": "interface \u00b7 confirmation_003",
+   "bron": "interface-sounds/Audio/confirmation_003.ogg"
+  },
+  {
+   "bestand": "bevestig-8.mp3",
+   "label": "interface \u00b7 select_007",
+   "bron": "interface-sounds/Audio/select_007.ogg"
+  },
+  {
+   "bestand": "bevestig-9.mp3",
+   "label": "interface \u00b7 select_008",
+   "bron": "interface-sounds/Audio/select_008.ogg"
+  },
+  {
+   "bestand": "bevestig-10.mp3",
+   "label": "ui \u00b7 switch1",
+   "bron": "ui-audio/Audio/switch1.ogg"
+  },
+  {
+   "bestand": "bevestig-11.mp3",
+   "label": "ui \u00b7 switch10",
+   "bron": "ui-audio/Audio/switch10.ogg"
+  },
+  {
+   "bestand": "bevestig-12.mp3",
+   "label": "ui \u00b7 switch11",
+   "bron": "ui-audio/Audio/switch11.ogg"
+  },
+  {
+   "bestand": "bevestig-13.mp3",
+   "label": "ui \u00b7 switch12",
+   "bron": "ui-audio/Audio/switch12.ogg"
+  },
+  {
+   "bestand": "bevestig-14.mp3",
+   "label": "ui \u00b7 switch13",
+   "bron": "ui-audio/Audio/switch13.ogg"
+  },
+  {
+   "bestand": "bevestig-15.mp3",
+   "label": "ui \u00b7 switch14",
+   "bron": "ui-audio/Audio/switch14.ogg"
+  },
+  {
+   "bestand": "bevestig-16.mp3",
+   "label": "ui \u00b7 switch15",
+   "bron": "ui-audio/Audio/switch15.ogg"
+  },
+  {
+   "bestand": "bevestig-17.mp3",
+   "label": "ui \u00b7 switch16",
+   "bron": "ui-audio/Audio/switch16.ogg"
+  },
+  {
+   "bestand": "bevestig-18.mp3",
+   "label": "ui \u00b7 switch17",
+   "bron": "ui-audio/Audio/switch17.ogg"
+  },
+  {
+   "bestand": "bevestig-19.mp3",
+   "label": "ui \u00b7 switch18",
+   "bron": "ui-audio/Audio/switch18.ogg"
+  },
+  {
+   "bestand": "bevestig-20.mp3",
+   "label": "ui \u00b7 switch19",
+   "bron": "ui-audio/Audio/switch19.ogg"
   }
  ],
  "goed": [
@@ -172,6 +437,76 @@
    "bestand": "goed-6.mp3",
    "label": "steel vrolijk",
    "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL04.ogg"
+  },
+  {
+   "bestand": "goed-7.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI01",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI01.ogg"
+  },
+  {
+   "bestand": "goed-8.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI02",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI02.ogg"
+  },
+  {
+   "bestand": "goed-9.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI03",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI03.ogg"
+  },
+  {
+   "bestand": "goed-10.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI04",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI04.ogg"
+  },
+  {
+   "bestand": "goed-11.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI05",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI05.ogg"
+  },
+  {
+   "bestand": "goed-12.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI06",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI06.ogg"
+  },
+  {
+   "bestand": "goed-13.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI08",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI08.ogg"
+  },
+  {
+   "bestand": "goed-14.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI09",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI09.ogg"
+  },
+  {
+   "bestand": "goed-15.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI11",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI11.ogg"
+  },
+  {
+   "bestand": "goed-16.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI12",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI12.ogg"
+  },
+  {
+   "bestand": "goed-17.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI13",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI13.ogg"
+  },
+  {
+   "bestand": "goed-18.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI14",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI14.ogg"
+  },
+  {
+   "bestand": "goed-19.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI15",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI15.ogg"
+  },
+  {
+   "bestand": "goed-20.mp3",
+   "label": "music-jingles \u00b7 jingles_PIZZI16",
+   "bron": "music-jingles/Audio/Pizzicato jingles/jingles_PIZZI16.ogg"
   }
  ],
  "fout": [
@@ -204,6 +539,76 @@
    "bestand": "fout-6.mp3",
    "label": "fout zacht",
    "bron": "interface-sounds/Audio/error_008.ogg"
+  },
+  {
+   "bestand": "fout-7.mp3",
+   "label": "interface \u00b7 error_001",
+   "bron": "interface-sounds/Audio/error_001.ogg"
+  },
+  {
+   "bestand": "fout-8.mp3",
+   "label": "interface \u00b7 error_002",
+   "bron": "interface-sounds/Audio/error_002.ogg"
+  },
+  {
+   "bestand": "fout-9.mp3",
+   "label": "interface \u00b7 error_004",
+   "bron": "interface-sounds/Audio/error_004.ogg"
+  },
+  {
+   "bestand": "fout-10.mp3",
+   "label": "interface \u00b7 error_005",
+   "bron": "interface-sounds/Audio/error_005.ogg"
+  },
+  {
+   "bestand": "fout-11.mp3",
+   "label": "interface \u00b7 error_007",
+   "bron": "interface-sounds/Audio/error_007.ogg"
+  },
+  {
+   "bestand": "fout-12.mp3",
+   "label": "interface \u00b7 glitch_001",
+   "bron": "interface-sounds/Audio/glitch_001.ogg"
+  },
+  {
+   "bestand": "fout-13.mp3",
+   "label": "interface \u00b7 glitch_002",
+   "bron": "interface-sounds/Audio/glitch_002.ogg"
+  },
+  {
+   "bestand": "fout-14.mp3",
+   "label": "interface \u00b7 glitch_003",
+   "bron": "interface-sounds/Audio/glitch_003.ogg"
+  },
+  {
+   "bestand": "fout-15.mp3",
+   "label": "interface \u00b7 glitch_004",
+   "bron": "interface-sounds/Audio/glitch_004.ogg"
+  },
+  {
+   "bestand": "fout-16.mp3",
+   "label": "interface \u00b7 scratch_001",
+   "bron": "interface-sounds/Audio/scratch_001.ogg"
+  },
+  {
+   "bestand": "fout-17.mp3",
+   "label": "interface \u00b7 scratch_002",
+   "bron": "interface-sounds/Audio/scratch_002.ogg"
+  },
+  {
+   "bestand": "fout-18.mp3",
+   "label": "interface \u00b7 scratch_003",
+   "bron": "interface-sounds/Audio/scratch_003.ogg"
+  },
+  {
+   "bestand": "fout-19.mp3",
+   "label": "interface \u00b7 scratch_004",
+   "bron": "interface-sounds/Audio/scratch_004.ogg"
+  },
+  {
+   "bestand": "fout-20.mp3",
+   "label": "interface \u00b7 scratch_005",
+   "bron": "interface-sounds/Audio/scratch_005.ogg"
   }
  ],
  "munt": [
@@ -221,6 +626,91 @@
    "bestand": "munt-3.mp3",
    "label": "fiches tikken",
    "bron": "casino-audio/Audio/chips-collide-1.ogg"
+  },
+  {
+   "bestand": "munt-4.mp3",
+   "label": "casino \u00b7 chip-lay-2",
+   "bron": "casino-audio/Audio/chip-lay-2.ogg"
+  },
+  {
+   "bestand": "munt-5.mp3",
+   "label": "casino \u00b7 chips-handle-1",
+   "bron": "casino-audio/Audio/chips-handle-1.ogg"
+  },
+  {
+   "bestand": "munt-6.mp3",
+   "label": "casino \u00b7 chips-handle-3",
+   "bron": "casino-audio/Audio/chips-handle-3.ogg"
+  },
+  {
+   "bestand": "munt-7.mp3",
+   "label": "casino \u00b7 chips-handle-4",
+   "bron": "casino-audio/Audio/chips-handle-4.ogg"
+  },
+  {
+   "bestand": "munt-8.mp3",
+   "label": "casino \u00b7 chips-handle-5",
+   "bron": "casino-audio/Audio/chips-handle-5.ogg"
+  },
+  {
+   "bestand": "munt-9.mp3",
+   "label": "casino \u00b7 chips-handle-6",
+   "bron": "casino-audio/Audio/chips-handle-6.ogg"
+  },
+  {
+   "bestand": "munt-10.mp3",
+   "label": "casino \u00b7 chips-collide-2",
+   "bron": "casino-audio/Audio/chips-collide-2.ogg"
+  },
+  {
+   "bestand": "munt-11.mp3",
+   "label": "casino \u00b7 chips-collide-4",
+   "bron": "casino-audio/Audio/chips-collide-4.ogg"
+  },
+  {
+   "bestand": "munt-12.mp3",
+   "label": "rpg \u00b7 handleCoins",
+   "bron": "rpg-audio/Audio/handleCoins.ogg"
+  },
+  {
+   "bestand": "munt-13.mp3",
+   "label": "rpg \u00b7 handleCoins2",
+   "bron": "rpg-audio/Audio/handleCoins2.ogg"
+  },
+  {
+   "bestand": "munt-14.mp3",
+   "label": "rpg \u00b7 metalClick",
+   "bron": "rpg-audio/Audio/metalClick.ogg"
+  },
+  {
+   "bestand": "munt-15.mp3",
+   "label": "rpg \u00b7 metalLatch",
+   "bron": "rpg-audio/Audio/metalLatch.ogg"
+  },
+  {
+   "bestand": "munt-16.mp3",
+   "label": "casino \u00b7 chips-stack-1",
+   "bron": "casino-audio/Audio/chips-stack-1.ogg"
+  },
+  {
+   "bestand": "munt-17.mp3",
+   "label": "casino \u00b7 chips-stack-2",
+   "bron": "casino-audio/Audio/chips-stack-2.ogg"
+  },
+  {
+   "bestand": "munt-18.mp3",
+   "label": "casino \u00b7 chips-stack-3",
+   "bron": "casino-audio/Audio/chips-stack-3.ogg"
+  },
+  {
+   "bestand": "munt-19.mp3",
+   "label": "casino \u00b7 chips-stack-4",
+   "bron": "casino-audio/Audio/chips-stack-4.ogg"
+  },
+  {
+   "bestand": "munt-20.mp3",
+   "label": "casino \u00b7 chips-stack-5",
+   "bron": "casino-audio/Audio/chips-stack-5.ogg"
   }
  ],
  "plop": [
@@ -238,6 +728,91 @@
    "bestand": "plop-3.mp3",
    "label": "wegzakken",
    "bron": "interface-sounds/Audio/minimize_002.ogg"
+  },
+  {
+   "bestand": "plop-4.mp3",
+   "label": "interface \u00b7 minimize_001",
+   "bron": "interface-sounds/Audio/minimize_001.ogg"
+  },
+  {
+   "bestand": "plop-5.mp3",
+   "label": "interface \u00b7 minimize_003",
+   "bron": "interface-sounds/Audio/minimize_003.ogg"
+  },
+  {
+   "bestand": "plop-6.mp3",
+   "label": "interface \u00b7 minimize_004",
+   "bron": "interface-sounds/Audio/minimize_004.ogg"
+  },
+  {
+   "bestand": "plop-7.mp3",
+   "label": "interface \u00b7 minimize_005",
+   "bron": "interface-sounds/Audio/minimize_005.ogg"
+  },
+  {
+   "bestand": "plop-8.mp3",
+   "label": "interface \u00b7 minimize_006",
+   "bron": "interface-sounds/Audio/minimize_006.ogg"
+  },
+  {
+   "bestand": "plop-9.mp3",
+   "label": "interface \u00b7 minimize_007",
+   "bron": "interface-sounds/Audio/minimize_007.ogg"
+  },
+  {
+   "bestand": "plop-10.mp3",
+   "label": "interface \u00b7 minimize_008",
+   "bron": "interface-sounds/Audio/minimize_008.ogg"
+  },
+  {
+   "bestand": "plop-11.mp3",
+   "label": "interface \u00b7 minimize_009",
+   "bron": "interface-sounds/Audio/minimize_009.ogg"
+  },
+  {
+   "bestand": "plop-12.mp3",
+   "label": "interface \u00b7 drop_001",
+   "bron": "interface-sounds/Audio/drop_001.ogg"
+  },
+  {
+   "bestand": "plop-13.mp3",
+   "label": "interface \u00b7 drop_003",
+   "bron": "interface-sounds/Audio/drop_003.ogg"
+  },
+  {
+   "bestand": "plop-14.mp3",
+   "label": "interface \u00b7 close_001",
+   "bron": "interface-sounds/Audio/close_001.ogg"
+  },
+  {
+   "bestand": "plop-15.mp3",
+   "label": "interface \u00b7 close_002",
+   "bron": "interface-sounds/Audio/close_002.ogg"
+  },
+  {
+   "bestand": "plop-16.mp3",
+   "label": "interface \u00b7 close_003",
+   "bron": "interface-sounds/Audio/close_003.ogg"
+  },
+  {
+   "bestand": "plop-17.mp3",
+   "label": "interface \u00b7 close_004",
+   "bron": "interface-sounds/Audio/close_004.ogg"
+  },
+  {
+   "bestand": "plop-18.mp3",
+   "label": "digital \u00b7 lowDown",
+   "bron": "digital-audio/Audio/lowDown.ogg"
+  },
+  {
+   "bestand": "plop-19.mp3",
+   "label": "interface \u00b7 back_001",
+   "bron": "interface-sounds/Audio/back_001.ogg"
+  },
+  {
+   "bestand": "plop-20.mp3",
+   "label": "interface \u00b7 back_002",
+   "bron": "interface-sounds/Audio/back_002.ogg"
   }
  ],
  "fanfare": [
@@ -255,6 +830,91 @@
    "bestand": "fanfare-3.mp3",
    "label": "hit-fanfare",
    "bron": "music-jingles/Audio/Hit jingles/jingles_HIT03.ogg"
+  },
+  {
+   "bestand": "fanfare-4.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL03 (1.4s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL03.ogg"
+  },
+  {
+   "bestand": "fanfare-5.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL02 (1.4s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL02.ogg"
+  },
+  {
+   "bestand": "fanfare-6.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL14 (1.4s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL14.ogg"
+  },
+  {
+   "bestand": "fanfare-7.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL01 (1.4s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL01.ogg"
+  },
+  {
+   "bestand": "fanfare-8.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL06 (1.4s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL06.ogg"
+  },
+  {
+   "bestand": "fanfare-9.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL12 (1.3s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL12.ogg"
+  },
+  {
+   "bestand": "fanfare-10.mp3",
+   "label": "music-jingles \u00b7 jingles_SAX03 (1.1s)",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX03.ogg"
+  },
+  {
+   "bestand": "fanfare-11.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL13 (1.1s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL13.ogg"
+  },
+  {
+   "bestand": "fanfare-12.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL05 (0.9s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL05.ogg"
+  },
+  {
+   "bestand": "fanfare-13.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL15 (0.9s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL15.ogg"
+  },
+  {
+   "bestand": "fanfare-14.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL16 (0.9s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL16.ogg"
+  },
+  {
+   "bestand": "fanfare-15.mp3",
+   "label": "music-jingles \u00b7 jingles_STEEL10 (0.9s)",
+   "bron": "music-jingles/Audio/Steel jingles/jingles_STEEL10.ogg"
+  },
+  {
+   "bestand": "fanfare-16.mp3",
+   "label": "music-jingles \u00b7 jingles_SAX01 (0.9s)",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX01.ogg"
+  },
+  {
+   "bestand": "fanfare-17.mp3",
+   "label": "music-jingles \u00b7 jingles_SAX02 (0.9s)",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX02.ogg"
+  },
+  {
+   "bestand": "fanfare-18.mp3",
+   "label": "music-jingles \u00b7 jingles_SAX12 (0.9s)",
+   "bron": "music-jingles/Audio/Sax jingles/jingles_SAX12.ogg"
+  },
+  {
+   "bestand": "fanfare-19.mp3",
+   "label": "music-jingles \u00b7 jingles_NES12 (0.9s)",
+   "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES12.ogg"
+  },
+  {
+   "bestand": "fanfare-20.mp3",
+   "label": "music-jingles \u00b7 jingles_NES11 (0.8s)",
+   "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES11.ogg"
   }
  ],
  "stinger": [
@@ -272,6 +932,91 @@
    "bestand": "stinger-3.mp3",
    "label": "8-bit spannend",
    "bron": "music-jingles/Audio/8-Bit jingles/jingles_NES05.ogg"
+  },
+  {
+   "bestand": "stinger-4.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT01",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT01.ogg"
+  },
+  {
+   "bestand": "stinger-5.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT02",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT02.ogg"
+  },
+  {
+   "bestand": "stinger-6.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT04",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT04.ogg"
+  },
+  {
+   "bestand": "stinger-7.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT05",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT05.ogg"
+  },
+  {
+   "bestand": "stinger-8.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT06",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT06.ogg"
+  },
+  {
+   "bestand": "stinger-9.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT07",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT07.ogg"
+  },
+  {
+   "bestand": "stinger-10.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT08",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT08.ogg"
+  },
+  {
+   "bestand": "stinger-11.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT09",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT09.ogg"
+  },
+  {
+   "bestand": "stinger-12.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT10",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT10.ogg"
+  },
+  {
+   "bestand": "stinger-13.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT11",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT11.ogg"
+  },
+  {
+   "bestand": "stinger-14.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT12",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT12.ogg"
+  },
+  {
+   "bestand": "stinger-15.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT13",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT13.ogg"
+  },
+  {
+   "bestand": "stinger-16.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT14",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT14.ogg"
+  },
+  {
+   "bestand": "stinger-17.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT15",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT15.ogg"
+  },
+  {
+   "bestand": "stinger-18.mp3",
+   "label": "music-jingles \u00b7 jingles_HIT16",
+   "bron": "music-jingles/Audio/Hit jingles/jingles_HIT16.ogg"
+  },
+  {
+   "bestand": "stinger-19.mp3",
+   "label": "sci-fi \u00b7 forceField_000",
+   "bron": "sci-fi-sounds/Audio/forceField_000.ogg"
+  },
+  {
+   "bestand": "stinger-20.mp3",
+   "label": "sci-fi \u00b7 forceField_001",
+   "bron": "sci-fi-sounds/Audio/forceField_001.ogg"
   }
  ],
  "live": {
