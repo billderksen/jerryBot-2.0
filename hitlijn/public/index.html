@@ -61,6 +61,19 @@
   .sz-s .titel b { -webkit-line-clamp:1; }
   .sz-m2 { width:96px; height:88px; padding:7px 8px; }
   .sz-m2 .jaar { font-size:1.25rem; } .sz-m2 .titel { font-size:.64rem; }
+  /* jaren 50: jukebox — crème karton met rode bies en een chroomstreep */
+  .k50 { background:linear-gradient(160deg,#f6efdd,#e6d9bd); box-shadow:0 5px 12px rgba(0,0,0,.5), inset 0 0 0 2px #c0392b; }
+  .kaart.k50::after { content:''; position:absolute; left:0; right:0; bottom:46%; height:5px;
+    background:repeating-linear-gradient(90deg,#c0392b 0 10px, #f6efdd 10px 20px); opacity:.75; }
+  .k50 .jaar { color:#a5241a; }
+  .k50 .titel { color:#3a2a1a; }
+  /* jaren 60: mod/psychedelisch — zonnestraal in oranje en turquoise */
+  .k60 { background:radial-gradient(circle at 82% 14%, #ffd76e 0 11%, transparent 12%),
+                    linear-gradient(160deg,#f0a04b,#d96f3c 70%,#e88f45); }
+  .kaart.k60::after { content:''; position:absolute; inset:0; opacity:.2; pointer-events:none;
+    background:repeating-conic-gradient(from 20deg at 82% 14%, rgba(255,255,255,.45) 0 7deg, transparent 7deg 24deg); }
+  .k60 .jaar { color:#33165c; }
+  .k60 .titel { color:#3a1f10; }
   .k70 { background:linear-gradient(160deg,#e8c26a,#d18b2f); }
   .kaart.k70::after { content:''; position:absolute; left:0; right:0; bottom:46%; height:6px;
     background:repeating-linear-gradient(90deg,#8a4b18 0 7px, #c8742a 7px 14px, #e8a83e 14px 21px); opacity:.85; }
@@ -77,6 +90,12 @@
   .k00 .jaar { color:#2b5f9e; }
   .k10 { background:#ff6f61; color:#fff; }
   .k10 .jaar { color:#fff; } .k10 .titel { color:#ffe3df; opacity:1; }
+  /* jaren 20: holografisch — donkere kaart met een glinsterende gradient */
+  .k20 { color:#fff; background:linear-gradient(150deg,#2b1b4d,#6a3fa0 45%,#2f5fa8 75%,#1b2b52); }
+  .kaart.k20::after { content:''; position:absolute; inset:0; opacity:.35; pointer-events:none;
+    background:linear-gradient(115deg, transparent 30%, rgba(255,255,255,.45) 45%, transparent 58%); }
+  .k20 .jaar { color:#8ff0ff; text-shadow:0 0 10px rgba(143,240,255,.65); }
+  .k20 .titel { color:#e6d9ff; opacity:1; }
   .chip { width:14px; height:14px; border-radius:50%; display:inline-block;
     background:radial-gradient(circle at 35% 35%, #ffd76e, #d99a1e 70%);
     border:2px dashed rgba(60,30,0,.55); box-shadow:0 2px 3px rgba(0,0,0,.5); }
@@ -204,9 +223,13 @@
      band en de spelersrij platgedrukt zodra de inhoud net niet past, en knipt de band
      (overflow:hidden) zijn eigen tijdlijn af. Het podium mag als enige krimpen. */
   .band, .spelers-rij, .scroll-hint, .uitklap, .mijn, .duimzone { flex-shrink:0; }
-  .stage-mobiel { min-height:0; }
+  .stage-mobiel { min-height:0; overflow:hidden; }
   /* eigen beurt: geen dubbele tijdlijn — de band herhaalt wat onderin al interactief staat */
   #spelView.mijn-beurt #bandWrap { display:none; }
+  /* eigen beurt tijdens het uitdaagvenster: alleen de aftelbalk, geen tweede tijdlijn */
+  #spelView.mijn-beurt-uitdaag #bandKop,
+  #spelView.mijn-beurt-uitdaag #bandLijn { display:none; }
+  #spelView.mijn-beurt-uitdaag #bandWrap { padding:9px 14px; }
   .band { margin:6px 12px 0; border-radius:14px; padding:11px 14px; position:relative; z-index:2; overflow:hidden;
     background:linear-gradient(180deg, rgba(255,157,60,.10), rgba(0,0,0,.3));
     border:1px solid rgba(255,157,60,.4); }
@@ -307,16 +330,21 @@
   /* jij-aan-zet: de draaitafel als middenpodium vult de vrije ruimte */
   .stage-mobiel { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; position:relative;
     position:relative; z-index:2; padding:10px 0; }
-  .grote-plaat { width:128px; height:128px; border-radius:50%; position:relative;
+  /* aspect-ratio + flex-shrink:0 houden de plaat rond; hij schaalt mee met de
+     schermhoogte i.p.v. verticaal platgedrukt te worden in een krappe kolom */
+  .grote-plaat { width:min(128px, 22vh); aspect-ratio:1; height:auto; flex-shrink:0;
+    border-radius:50%; position:relative;
     background:repeating-radial-gradient(circle, #0d0d0d 0 1.6px, #1f1f1f 1.6px 3.4px);
     animation:spin 2.8s linear infinite; filter:drop-shadow(0 14px 26px rgba(0,0,0,.6)); }
-  .grote-plaat::after { content:'?'; position:absolute; inset:42px; border-radius:50%;
+  .grote-plaat::after { content:'?'; position:absolute; inset:33%; border-radius:50%;
     background:radial-gradient(circle at 35% 30%, var(--hotpink), #a00f52);
-    display:flex; align-items:center; justify-content:center; font-family:'Anton'; font-size:1.4rem; color:#ffd; }
+    display:flex; align-items:center; justify-content:center; font-family:'Anton';
+    font-size:clamp(.8rem, 3.4vh, 1.4rem); color:#ffd; }
   .stage-mobiel .eq { height:22px; } .stage-mobiel .eq i { width:5px; }
   /* onthulde albumhoes op de plek van de plaat, tot de volgende ronde start */
   .album-hoes { display:flex; flex-direction:column; align-items:center; gap:12px; animation:hoesIn .5s ease-out; }
-  .album-hoes img { width:min(232px, 56vw); height:min(232px, 56vw); object-fit:cover; border-radius:14px;
+  .album-hoes img { height:min(232px, 56vw, 24vh); width:auto; aspect-ratio:1; flex-shrink:0;
+    object-fit:cover; border-radius:14px;
     box-shadow:0 16px 40px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.12); }
   .album-tekst { text-align:center; line-height:1.45; max-width:82vw; }
   .album-tekst b { font-size:.95rem; }
@@ -626,9 +654,9 @@
     .band-lijn .vak { width:36px; height:96px; }
     .band-lijn .spook { width:112px; height:96px; }
     /* schaalt mee met de schermhoogte: op een liggende iPad past alles zonder scrollen */
-    .grote-plaat { width:min(300px, 26vh); height:min(300px, 26vh); }
-    .grote-plaat::after { inset:39%; font-size:min(2rem, 3.6vh); }
-    .album-hoes img { width:min(280px, 30vh); height:min(280px, 30vh); }
+    .grote-plaat { width:min(300px, 26vh); }
+    .grote-plaat::after { font-size:min(2rem, 3.6vh); }
+    .album-hoes img { height:min(280px, 30vh); width:auto; }
     .stage-mobiel { min-height:0; padding:4px 0; gap:8px; overflow:hidden; }
     .mijn { padding:10px 14px 12px; }
     .podium-zuil { width:110px; }
@@ -893,11 +921,14 @@
   }
   function chipsHtml(n) { return '<span class="chip"></span>'.repeat(Math.max(0, n)); }
   function decadeClass(year) {
+    if (year < 1960) return 'k50';
+    if (year < 1970) return 'k60';
     if (year < 1980) return 'k70';
     if (year < 1990) return 'k80';
     if (year < 2000) return 'k90';
     if (year < 2010) return 'k00';
-    return 'k10';
+    if (year < 2020) return 'k10';
+    return 'k20';
   }
   // Catalogus-ruis achter de echte titel weghalen voor weergave: Deezer/Spotify plakken
   // er vaak ' - 2004 Remaster', ' - Radio Edit' of '(Remastered 2011)' achter. Alleen
@@ -1359,6 +1390,8 @@
     // Alleen tijdens het leggen verbergen; in de challenge-fase blijft hij staan, want
     // daar hangt de aftelbalk in.
     $('spelView').classList.toggle('mijn-beurt', isMijnBeurt && room.phase === 'listening');
+    // uitdaagfase: band blijft staan voor de aftelbalk, maar zonder de kopie van je tijdlijn
+    $('spelView').classList.toggle('mijn-beurt-uitdaag', isMijnBeurt && room.phase === 'challenge');
 
     renderMijn(room, ik, isMijnBeurt);
     renderDuimzone(room, ik, isMijnBeurt);
